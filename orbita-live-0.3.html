@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111923">
+<title>ОРБИТА 0.3 · Заказы и смена водителя</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoKtjTE+24O6xM=" crossorigin="">
+<link rel="stylesheet" href="./assets/orbita-live-0.3.css">
+</head>
+<body><main class="shell">
+<header class="heading"><div class="brand">◉</div><div><h1>ОРБИТА</h1><p class="subtitle">ТАКСИ · ЧИК / ПРОКУДСКОЕ</p></div><span class="pill">LIVE TEST 0.3</span></header>
+<div id="notice" class="banner">Подключение к тестовому серверу ещё не проверено.</div>
+<section class="card warning"><b>⚠️ Только тестирование</b><div class="note">Это обмен заказами через сервер между отдельными устройствами. Здесь нет настоящего GPS, тарификации, оплаты, SMS или готового водительского APK. Используй только вымышленные адреса и тестовые аккаунты.</div></section>
+<section id="connectBox" class="card short hidden"><h2>1. Подключение к серверу</h2><p class="note">Можно использовать те же публичные параметры, что в «Проверке входа 0.2». Секретные ключи вводить нельзя.</p><form id="connectForm"><label for="sbUrl">Project URL</label><input id="sbUrl" required placeholder="https://xxxx.supabase.co" spellcheck="false" autocomplete="off"><label for="sbKey">Publishable key</label><input id="sbKey" required type="password" placeholder="sb_publishable_..." spellcheck="false" autocomplete="off"><button class="btn" style="margin-top:15px" type="submit">Подключиться</button></form></section>
+<section id="loginBox" class="card short hidden"><h2>2. Войти в тестовый аккаунт</h2><p class="note">Пассажир, водитель и администратор входят каждый со своего устройства. Роль назначается сервером.</p><form id="loginForm"><label for="email">Тестовая почта</label><input id="email" type="email" autocomplete="username" required placeholder="orbita-passenger@example.com"><label for="password">Пароль аккаунта</label><input id="password" type="password" autocomplete="current-password" required><button class="btn" type="submit" style="margin-top:15px">Войти</button></form></section>
+<section id="app" class="hidden">
+  <div class="card"><div class="two"><div><b id="accountEmail">—</b><div class="mini">Роль: <strong id="accountRole">—</strong> · Серверная версия 0.3</div></div><div class="topcontrols"><button class="btn secondary small" id="refresh" type="button">↻ Обновить</button><button class="btn secondary small" id="logout" type="button">Выйти</button></div></div><div class="help" id="lastUpdate">Синхронизация: ожидание</div></div>
+  <div class="grid" id="roleLayout">
+    <section id="passengerBox" class="card hidden"><h2>🚕 Пассажир</h2><p class="note">Закажи тестовую машину. Данные появятся на другом устройстве после обновления. Цены отключены.</p><form id="orderForm"><label for="pickup">Откуда</label><input id="pickup" required maxlength="250" value="Чик · Тестовая точка А"><label for="destination">Куда</label><input id="destination" required maxlength="250" value="Прокудское · Тестовая точка Б"><button class="btn" style="margin-top:12px" type="submit">Заказать такси</button></form><div class="divider"></div><h3>Мои поездки</h3><div id="passengerOrders"></div></section>
+    <section id="driverBox" class="card hidden" aria-labelledby="driverHeading">
+      <div class="two"><h2 id="driverHeading">🚘 Водитель</h2><span id="driverState" class="badge">Проверка…</span></div>
+      <strong id="driverName">—</strong><p class="mini" id="carName">—</p>
+      <div id="driverAccessMessage" class="banner error hidden" role="status"></div>
+      <section aria-label="Текущий заказ"><div id="driverCurrentOrders"></div></section>
+      <div class="actions" id="shiftControls"><button class="btn" id="online" type="button">Выйти на линию</button><button class="btn secondary" id="offline" type="button">Уйти с линии</button></div>
+      <div class="driver-tools"><button class="btn secondary small" id="soundToggle" type="button" aria-pressed="false">Включить звук заказов</button><button class="btn secondary small" id="notificationToggle" type="button">Включить уведомления</button></div>
+      <p class="help" id="soundStatus" role="status">Для звукового сигнала нажми «Включить звук заказов».</p>
+      <p class="help" id="notificationStatus">Чтобы получать новые заказы, держи приложение открытым.</p>
+      <details id="driverHistory"><summary>История поездок</summary><div id="driverOrders"></div></details>
+    </section>
+  </div>
+  <section id="mapBox" class="card hidden"><div class="two"><h2>🗺️ Карта Чика</h2><span class="badge">Не GPS · Тестовые точки</span></div><div id="map"></div><div class="maptools" id="mapTools"><label><input type="radio" name="pinType" value="pickup" checked> Точка подачи</label><label><input type="radio" name="pinType" value="destination"> Пункт назначения</label></div><p class="help">Нажми на карте, чтобы задать координаты выбранной точки. В реальности её расположение будет определяться геолокацией и поиском адресов на следующем этапе.</p></section>
+  <section id="adminBox" class="card hidden"><h2>⚙️ Диспетчерская · Администратор</h2><p class="note">Добавить водителя можно только из уже созданного тестового аккаунта Supabase Authentication → Users. Одобрение проверяется в базе, а не кнопками интерфейса.</p><div class="kpi"><div><b id="totalOrders">0</b><small>Заказов в базе</small></div><div><b id="totalDrivers">0</b><small>Водителей</small></div></div><div class="grid" style="margin-top:16px"><div><h3>Добавить тестового водителя</h3><form id="addDriverForm"><label for="dEmail">Email существующего тестового аккаунта</label><input id="dEmail" type="email" required placeholder="orbita-driver1@example.com"><label for="dName">Имя (вымышленное)</label><input id="dName" required maxlength="80" placeholder="Алексей"><label for="dCar">Автомобиль</label><input id="dCar" required maxlength="120" placeholder="Toyota Corolla"><label for="dPlate">Номер (вымышленный)</label><input id="dPlate" required maxlength="30" placeholder="Т001ЕСТ"><button class="btn" style="margin-top:12px" type="submit">Добавить и одобрить</button></form></div><div><h3>Водители и текущие заказы</h3><p class="help">Порядок очереди сохранён. В карточке показаны текущий этап поездки и доступ к новым заказам.</p><div id="adminDrivers"></div></div></div><div class="divider"></div><h3>Заказы диспетчерской</h3><div id="adminOrders"></div></section>
+</section><p class="footer">ОРБИТА · Тестовая сборка 0.3. Данные OSM © участники OpenStreetMap. Не использовать для коммерческих перевозок.</p>
+</main>
+<dialog id="offerDialog" aria-labelledby="offerHeading" aria-describedby="offerRoute">
+  <div class="offer-top"><span class="badge good">НОВЫЙ ЗАКАЗ</span><span id="offerCountdown" role="timer"></span></div>
+  <h2 id="offerHeading">Предложение поездки</h2>
+  <div id="offerRoute"><p class="label">Откуда</p><p id="offerPickup" class="offer-address"></p><p class="label">Куда</p><p id="offerDestination" class="offer-address"></p></div>
+  <p id="offerConnection" class="help hidden" role="status">Нет связи. Ответить на заказ можно после восстановления интернета.</p>
+  <p id="offerError" class="banner error hidden" role="alert"></p>
+  <div class="offer-actions"><button class="btn" id="offerAccept" type="button" autofocus>Принять заказ</button><button class="btn secondary" id="offerDecline" type="button">Отказаться</button></div>
+  <button class="offer-sound" id="offerSound" type="button">Включить звук</button>
+</dialog>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="./assets/orbita-live-0.3.js"></script>
+</body>
+</html>
