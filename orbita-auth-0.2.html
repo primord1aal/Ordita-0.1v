@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101720">
+  <title>ОРБИТА · Проверка входа 0.2</title>
+  <style>
+    :root{color-scheme:dark;--bg:#101720;--card:#1a2431;--line:#354253;--muted:#9daabe;--text:#f3f7fc;--accent:#a9ef33;--bad:#ffb76b}
+    *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
+    main{max-width:650px;margin:0 auto;padding:30px 17px 55px}header{display:flex;align-items:center;gap:15px;margin-bottom:22px}.logo{width:56px;height:56px;display:grid;place-items:center;border:3px solid var(--accent);border-radius:100%;font-size:26px;color:var(--accent);font-weight:900;transform:rotate(-14deg)}h1{margin:0;font-size:25px;letter-spacing:.16em}header p{margin:4px 0 0;color:var(--muted);font-size:13px}
+    .pill{margin-left:auto;font-size:11px;background:var(--accent);padding:6px 8px;border-radius:30px;color:#101720;font-weight:800;white-space:nowrap}
+    .card{padding:19px;margin-bottom:15px;border:1px solid var(--line);background:var(--card);border-radius:18px;box-shadow:0 6px 24px #0001}.card h2{font-size:19px;margin:0 0 9px}.desc{font-size:14px;color:var(--muted);line-height:1.6;margin:0 0 15px}
+    label{display:block;font-size:13px;color:#d2dbea;margin:14px 0 6px}input{width:100%;height:47px;padding:0 12px;border:1px solid #465366;border-radius:11px;background:#0d1620;color:var(--text);font-size:16px;outline:none}input:focus{border-color:var(--accent)}
+    button{width:100%;height:48px;border:0;border-radius:12px;background:var(--accent);color:#101720;font-size:16px;font-weight:800;margin-top:17px;cursor:pointer}button:disabled{opacity:.5;cursor:wait}.secondary{background:#2d3948;color:#f3f7fc;border:1px solid #4d5969}.buttons{display:grid;grid-template-columns:1fr 1fr;gap:10px}.buttons button{font-size:14px}
+    .status{font-size:14px;line-height:1.5;padding:13px;border-radius:12px;background:#121b27;border:1px solid var(--line);overflow-wrap:anywhere}.status.ok{border-color:#4f8e3e;color:#bbff92}.status.bad{border-color:#a46a39;color:#ffd6aa}.statrow{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid #324050;font-size:14px}.statrow span:first-child{color:var(--muted)}.small{font-size:12px;color:var(--muted);line-height:1.5}a{color:#b9e49b}strong{font-weight:750}.hide{display:none!important}
+  </style>
+</head>
+<body>
+<main>
+  <header><div class="logo">◉</div><div><h1>ОРБИТА</h1><p>ТАКСИ · ЧИК / ПРОКУДСКОЕ</p></div><span class="pill">AUTH 0.2</span></header>
+  <div class="card">
+    <h2>Проверка связи с Supabase</h2>
+    <p class="desc">Эта отдельная тестовая страница проверяет настоящий вход и права пользователя. Она <strong>не заменяет</strong> нашу версию 0.1 и пока не создаёт поездки.</p>
+    <div id="state" class="status">Параметры подключения ещё не заданы.</div>
+  </div>
+  <section id="setup" class="card">
+    <h2>1. Подключаем тестовый сервер</h2>
+    <p class="desc">Вводить можно только <strong>Project URL</strong> и <strong>Publishable key</strong> с префиксом <code>sb_publishable_</code>. Они предназначены для браузерного приложения. Секретные ключи не вводи.</p>
+    <form id="setupForm">
+      <label for="url">Project URL</label>
+      <input id="url" required inputmode="url" autocomplete="url" placeholder="https://xxxx.supabase.co" spellcheck="false">
+      <label for="key">Publishable key</label>
+      <input id="key" required autocomplete="off" spellcheck="false" placeholder="sb_publishable_..." type="password">
+      <button type="submit">Сохранить подключение</button>
+    </form>
+    <p class="small">Настройки подключения сохраняются только в браузере этого телефона. Пароль здесь не вводится.</p>
+  </section>
+  <section id="login" class="card hide">
+    <h2>2. Вход в «Орбиту»</h2>
+    <p class="desc">Введи тестовые данные, созданные в Supabase Authentication → Users.</p>
+    <form id="loginForm">
+      <label for="email">Почта</label><input id="email" type="email" autocomplete="username" required value="orbita-admin@example.com">
+      <label for="password">Пароль тестового пользователя</label><input id="password" type="password" autocomplete="current-password" required>
+      <button id="loginBtn" type="submit">Войти и проверить права</button>
+    </form>
+  </section>
+  <section id="account" class="card hide">
+    <h2>3. Проверка роли</h2>
+    <div class="statrow"><span>Пользователь</span><strong id="userEmail">—</strong></div>
+    <div class="statrow"><span>Роль из базы</span><strong id="role">—</strong></div>
+    <div class="statrow"><span>Права администратора</span><strong id="canAdmin">—</strong></div>
+    <div id="adminBox" class="hide"><p class="desc" style="margin-top:16px">Чтение тестовой базы выполнено с правами вашего аккаунта, не через секретный ключ.</p>
+      <div class="statrow"><span>Зарегистрировано водителей</span><strong id="driversCount">—</strong></div>
+      <div class="statrow"><span>Создано заказов</span><strong id="ordersCount">—</strong></div>
+    </div>
+    <div class="buttons"><button type="button" id="refresh" class="secondary">Обновить роль</button><button type="button" id="logout" class="secondary">Выйти</button></div>
+  </section>
+  <div class="card"><p class="small" style="margin:0">Это тест с вымышленными пользователями и заказами. Не вводи сюда личные данные пассажиров или настоящих водителей. Пароль базы данных, <code>sb_secret_...</code> и <code>service_role</code> сюда вводить нельзя.</p></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const show = (id, yes) => $(id).classList.toggle('hide', !yes);
+  let client = null;
+  let busy = false;
+  function state(message, kind='') { $('state').textContent = message; $('state').className='status'+(kind?' '+kind:''); }
+  function validate(url,key) {
+    if(!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(url)) throw new Error('URL должен выглядеть как https://xxxx.supabase.co');
+    if(!/^sb_publishable_[A-Za-z0-9_-]{10,}$/.test(key)) throw new Error('Нужен только Publishable key (sb_publishable_...). Secret и service_role запрещены.');
+  }
+  async function connect(url,key) {
+    validate(url,key);
+    if(!window.supabase || !window.supabase.createClient) throw new Error('Библиотека Supabase не загрузилась. Проверь интернет или попробуй другой браузер.');
+    client = window.supabase.createClient(url.replace(/\/$/,''),key,{
+      auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:'orbita-auth-v02-session'}
+    });
+    show('login',true);
+    state('Подключение настроено. Теперь войди в тестовый аккаунт.', 'ok');
+    const {data,error} = await client.auth.getSession();
+    if(error) throw error;
+    if(data && data.session) await inspect();
+  }
+  async function inspect() {
+    if (!client) return;
+    const {data:userInfo,error:authError}=await client.auth.getUser();
+    if(authError) throw authError;
+    const user=userInfo?.user;
+    if(!user) {show('account',false);show('login',true);state('Войдите в тестовый аккаунт.');return;}
+    const {data:profile,error:profileError}=await client.from('orbita_profiles').select('role').eq('user_id',user.id).maybeSingle();
+    if(profileError) throw new Error('Не удалось прочитать роль: '+profileError.message);
+    $('userEmail').textContent=user.email || 'тестовый пользователь';
+    $('role').textContent=profile?.role || 'не найдена';
+    const admin=profile?.role==='admin';
+    $('canAdmin').textContent=admin?'Да':'Нет';
+    show('login',false);show('account',true);show('adminBox',admin);
+    if(admin) {
+      const [drivers,orders]=await Promise.all([
+        client.from('orbita_drivers').select('user_id',{count:'exact',head:true}),
+        client.from('orbita_orders').select('id',{count:'exact',head:true})
+      ]);
+      if(drivers.error) throw new Error('Ошибка доступа к водителям: '+drivers.error.message);
+      if(orders.error) throw new Error('Ошибка доступа к заказам: '+orders.error.message);
+      $('driversCount').textContent=String(drivers.count??0);
+      $('ordersCount').textContent=String(orders.count??0);
+      state('Успешно! Вход выполнен, роль admin подтверждена сервером, тестовая база доступна.', 'ok');
+    } else state('Вход выполнен, но сервер не назначил этому аккаунту права администратора.','bad');
+  }
+  $('setupForm').addEventListener('submit', async event=>{
+    event.preventDefault();if(busy)return;busy=true;
+    const btn=$('setupForm').querySelector('button');btn.disabled=true;
+    try{
+      const url=$('url').value.trim(), key=$('key').value.trim();
+      validate(url,key);
+      localStorage.setItem('orbita-auth-v02-config',JSON.stringify({url,key}));
+      await connect(url,key);
+    }catch(err){state('Ошибка подключения: '+String(err.message || err),'bad');}
+    finally{btn.disabled=false;busy=false;}
+  });
+  $('loginForm').addEventListener('submit',async event=>{
+    event.preventDefault();if(busy)return;busy=true;$('loginBtn').disabled=true;
+    state('Проверяем логин и пароль...');
+    try{
+      const {error}=await client.auth.signInWithPassword({email:$('email').value.trim(), password:$('password').value});
+      $('password').value='';
+      if(error) throw error;
+      await inspect();
+    }catch(err){$('password').value='';state('Ошибка входа: '+String(err.message||err),'bad');}
+    finally{$('loginBtn').disabled=false;busy=false;}
+  });
+  $('refresh').addEventListener('click',async()=>{try{await inspect();}catch(err){state('Ошибка: '+String(err.message||err),'bad');}});
+  $('logout').addEventListener('click',async()=>{
+    try{const {error}=await client.auth.signOut();if(error)throw error;show('account',false);show('login',true);state('Вы вышли из аккаунта.','ok');}
+    catch(err){state('Ошибка выхода: '+String(err.message||err),'bad');}
+  });
+  try {
+    const saved=JSON.parse(localStorage.getItem('orbita-auth-v02-config')||'null');
+    if(saved && saved.url && saved.key) {$('url').value=saved.url; $('key').value=saved.key; connect(saved.url,saved.key).catch(err=>state('Ошибка проверки подключения: '+String(err.message||err),'bad'));}
+  }catch(_) {state('Введите URL проекта и Publishable key.');}
+})();
+</script>
+</body>
+</html>
