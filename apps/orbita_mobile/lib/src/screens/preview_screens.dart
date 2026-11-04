@@ -320,6 +320,12 @@ class ProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             _MenuTile(
+              icon: Icons.cloud_outlined,
+              title: 'Проверка API',
+              onTap: () => Navigator.pushNamed(context, '/api-check'),
+            ),
+            const SizedBox(height: 12),
+            _MenuTile(
               icon: Icons.notifications_outlined,
               title: 'Проверка уведомлений',
               onTap: () =>

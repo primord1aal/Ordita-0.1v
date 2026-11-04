@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'backend/api_probe.dart';
 import 'platform/device_gateway.dart';
+import 'screens/api_check_screen.dart';
 import 'screens/device_check_screen.dart';
 import 'screens/preview_screens.dart';
 import 'ui/theme.dart';
 
 class OrbitaApp extends StatefulWidget {
-  const OrbitaApp({required this.device, super.key});
+  const OrbitaApp({required this.device, this.apiProbeFactory, super.key});
   final DeviceGateway device;
+  final ApiProbe Function()? apiProbeFactory;
   @override
   State<OrbitaApp> createState() => _OrbitaAppState();
 }
@@ -48,6 +51,8 @@ class _OrbitaAppState extends State<OrbitaApp> {
     theme: orbitaTheme(),
     routes: {
       '/': (_) => WelcomeScreen(device: widget.device),
+      '/api-check': (_) =>
+          ApiCheckScreen(probe: (widget.apiProbeFactory ?? createApiProbe)()),
       '/device-check': (_) => DeviceCheckScreen(device: widget.device),
       '/device-check/notifications': (_) => DeviceCheckScreen(
         device: widget.device,

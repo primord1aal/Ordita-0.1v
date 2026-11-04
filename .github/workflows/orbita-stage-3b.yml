@@ -1,0 +1,107 @@
+name: Орбита 3Б — изолированные проверки и API APK
+
+on:
+  push:
+    branches: [codex/orbita-stage-3b-auth]
+    paths:
+      - 'apps/orbita_mobile/**'
+      - '.github/workflows/orbita-stage-3b.yml'
+      - 'docs/STAGE_3B_API_CHECK.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orbita-stage3b-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-and-build:
+    name: Изоляция, регрессии и защищённая сборка
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: apps/orbita_mobile
+    env:
+      CI: 'true'
+      FLUTTER_SUPPRESS_ANALYTICS: 'true'
+    steps:
+      - name: Получить исходники
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Подготовить JDK 17
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            apps/orbita_mobile/android/**/*.gradle.kts
+            apps/orbita_mobile/android/gradle/wrapper/gradle-wrapper.properties
+      - name: Подготовить закреплённый Flutter
+        shell: bash
+        run: |
+          sdk_dir="$RUNNER_TEMP/orbita-flutter"
+          git clone --depth 1 --branch 3.47.9 https://github.com/flutter/flutter.git "$sdk_dir"
+          test "$(git -C "$sdk_dir" rev-parse HEAD)" = c197ca5199e9ee5661e865596c9c07294dfab51c
+          echo "$sdk_dir/bin" >> "$GITHUB_PATH"
+          "$sdk_dir/bin/flutter" precache --android --linux
+      - name: Подготовить Android SDK
+        shell: bash
+        run: |
+          sdk_manager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$sdk_manager" ]; then
+            archive="$RUNNER_TEMP/orbita-android-tools.zip"
+            curl --fail --location --retry 3 https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip --output "$archive"
+            echo "0877a1d048fe4a24efe2eff536ca4223f7adeb58648bb81909d33c446918cfa8  $archive" | sha256sum --check
+            mkdir -p "$ANDROID_HOME/cmdline-tools" "$RUNNER_TEMP/orbita-android-tools"
+            unzip -q "$archive" -d "$RUNNER_TEMP/orbita-android-tools"
+            mv "$RUNNER_TEMP/orbita-android-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          flutter config --no-analytics --android-sdk "$ANDROID_HOME"
+          (yes || true) | "$sdk_manager" --licenses > /dev/null
+          "$sdk_manager" 'platforms;android-36' 'platforms;android-35' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - name: Проверить зависимости, формат и анализ
+        run: |
+          flutter pub get --enforce-lockfile
+          dart format --output=none --set-exit-if-changed lib test tool
+          flutter analyze --fatal-infos --no-pub
+      - name: Flutter и конфигурация без внешнего сетевого доступа
+        shell: bash
+        run: |
+          sudo unshare --net -- bash -euc '
+            ip link set lo up
+            exec runuser -u "$1" -- bash "$2" "$3"
+          ' _ "$(id -un)" "$PWD/tool/checks_without_cloud.sh" "$(command -v flutter)"
+      - name: Проверить компиляцию без подключения к серверу
+        run: flutter build apk --debug --no-pub --split-per-abi --target-platform android-arm64
+      - name: Проверить Android-службу и разрешения
+        working-directory: apps/orbita_mobile/android
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug
+      - name: Проверить целевой проект и подготовить клиентскую конфигурацию
+        env:
+          SUPABASE_TEST_URL: ${{ vars.SUPABASE_TEST_URL }}
+          SUPABASE_TEST_PUBLISHABLE_KEY: ${{ vars.SUPABASE_TEST_PUBLISHABLE_KEY }}
+          SUPABASE_TEST_PROJECT_REF: ${{ vars.SUPABASE_TEST_PROJECT_REF }}
+          SUPABASE_FORBIDDEN_PROJECT_REF: ${{ vars.SUPABASE_FORBIDDEN_PROJECT_REF }}
+        run: dart tool/write_test_config.dart "$RUNNER_TEMP/orbita-stage3b-defines.json"
+      - name: Собрать подключённый диагностический APK
+        run: flutter build apk --debug --no-pub --split-per-abi --target-platform android-arm64 --dart-define-from-file="$RUNNER_TEMP/orbita-stage3b-defines.json"
+      - name: Подготовить APK для владельца
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk dist/ORBITA-0.5.2-api-check.apk
+          cp ../../docs/STAGE_3B_API_CHECK.md dist/INSTALL-ANDROID.md
+          (cd dist && sha256sum ORBITA-0.5.2-api-check.apk > SHA256SUMS.txt)
+      - name: Сохранить APK и инструкцию
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ORBITA-0.5.2-api-check-apk
+          path: apps/orbita_mobile/dist/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Удалить временную конфигурацию
+        if: always()
+        run: rm -f -- "$RUNNER_TEMP/orbita-stage3b-defines.json"
