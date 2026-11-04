@@ -1,0 +1,9 @@
+# Секреты и локальные параметры никогда не входят в репозиторий.
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+key.properties
+**/local.properties
