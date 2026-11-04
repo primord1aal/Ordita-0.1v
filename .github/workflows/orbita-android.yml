@@ -54,9 +54,19 @@ jobs:
       - name: Подготовить Android SDK
         shell: bash
         run: |
+          sdk_manager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$sdk_manager" ]; then
+            archive="$RUNNER_TEMP/orbita-android-tools.zip"
+            curl --fail --location --retry 3 https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip --output "$archive"
+            echo "0877a1d048fe4a24efe2eff536ca4223f7adeb58648bb81909d33c446918cfa8  $archive" | sha256sum --check
+            mkdir -p "$ANDROID_HOME/cmdline-tools" "$RUNNER_TEMP/orbita-android-tools"
+            unzip -q "$archive" -d "$RUNNER_TEMP/orbita-android-tools"
+            mv "$RUNNER_TEMP/orbita-android-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           flutter config --no-analytics --android-sdk "$ANDROID_HOME"
-          (yes || true) | sdkmanager --licenses > /dev/null
-          sdkmanager 'platforms;android-36' 'platforms;android-35' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+          (yes || true) | "$sdk_manager" --licenses > /dev/null
+          "$sdk_manager" 'platforms;android-36' 'platforms;android-35' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
           flutter --version
       - name: Проверить зафиксированные зависимости
         run: flutter pub get --enforce-lockfile
