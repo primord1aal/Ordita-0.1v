@@ -2,16 +2,18 @@ name: Орбита — проверка и тестовый APK
 
 on:
   push:
-    branches: [codex/orbita-android-foundation]
+    branches: [codex/orbita-android-foundation, codex/orbita-ui-refinement]
     paths:
       - 'apps/orbita_mobile/**'
       - '.github/workflows/orbita-android.yml'
       - 'docs/ANDROID_STAGE_2.md'
+      - 'docs/ANDROID_0.5.1.md'
   pull_request:
     paths:
       - 'apps/orbita_mobile/**'
       - '.github/workflows/orbita-android.yml'
       - 'docs/ANDROID_STAGE_2.md'
+      - 'docs/ANDROID_0.5.1.md'
   workflow_dispatch:
 
 permissions:
@@ -71,7 +73,7 @@ jobs:
       - name: Проверить зафиксированные зависимости
         run: flutter pub get --enforce-lockfile
       - name: Проверить форматирование
-        run: dart format --output=none --set-exit-if-changed lib test
+        run: dart format --output=none --set-exit-if-changed lib test tool
       - name: Выполнить анализ
         run: flutter analyze --fatal-infos
       - name: Проверить поведение Flutter
@@ -85,14 +87,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk dist/ORBITA-0.5.0-test.apk
-          cp ../../docs/ANDROID_STAGE_2.md dist/INSTALL-ANDROID.md
-          (cd dist && sha256sum ORBITA-0.5.0-test.apk > SHA256SUMS.txt)
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk dist/ORBITA-0.5.1-test.apk
+          cp ../../docs/ANDROID_0.5.1.md dist/INSTALL-ANDROID.md
+          (cd dist && sha256sum ORBITA-0.5.1-test.apk > SHA256SUMS.txt)
           echo 'Тестовая основа. Реальные заказы и серверный Push не подключены.' >> "$GITHUB_STEP_SUMMARY"
       - name: Сохранить APK и инструкцию
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ORBITA-0.5.0-test-apk
+          name: ORBITA-0.5.1-test-apk
           path: apps/orbita_mobile/dist/
           if-no-files-found: error
           retention-days: 14

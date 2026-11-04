@@ -1,62 +1,61 @@
 import 'package:flutter/material.dart';
 
 import '../domain/contracts.dart';
+import '../platform/device_gateway.dart';
+import '../ui/components.dart';
+import '../ui/theme.dart';
 
 class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({super.key});
-  void _open(BuildContext context, PreviewRole role) => Navigator.of(context)
-      .push(MaterialPageRoute<void>(builder: (_) => PreviewShell(role: role)));
+  const WelcomeScreen({required this.device, super.key});
+  final DeviceGateway device;
+  void _open(BuildContext context, PreviewRole role) => Navigator.push(
+    context,
+    MaterialPageRoute<void>(
+      builder: (_) => PreviewShell(role: role, device: device),
+    ),
+  );
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SafeArea(
       child: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(20),
         children: [
-          const SizedBox(height: 32),
-          Icon(
-            Icons.blur_circular_rounded,
-            size: 76,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'ОРБИТА',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineLarge
-                ?.copyWith(fontWeight: FontWeight.w800, letterSpacing: 4),
-          ),
-          const SizedBox(height: 8),
-          const Text('Рядом, когда нужно ехать', textAlign: TextAlign.center),
-          const SizedBox(height: 36),
-          const SectionTitle('Знакомство с приложением'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 24),
           const Text(
-            'Тестовая основа Android. Выберите интерфейс для просмотра. Это не вход в аккаунт.',
+            'Орбита',
+            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
           ),
-          const SizedBox(height: 20),
-          RoleCard(
-            icon: Icons.person_outline,
-            title: 'Пассажир',
-            subtitle: 'Адреса, поездки и профиль',
-            onTap: () => _open(context, PreviewRole.passenger),
+          const SizedBox(height: 8),
+          const Text('Чик, Прокудское и рядом'),
+          const SizedBox(height: 28),
+          Text(
+            'Выберите интерфейс',
+            style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 12),
-          RoleCard(
+          const Text(
+            'Тестовый просмотр. Это не вход в аккаунт, заказы пока недоступны.',
+          ),
+          const SizedBox(height: 20),
+          _MenuTile(
+            icon: Icons.person_outline,
+            title: 'Пассажир',
+            subtitle: 'Адреса и поездки',
+            onTap: () => _open(context, PreviewRole.passenger),
+          ),
+          const SizedBox(height: 14),
+          _MenuTile(
             icon: Icons.local_taxi_outlined,
             title: 'Водитель',
-            subtitle: 'Рабочий экран и данные автомобиля',
+            subtitle: 'Рабочий экран',
             onTap: () => _open(context, PreviewRole.driver),
           ),
           const SizedBox(height: 24),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.pushNamed(context, '/device-check'),
-            icon: const Icon(Icons.phonelink_setup_outlined),
-            label: const Text('Проверка телефона'),
-          ),
-          const SizedBox(height: 16),
+          const Text('Настройки и проверка телефона находятся в профиле.'),
+          const SizedBox(height: 12),
           const Text(
-            'Вход, заказы и серверные уведомления ещё не подключены.',
-            textAlign: TextAlign.center,
+            'Тестовая версия $appVersion',
+            style: TextStyle(fontSize: 12),
           ),
         ],
       ),
@@ -64,38 +63,10 @@ class WelcomeScreen extends StatelessWidget {
   );
 }
 
-class RoleCard extends StatelessWidget {
-  const RoleCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-    super.key,
-  });
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => Card(
-    child: ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      leading: Icon(
-        icon,
-        color: Theme.of(context).colorScheme.primary,
-        size: 30,
-      ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      subtitle: Text(subtitle),
-      trailing: const Icon(Icons.chevron_right),
-      onTap: onTap,
-    ),
-  );
-}
-
 class PreviewShell extends StatefulWidget {
-  const PreviewShell({required this.role, super.key});
+  const PreviewShell({required this.role, required this.device, super.key});
   final PreviewRole role;
+  final DeviceGateway device;
   @override
   State<PreviewShell> createState() => _PreviewShellState();
 }
@@ -105,139 +76,47 @@ class _PreviewShellState extends State<PreviewShell> {
   @override
   Widget build(BuildContext context) {
     final driver = widget.role == PreviewRole.driver;
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(driver ? 'Орбита · водитель' : 'Орбита · пассажир'),
-        actions: [
-          IconButton(
-            tooltip: 'Проверка телефона',
-            onPressed: () => Navigator.pushNamed(context, '/device-check'),
-            icon: const Icon(Icons.phonelink_setup_outlined),
-          ),
-        ],
+      body: SafeArea(
+        bottom: false,
+        child: IndexedStack(
+          index: _index,
+          children: [
+            driver ? const DriverScreen() : const PassengerScreen(),
+            const HistoryScreen(),
+            ProfileScreen(driver: driver, device: widget.device),
+          ],
+        ),
       ),
-      body: Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Notice(
-              'Просмотр интерфейса · заказы недоступны',
-              icon: Icons.science_outlined,
+      bottomNavigationBar: keyboardVisible
+          ? null
+          : AdaptiveNavigation(
+              driver: driver,
+              selected: _index,
+              onSelected: (i) => setState(() => _index = i),
             ),
-          ),
-          Expanded(
-            child: IndexedStack(
-              index: _index,
-              children: [
-                driver ? const DriverScreen() : const PassengerScreen(),
-                const HistoryScreen(),
-                ProfileScreen(driver: driver),
-              ],
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
-        destinations: [
-          NavigationDestination(
-            icon: Icon(
-              driver ? Icons.local_taxi_outlined : Icons.place_outlined,
-            ),
-            label: driver ? 'Работа' : 'Заказ',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.history),
-            label: 'Поездки',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            label: 'Профиль',
-          ),
-        ],
-      ),
     );
   }
-}
-
-class PassengerScreen extends StatelessWidget {
-  const PassengerScreen({super.key});
-  @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(16),
-    children: [
-      const SectionTitle('Куда поедем?'),
-      const SizedBox(height: 8),
-      const Text('Чик, Прокудское и рядом'),
-      const SizedBox(height: 16),
-      const MapPlaceholder(),
-      const SizedBox(height: 20),
-      const TextField(
-        key: Key('pickup'),
-        decoration: InputDecoration(
-          labelText: 'Откуда',
-          prefixIcon: Icon(Icons.trip_origin),
-        ),
-      ),
-      const SizedBox(height: 12),
-      const TextField(
-        key: Key('destination'),
-        decoration: InputDecoration(
-          labelText: 'Куда',
-          prefixIcon: Icon(Icons.location_on_outlined),
-        ),
-      ),
-      const SizedBox(height: 20),
-      const FilledButton(onPressed: null, child: Text('Заказать такси')),
-      const SizedBox(height: 12),
-      const Text(
-        'Можно посмотреть поля и навигацию. Заказ не отправляется, адреса не сохраняются.',
-      ),
-    ],
-  );
 }
 
 class DriverScreen extends StatelessWidget {
   const DriverScreen({super.key});
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(16),
-    children: [
-      const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) => CustomScrollView(
+    key: const Key('driver-scroll'),
+    slivers: [
+      const SliverToBoxAdapter(child: BrandHeader(showShift: true)),
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        sliver: SliverFillRemaining(
+          hasScrollBody: false,
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SectionTitle('Рабочий день'),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: false,
-                onChanged: null,
-                title: Text('Не на линии'),
-              ),
-              Text(
-                'Выход на линию станет доступен после входа и подключения сервера.',
-              ),
-            ],
-          ),
-        ),
-      ),
-      const SizedBox(height: 16),
-      const MapPlaceholder(driver: true),
-      const SizedBox(height: 16),
-      const Card(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SectionTitle('Текущий заказ'),
-              SizedBox(height: 8),
-              Text(
-                'Назначенный заказ появится здесь. Предложения и очередь пока не подключены.',
-              ),
+              Expanded(child: MapPlaceholder(key: Key('driver-map'))),
+              SizedBox(height: 12),
+              CurrentOrderCard(),
             ],
           ),
         ),
@@ -246,121 +125,289 @@ class DriverScreen extends StatelessWidget {
   );
 }
 
-class MapPlaceholder extends StatelessWidget {
-  const MapPlaceholder({this.driver = false, super.key});
-  final bool driver;
+class CurrentOrderCard extends StatelessWidget {
+  const CurrentOrderCard({
+    this.pickup,
+    this.destination,
+    this.status,
+    this.actionLabel,
+    this.onAction,
+    super.key,
+  });
+  final String? pickup, destination, status, actionLabel;
+  final VoidCallback? onAction;
   @override
-  Widget build(BuildContext context) => Container(
-    constraints: BoxConstraints(minHeight: driver ? 240 : 170),
-    padding: const EdgeInsets.all(24),
-    decoration: BoxDecoration(
-      color: const Color(0xff17242b),
-      borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: const Color(0xff344752)),
-    ),
+  Widget build(BuildContext context) => SurfaceCard(
+    key: const Key('current-order'),
+    padding: const EdgeInsets.all(14),
     child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          Icons.map_outlined,
-          size: 48,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        const SizedBox(height: 12),
         const Text(
-          'Здесь будет карта',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          'Текущий заказ',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         ),
-        const SizedBox(height: 8),
-        const Text(
-          'Карта и положение автомобиля ещё не подключены.',
-          textAlign: TextAlign.center,
-        ),
+        const SizedBox(height: 6),
+        if (pickup == null)
+          const Text('Нет активных заказов')
+        else ...[
+          Text('Откуда: $pickup'),
+          const SizedBox(height: 8),
+          Text('Куда: ${destination ?? 'Не указано'}'),
+          if (status != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(status!),
+            ),
+          if (actionLabel != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: FullWidthAction(actionLabel!, onPressed: onAction),
+            ),
+        ],
       ],
     ),
+  );
+}
+
+class PassengerScreen extends StatelessWidget {
+  const PassengerScreen({super.key});
+  @override
+  Widget build(BuildContext context) => CustomScrollView(
+    key: const Key('passenger-scroll'),
+    slivers: [
+      const SliverToBoxAdapter(child: BrandHeader()),
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        sliver: SliverList.list(
+          children: [
+            const MapPlaceholder(key: Key('passenger-map'), minimumHeight: 230),
+            const SizedBox(height: 16),
+            SurfaceCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const TextField(
+                    key: Key('pickup'),
+                    maxLines: null,
+                    maxLength: 250,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'Откуда',
+                      prefixIcon: Icon(Icons.trip_origin),
+                      counterText: '',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('destination'),
+                    maxLines: null,
+                    maxLength: 250,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                    decoration: const InputDecoration(
+                      labelText: 'Куда',
+                      prefixIcon: Icon(Icons.place_outlined),
+                      counterText: '',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const FullWidthAction(
+                    'Заказать такси',
+                    key: Key('create-order'),
+                    onPressed: null,
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Заказы недоступны в режиме просмотра.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
   );
 }
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(24),
-    children: const [
-      SizedBox(height: 40),
-      Icon(Icons.history, size: 56),
-      SizedBox(height: 20),
-      Center(child: SectionTitle('Ваши поездки')),
-      SizedBox(height: 12),
-      Text(
-        'История появится после подключения аккаунта. Тестовых заказов здесь нет.',
-        textAlign: TextAlign.center,
+  Widget build(BuildContext context) => CustomScrollView(
+    slivers: [
+      const SliverToBoxAdapter(child: BrandHeader()),
+      SliverPadding(
+        padding: const EdgeInsets.all(16),
+        sliver: SliverList.list(
+          children: [
+            Text('Ваши поездки', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 16),
+            const SurfaceCard(
+              child: Text(
+                'История появится после входа. В тестовой версии поездок нет.',
+              ),
+            ),
+          ],
+        ),
       ),
     ],
   );
 }
 
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({required this.driver, super.key});
+  const ProfileScreen({required this.driver, required this.device, super.key});
   final bool driver;
+  final DeviceGateway device;
+  Future<void> _settings(BuildContext context) async {
+    try {
+      await device.openSettings();
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Не удалось открыть настройки приложения.'),
+          ),
+        );
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(20),
-    children: [
-      SectionTitle(driver ? 'Профиль водителя' : 'Профиль пассажира'),
-      const SizedBox(height: 16),
-      const Notice('Аккаунт не подключён', icon: Icons.lock_outline),
-      const SizedBox(height: 16),
-      Text(
-        driver
-            ? 'Имя и данные автомобиля будут получены после входа. Водительский аккаунт создаёт администратор.'
-            : 'Вход и подтверждение телефона появятся на следующем этапе.',
-      ),
-      const SizedBox(height: 24),
-      OutlinedButton.icon(
-        onPressed: () => Navigator.pushNamed(context, '/device-check'),
-        icon: const Icon(Icons.phonelink_setup_outlined),
-        label: const Text('Проверка телефона'),
-      ),
-      const SizedBox(height: 16),
-      const Text('Орбита · тестовая основа 0.5.0'),
-      const SizedBox(height: 8),
-      const Text(
-        'Выбор экрана для просмотра не предоставляет права пассажира или водителя на сервере.',
+  Widget build(BuildContext context) => CustomScrollView(
+    slivers: [
+      const SliverToBoxAdapter(child: BrandHeader()),
+      SliverPadding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+        sliver: SliverList.list(
+          children: [
+            Text(
+              driver ? 'Профиль водителя' : 'Профиль пассажира',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 14),
+            SurfaceCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const StateBadge('Просмотр без входа', good: false),
+                  const SizedBox(height: 12),
+                  Text(
+                    driver
+                        ? 'Аккаунт и данные автомобиля подключит администратор.'
+                        : 'Вход и данные пассажира будут подключены на следующем этапе.',
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Настройки и проверки',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            _MenuTile(
+              icon: Icons.settings_outlined,
+              title: 'Настройки приложения',
+              onTap: () => _settings(context),
+            ),
+            const SizedBox(height: 12),
+            _MenuTile(
+              icon: Icons.phonelink_setup_outlined,
+              title: 'Проверка телефона',
+              onTap: () => Navigator.pushNamed(context, '/device-check'),
+            ),
+            const SizedBox(height: 12),
+            _MenuTile(
+              icon: Icons.notifications_outlined,
+              title: 'Проверка уведомлений',
+              onTap: () =>
+                  Navigator.pushNamed(context, '/device-check/notifications'),
+            ),
+            const SizedBox(height: 12),
+            _MenuTile(
+              icon: Icons.location_on_outlined,
+              title: 'Диагностика геолокации',
+              onTap: () =>
+                  Navigator.pushNamed(context, '/device-check/location'),
+            ),
+            const SizedBox(height: 12),
+            const SurfaceCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'О приложении',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  SizedBox(height: 6),
+                  Text('Версия $appVersion · тестовая основа'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () => Navigator.maybePop(context),
+              child: const Text('Сменить интерфейс просмотра'),
+            ),
+          ],
+        ),
       ),
     ],
   );
 }
 
-class SectionTitle extends StatelessWidget {
-  const SectionTitle(this.text, {super.key});
-  final String text;
-  @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: Theme.of(context).textTheme.titleLarge
-        ?.copyWith(fontWeight: FontWeight.w700),
-  );
-}
-
-class Notice extends StatelessWidget {
-  const Notice(this.text, {required this.icon, super.key});
-  final String text;
+class _MenuTile extends StatelessWidget {
+  const _MenuTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+  });
   final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: const Color(0xff29382a),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
-        const SizedBox(width: 10),
-        Expanded(child: Text(text)),
-      ],
+  Widget build(BuildContext context) => Card(
+    child: InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(icon, size: 24, color: OrbitaColors.accent),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (subtitle != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Text(subtitle!),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right,
+              size: 20,
+              color: OrbitaColors.muted,
+            ),
+          ],
+        ),
+      ),
     ),
   );
 }

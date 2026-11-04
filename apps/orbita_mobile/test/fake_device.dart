@@ -5,47 +5,57 @@ class FakeDevice implements DeviceGateway {
   final List<String> calls = [];
   bool launchRequested = false;
   bool failRead = false;
+  Future<DeviceState> Function()? readHandler;
+  Future<void> Function(String name)? actionHandler;
   void Function()? openCallback;
   @override
   Future<DeviceState> read() async {
     calls.add('read');
     if (failRead) throw StateError('Тестовый отказ платформы');
+    if (readHandler != null) return readHandler!();
     return state;
   }
 
   @override
   Future<void> requestNotifications() async {
     calls.add('notifications');
+    await actionHandler?.call('notifications');
   }
 
   @override
   Future<void> requestForegroundLocation() async {
     calls.add('foreground');
+    await actionHandler?.call('foreground');
   }
 
   @override
   Future<void> requestBackgroundLocation() async {
     calls.add('background');
+    await actionHandler?.call('background');
   }
 
   @override
   Future<void> showLocalNotification() async {
     calls.add('notification');
+    await actionHandler?.call('notification');
   }
 
   @override
   Future<void> startLocationDiagnostic() async {
     calls.add('start');
+    await actionHandler?.call('start');
   }
 
   @override
   Future<void> stopLocationDiagnostic() async {
     calls.add('stop');
+    await actionHandler?.call('stop');
   }
 
   @override
   Future<void> openSettings() async {
     calls.add('settings');
+    await actionHandler?.call('settings');
   }
 
   @override

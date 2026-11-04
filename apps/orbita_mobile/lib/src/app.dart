@@ -4,6 +4,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'platform/device_gateway.dart';
 import 'screens/device_check_screen.dart';
 import 'screens/preview_screens.dart';
+import 'ui/theme.dart';
 
 class OrbitaApp extends StatefulWidget {
   const OrbitaApp({required this.device, super.key});
@@ -44,42 +45,18 @@ class _OrbitaAppState extends State<OrbitaApp> {
     supportedLocales: const [Locale('ru')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
     navigatorKey: _navigator,
-    theme: ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(0xff111720),
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xffb9ef63),
-        brightness: Brightness.dark,
-        primary: const Color(0xffb9ef63),
-        surface: const Color(0xff1b2431),
-      ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xff111720),
-        centerTitle: false,
-      ),
-      inputDecorationTheme: const InputDecorationTheme(
-        filled: true,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
-        ),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          minimumSize: const Size(48, 54),
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-        ),
-      ),
-      cardTheme: const CardThemeData(
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(20)),
-        ),
-      ),
-    ),
+    theme: orbitaTheme(),
     routes: {
-      '/': (_) => const WelcomeScreen(),
+      '/': (_) => WelcomeScreen(device: widget.device),
       '/device-check': (_) => DeviceCheckScreen(device: widget.device),
+      '/device-check/notifications': (_) => DeviceCheckScreen(
+        device: widget.device,
+        section: DeviceCheckSection.notifications,
+      ),
+      '/device-check/location': (_) => DeviceCheckScreen(
+        device: widget.device,
+        section: DeviceCheckSection.location,
+      ),
     },
   );
 }

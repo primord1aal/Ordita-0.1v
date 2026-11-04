@@ -1,7 +1,7 @@
 name: orbita_mobile
 description: 'Тестовая Android-основа местного сервиса такси «Орбита».'
 publish_to: none
-version: 0.5.0+1
+version: 0.5.1+2
 
 environment:
   sdk: '>=3.13.7 <4.0.0'

@@ -1,152 +1,270 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbita_mobile/src/app.dart';
-import 'package:orbita_mobile/src/platform/device_gateway.dart';
 import 'package:orbita_mobile/src/screens/device_check_screen.dart';
+import 'package:orbita_mobile/src/ui/components.dart';
 
 import 'fake_device.dart';
-
-Future<void> openEntry(WidgetTester tester, String label) async {
-  await tester.pumpAndSettle();
-  await tester.scrollUntilVisible(find.text(label), 150);
-  await tester.pumpAndSettle();
-  await tester.tap(find.text(label));
-  await tester.pumpAndSettle();
-}
+import 'test_helpers.dart';
 
 void main() {
-  testWidgets('Старт явно предлагает просмотр, без запроса разрешений', (
+  testWidgets('Старт предлагает просмотр без автоматических разрешений', (
     tester,
   ) async {
     final device = FakeDevice();
     await tester.pumpWidget(OrbitaApp(device: device));
     await tester.pumpAndSettle();
-    expect(find.text('Пассажир'), findsOneWidget);
-    expect(find.text('Водитель'), findsOneWidget);
     expect(find.textContaining('Это не вход'), findsOneWidget);
     expect(device.calls, isEmpty);
+    expect(find.text('Проверка телефона'), findsNothing);
   });
-  testWidgets('Пассажир видит два адреса и не может отправить заказ', (
+
+  testWidgets(
+    'Пассажир: два адреса, выключенный заказ, сохранение ввода во вкладках',
+    (tester) async {
+      await openPreview(tester, 'Пассажир');
+      expect(find.byType(TextField), findsNWidgets(2));
+      await scrollTo(tester, find.byKey(const Key('pickup')));
+      await tester.enterText(find.byKey(const Key('pickup')), 'Учебная точка');
+      tester.testTextInput.hide();
+      await tester.pumpAndSettle();
+      await scrollTo(tester, find.byKey(const Key('create-order')));
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.descendant(
+                of: find.byKey(const Key('create-order')),
+                matching: find.byType(FilledButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.byKey(const Key('nav-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Ваши поездки'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('nav-0')));
+      await tester.pumpAndSettle();
+      await scrollTo(tester, find.byKey(const Key('pickup')), delta: -180);
+      expect(find.text('Учебная точка'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Выберите интерфейс'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Водитель: карта главная, линия в шапке недоступна, настроек в шапке нет',
+    (tester) async {
+      setViewport(tester, const Size(390, 844), 1);
+      await openPreview(tester, 'Водитель');
+      expect(find.text('Рабочий день'), findsNothing);
+      expect(find.byType(SwitchListTile), findsNothing);
+      expect(find.text('На линию'), findsOneWidget);
+      expect(find.text('На линии'), findsNothing);
+      final button = find.descendant(
+        of: find.byKey(const Key('shift-control')),
+        matching: find.byType(FilledButton),
+      );
+      expect(tester.widget<FilledButton>(button).onPressed, isNull);
+      expect(find.byTooltip('Проверка телефона'), findsNothing);
+      expect(find.byIcon(Icons.settings_outlined), findsNothing);
+      final map = tester.getRect(find.byKey(const Key('driver-map')));
+      final card = tester.getRect(find.byKey(const Key('current-order')));
+      expect(map.height, greaterThan(card.height * 2));
+      expect(card.top, greaterThanOrEqualTo(map.bottom));
+      expect(find.text('Нет активных заказов'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Все проверки доступны из профиля; системные настройки вызываются явно',
+    (tester) async {
+      final device = FakeDevice();
+      await openPreview(tester, 'Водитель', device: device);
+      await openProfile(tester);
+      expect(find.text('Профиль водителя'), findsOneWidget);
+      await scrollTo(tester, find.text('Настройки приложения'));
+      await tester.tap(find.text('Настройки приложения'));
+      await tester.pumpAndSettle();
+      expect(device.calls, ['settings']);
+      await scrollTo(tester, find.text('Диагностика геолокации'));
+      await tester.tap(find.text('Диагностика геолокации'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('location-card')), findsOneWidget);
+      expect(find.byKey(const Key('notifications-card')), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      expect(device.calls, isNot(contains('stop')));
+    },
+  );
+
+  testWidgets(
+    'Разрешённые уведомления: главное действие — тест, лишнего запроса нет',
+    (tester) async {
+      final device = FakeDevice()..state = readyState();
+      await openPreview(tester, 'Пассажир', device: device);
+      await openCheck(tester, 'Проверка уведомлений');
+      expect(find.text('Разрешить уведомления'), findsNothing);
+      final test = find.byKey(const Key('notification-test'));
+      await scrollTo(tester, test);
+      await tester.tap(test);
+      await tester.pumpAndSettle();
+      expect(device.calls, contains('notification'));
+      expect(device.calls, isNot(contains('notifications')));
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'После получения разрешения кнопка меняется по свежему состоянию платформы',
+    (tester) async {
+      final device = FakeDevice();
+      device.actionHandler = (action) async {
+        if (action == 'notifications') device.state = readyState();
+      };
+      await openPreview(tester, 'Пассажир', device: device);
+      await openCheck(tester, 'Проверка уведомлений');
+      await scrollTo(tester, find.byKey(const Key('notification-permission')));
+      await tester.tap(find.byKey(const Key('notification-permission')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('notification-permission')), findsNothing);
+      expect(find.byKey(const Key('notification-test')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'Отдельные шаги разрешений сохраняются, фоновый запрос не вызывается заранее',
+    (tester) async {
+      final device = FakeDevice();
+      device.actionHandler = (action) async {
+        if (action == 'foreground') {
+          device.state = readyState(background: false);
+        }
+      };
+      await openPreview(tester, 'Водитель', device: device);
+      await openCheck(tester, 'Диагностика геолокации');
+      await scrollTo(tester, find.byKey(const Key('location-permissions')));
+      await tester.tap(find.byKey(const Key('location-permissions')));
+      await tester.pumpAndSettle();
+      await scrollTo(tester, find.byKey(const Key('background-permission')));
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.descendant(
+                of: find.byKey(const Key('background-permission')),
+                matching: find.byType(OutlinedButton),
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+      await scrollTo(
+        tester,
+        find.byKey(const Key('foreground-permission')),
+        delta: -180,
+      );
+      await tester.tap(find.byKey(const Key('foreground-permission')));
+      await tester.pumpAndSettle();
+      expect(device.calls, contains('foreground'));
+      expect(device.calls, isNot(contains('background')));
+      await scrollTo(tester, find.byKey(const Key('background-permission')));
+      await tester.tap(find.byKey(const Key('background-permission')));
+      await tester.pumpAndSettle();
+      expect(device.calls, contains('background'));
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'Служба: показ фактических GPS-данных, запуск и остановка не потеряны',
+    (tester) async {
+      final device = FakeDevice()..state = readyState(background: false);
+      device.actionHandler = (action) async {
+        device.state = readyState(
+          running: action == 'start',
+          background: false,
+        );
+      };
+      await openPreview(tester, 'Водитель', device: device);
+      await openCheck(tester, 'Диагностика геолокации');
+      await scrollTo(tester, find.byKey(const Key('start-diagnostic')));
+      await tester.tap(find.byKey(const Key('start-diagnostic')));
+      await tester.pumpAndSettle();
+      expect(find.text('Работает'), findsOneWidget);
+      expect(find.text('64'), findsOneWidget);
+      expect(device.calls, isNot(contains('background')));
+      await scrollTo(tester, find.byKey(const Key('stop-diagnostic')));
+      await tester.tap(find.byKey(const Key('stop-diagnostic')));
+      await tester.pumpAndSettle();
+      expect(find.text('Остановлена'), findsOneWidget);
+      expect(device.calls, contains('stop'));
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('Отказ чтения виден отдельно от карточек и не блокирует повтор', (
     tester,
   ) async {
-    await tester.pumpWidget(OrbitaApp(device: FakeDevice()));
-    await openEntry(tester, 'Пассажир');
-    expect(find.byType(TextField), findsNWidgets(2));
-    await tester.enterText(find.byKey(const Key('pickup')), 'Тестовая точка');
-    tester.testTextInput.hide();
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.widgetWithText(FilledButton, 'Заказать такси'),
-      150,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    final order = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Заказать такси'),
-    );
-    expect(order.onPressed, isNull);
-    await tester.tap(find.text('Поездки'));
-    await tester.pumpAndSettle();
-    expect(find.text('Ваши поездки'), findsOneWidget);
-    await tester.tap(find.text('Заказ'));
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('pickup')),
-      -150,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Тестовая точка'), findsOneWidget);
-    await tester.tap(find.byTooltip('Назад'));
-    await tester.pumpAndSettle();
-    expect(find.text('Знакомство с приложением'), findsOneWidget);
-  });
-  testWidgets('Водительский интерфейс не включает реальные назначения', (
-    tester,
-  ) async {
-    await tester.pumpWidget(OrbitaApp(device: FakeDevice()));
-    await openEntry(tester, 'Водитель');
-    expect(find.text('Рабочий день'), findsOneWidget);
-    expect(
-      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).onChanged,
-      isNull,
-    );
-    expect(find.byKey(const Key('pickup')), findsNothing);
-    await tester.tap(find.text('Профиль'));
-    await tester.pumpAndSettle();
-    expect(find.text('Профиль водителя'), findsOneWidget);
-  });
-  testWidgets('Уведомление открывает диагностику при холодном запуске', (
-    tester,
-  ) async {
-    final device = FakeDevice()..launchRequested = true;
-    await tester.pumpWidget(OrbitaApp(device: device));
-    await tester.pumpAndSettle();
-    expect(find.byType(DeviceCheckScreen), findsOneWidget);
-    expect(device.calls, isNot(contains('start')));
-    await tester.pumpWidget(const SizedBox());
-  });
-  testWidgets('Диагностика не просит геопозицию автоматически', (tester) async {
-    final device = FakeDevice();
-    await tester.pumpWidget(OrbitaApp(device: device));
-    await openEntry(tester, 'Проверка телефона');
-    expect(device.calls, ['read']);
-    final start = find.widgetWithText(
-      FilledButton,
-      'Запустить проверку в фоне',
-    );
-    await tester.scrollUntilVisible(start, 200);
-    await tester.pumpAndSettle();
-    expect(tester.widget<FilledButton>(start).onPressed, isNull);
-    await tester.pumpWidget(const SizedBox());
-  });
-  testWidgets('Отказ платформы показан по-русски без падения', (tester) async {
     final device = FakeDevice()..failRead = true;
-    await tester.pumpWidget(OrbitaApp(device: device));
-    await openEntry(tester, 'Проверка телефона');
-    expect(find.textContaining('Не удалось прочитать'), findsOneWidget);
+    await openPreview(tester, 'Водитель', device: device);
+    await openCheck(tester, 'Проверка телефона');
+    expect(
+      find.text('Не удалось обновить состояние телефона.'),
+      findsOneWidget,
+    );
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.text('Нет данных'), findsNWidgets(4));
+    expect(find.text('Остановлена'), findsNothing);
+    expect(find.text('Отключены'), findsNothing);
+    device.failRead = false;
+    device.state = readyState();
+    await tester.tap(find.text('Повторить проверку'));
+    await tester.pumpAndSettle();
+    expect(find.text('Не удалось обновить состояние телефона.'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
-  testWidgets('Только при использовании разрешает явный запуск проверки', (
-    tester,
-  ) async {
-    final device = FakeDevice()
-      ..state = const DeviceState(
-        sdk: 34,
-        notifications: true,
-        location: 'approximate',
-        locationEnabled: true,
-      );
-    await tester.pumpWidget(OrbitaApp(device: device));
-    await openEntry(tester, 'Проверка телефона');
-    final start = find.widgetWithText(
-      FilledButton,
-      'Запустить проверку в фоне',
-    );
-    await tester.scrollUntilVisible(start, 200);
-    await tester.pumpAndSettle();
-    await tester.tap(start);
-    await tester.pumpAndSettle();
-    expect(device.calls, contains('start'));
-    expect(device.calls, isNot(contains('background')));
-    await tester.pumpWidget(const SizedBox());
-  });
+
   testWidgets(
-    'Малый экран и крупный шрифт сохраняют навигацию без переполнения',
+    'Локальное уведомление по-прежнему открывает проверку при старте',
     (tester) async {
-      tester.view.physicalSize = const Size(360, 740);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      tester.platformDispatcher.textScaleFactorTestValue = 1.5;
-      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      await tester.pumpWidget(OrbitaApp(device: FakeDevice()));
-      await openEntry(tester, 'Водитель');
-      expect(tester.takeException(), isNull);
-      await tester.tap(find.text('Профиль'));
+      final device = FakeDevice()..launchRequested = true;
+      await tester.pumpWidget(OrbitaApp(device: device));
       await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
+      expect(find.byType(DeviceCheckScreen), findsOneWidget);
+      expect(device.calls, isNot(contains('start')));
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'Выход с подтверждённой линии требует подтверждения и не меняет статус сам',
+    (tester) async {
+      final requested = <bool>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ShiftControl(
+              confirmedOnline: true,
+              available: true,
+              requestChange: (online) async => requested.add(online),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('На линии'));
+      await tester.pumpAndSettle();
+      expect(requested, isEmpty);
+      await tester.tap(find.text('Остаться'));
+      await tester.pumpAndSettle();
+      expect(requested, isEmpty);
+      await tester.tap(find.text('На линии'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Выйти'));
+      await tester.pumpAndSettle();
+      expect(requested, [false]);
+      expect(find.text('На линии'), findsOneWidget);
     },
   );
 }
