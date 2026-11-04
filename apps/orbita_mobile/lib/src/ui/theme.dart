@@ -9,7 +9,7 @@ abstract final class OrbitaColors {
   static const warning = Color(0xffedc58d);
 }
 
-const appVersion = '0.5.2';
+const appVersion = '0.5.3';
 
 ThemeData orbitaTheme() {
   final scheme =

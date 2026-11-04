@@ -7,6 +7,8 @@ on:
       - 'apps/orbita_mobile/**'
       - '.github/workflows/orbita-stage-3b.yml'
       - 'docs/STAGE_3B_API_CHECK.md'
+      - 'docs/STAGE_3B_API_SERIES.md'
+      - 'docs/SUPABASE_FREE_RELIABILITY.md'
   workflow_dispatch:
 
 permissions:
@@ -92,13 +94,14 @@ jobs:
       - name: Подготовить APK для владельца
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk dist/ORBITA-0.5.2-api-check.apk
-          cp ../../docs/STAGE_3B_API_CHECK.md dist/INSTALL-ANDROID.md
-          (cd dist && sha256sum ORBITA-0.5.2-api-check.apk > SHA256SUMS.txt)
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk dist/ORBITA-0.5.3-api-check.apk
+          cp ../../docs/STAGE_3B_API_SERIES.md dist/INSTALL-ANDROID.md
+          cp ../../docs/SUPABASE_FREE_RELIABILITY.md dist/SUPABASE_FREE_RELIABILITY.md
+          (cd dist && sha256sum ORBITA-0.5.3-api-check.apk > SHA256SUMS.txt)
       - name: Сохранить APK и инструкцию
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ORBITA-0.5.2-api-check-apk
+          name: ORBITA-0.5.3-api-check-apk
           path: apps/orbita_mobile/dist/
           if-no-files-found: error
           retention-days: 14

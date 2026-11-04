@@ -19,6 +19,14 @@ class MainActivity : FlutterActivity() {
     @SuppressLint("MissingPermission") // Показ уведомления защищён notificationsAllowed.
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
+        MethodChannel(engine.dartExecutor.binaryMessenger, "ru.orbita.taxi.foundation/network")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "snapshot" -> result.success(NetworkSupport.snapshot(applicationContext))
+                    "beginProbe" -> result.success(NetworkSupport.snapshot(applicationContext, true))
+                    else -> result.notImplemented()
+                }
+            }
         channel = MethodChannel(engine.dartExecutor.binaryMessenger, "ru.orbita.taxi.foundation/device")
         channel.setMethodCallHandler { call, result ->
             try {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'backend/api_probe.dart';
+import 'backend/probe_journal.dart';
 import 'platform/device_gateway.dart';
 import 'screens/api_check_screen.dart';
 import 'screens/device_check_screen.dart';
@@ -18,6 +19,7 @@ class OrbitaApp extends StatefulWidget {
 
 class _OrbitaAppState extends State<OrbitaApp> {
   final _navigator = GlobalKey<NavigatorState>();
+  final _apiJournal = ProbeJournal();
   @override
   void initState() {
     super.initState();
@@ -51,8 +53,10 @@ class _OrbitaAppState extends State<OrbitaApp> {
     theme: orbitaTheme(),
     routes: {
       '/': (_) => WelcomeScreen(device: widget.device),
-      '/api-check': (_) =>
-          ApiCheckScreen(probe: (widget.apiProbeFactory ?? createApiProbe)()),
+      '/api-check': (_) => ApiCheckScreen(
+        probe: (widget.apiProbeFactory ?? createApiProbe)(),
+        journal: _apiJournal,
+      ),
       '/device-check': (_) => DeviceCheckScreen(device: widget.device),
       '/device-check/notifications': (_) => DeviceCheckScreen(
         device: widget.device,

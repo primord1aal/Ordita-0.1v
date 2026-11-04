@@ -16,6 +16,11 @@ enum ProbeState {
   serverError,
   unexpected,
   cancelled,
+  domainMismatch,
+  noNetwork,
+  networkMismatch,
+  conditionsBlocked,
+  httpError,
 }
 
 class ProbeResult {
@@ -24,12 +29,15 @@ class ProbeResult {
     required this.elapsed,
     required this.checkedAt,
     this.httpStatus,
+    this.requestUri,
   });
   final ProbeState state;
   final Duration elapsed;
   final DateTime checkedAt;
   final int? httpStatus;
+  final Uri? requestUri;
   bool get success => state == ProbeState.ready;
+  int get elapsedMilliseconds => (elapsed.inMicroseconds / 1000).ceil();
 
   String get message => switch (state) {
     ProbeState.ready => 'Служба входа ответила из Android.',
@@ -44,13 +52,29 @@ class ProbeResult {
     ProbeState.serverError => 'Служба входа временно недоступна.',
     ProbeState.unexpected => 'Получен неожиданный ответ. Проверка остановлена.',
     ProbeState.cancelled => 'Проверка отменена.',
+    ProbeState.domainMismatch =>
+      'Адрес запроса не соответствует конфигурации. Запрос запрещён.',
+    ProbeState.noNetwork => 'Нет сети. Запрос не отправлен.',
+    ProbeState.networkMismatch =>
+      'Активная сеть не совпадает с выбранной. Запрос не отправлен.',
+    ProbeState.conditionsBlocked =>
+      'Условия испытания не подтверждены. Запрос не отправлен.',
+    ProbeState.httpError => 'Сервер вернул HTTP-ошибку.',
   };
 }
 
 class ProbeResponse {
-  const ProbeResponse(this.status, this.body);
+  const ProbeResponse(this.status, this.body, {this.requestUri});
   final int status;
   final String body;
+  final Uri? requestUri;
+}
+
+class ObservedResponseFormatException extends FormatException {
+  const ObservedResponseFormatException(this.status, this.uri)
+    : super('Неожиданный формат ответа.');
+  final int status;
+  final Uri uri;
 }
 
 abstract interface class ProbeTransport {
@@ -74,14 +98,25 @@ class IoProbeTransport implements ProbeTransport {
         ..headers.set('apikey', publicKey)
         ..headers.set(HttpHeaders.acceptHeader, 'application/json');
       final response = await request.close();
-      final data = <int>[];
-      await for (final chunk in response) {
-        if (data.length + chunk.length > 8192) {
-          throw const FormatException('Ответ превышает предел диагностики.');
-        }
-        data.addAll(chunk);
+      if (response.statusCode != 200) {
+        return ProbeResponse(response.statusCode, '', requestUri: request.uri);
       }
-      return ProbeResponse(response.statusCode, utf8.decode(data));
+      try {
+        final data = <int>[];
+        await for (final chunk in response) {
+          if (data.length + chunk.length > 8192) {
+            throw const FormatException('Ответ превышает предел диагностики.');
+          }
+          data.addAll(chunk);
+        }
+        return ProbeResponse(
+          response.statusCode,
+          utf8.decode(data),
+          requestUri: request.uri,
+        );
+      } on FormatException {
+        throw ObservedResponseFormatException(response.statusCode, request.uri);
+      }
     } finally {
       client.close(force: true);
       if (identical(_client, client)) _client = null;
@@ -97,6 +132,9 @@ class IoProbeTransport implements ProbeTransport {
 
 abstract interface class ApiProbe {
   bool get configured;
+  Uri? get targetUri;
+  String? get expectedDomain;
+  bool get domainMatches;
   Future<ProbeResult> check();
   void dispose();
 }
@@ -105,6 +143,12 @@ abstract interface class ApiProbe {
 class UnconfiguredApiProbe implements ApiProbe {
   @override
   bool get configured => false;
+  @override
+  Uri? get targetUri => null;
+  @override
+  String? get expectedDomain => null;
+  @override
+  bool get domainMatches => false;
   @override
   Future<ProbeResult> check() async => ProbeResult(
     state: ProbeState.unconfigured,
@@ -119,8 +163,9 @@ class HealthApiProbe implements ApiProbe {
   HealthApiProbe({
     required this.configuration,
     required this.transport,
-    this.timeout = const Duration(seconds: 15),
-  }) {
+    this.timeout = const Duration(seconds: 12),
+    Uri? requestUri,
+  }) : _targetUri = requestUri ?? configuration.healthUri {
     if (!configuration.isValid) {
       throw ArgumentError('Тестовая конфигурация не подтверждена.');
     }
@@ -128,6 +173,17 @@ class HealthApiProbe implements ApiProbe {
   final TestBackendConfiguration configuration;
   final ProbeTransport transport;
   final Duration timeout;
+  final Uri _targetUri;
+  @override
+  Uri get targetUri => _targetUri;
+  @override
+  String get expectedDomain => configuration.healthUri.host;
+  @override
+  bool get domainMatches =>
+      _targetUri.scheme == 'https' &&
+      _targetUri.host == expectedDomain &&
+      !_targetUri.hasPort &&
+      _targetUri.userInfo.isEmpty;
   bool _busy = false, _disposed = false;
   @override
   bool get configured => true;
@@ -135,26 +191,38 @@ class HealthApiProbe implements ApiProbe {
   @override
   Future<ProbeResult> check() async {
     final watch = Stopwatch()..start();
+    int? observedStatus;
+    var observedUri = targetUri;
     ProbeResult result(ProbeState state, [int? httpStatus]) => ProbeResult(
       state: state,
       elapsed: watch.elapsed,
       checkedAt: DateTime.now(),
       httpStatus: httpStatus,
+      requestUri: observedUri,
     );
     if (_disposed || _busy) return result(ProbeState.cancelled);
+    if (!domainMatches || targetUri != configuration.healthUri) {
+      return result(ProbeState.domainMismatch);
+    }
     _busy = true;
     try {
       final response = await transport
-          .get(configuration.healthUri, configuration.publishableKey)
+          .get(targetUri, configuration.publishableKey)
           .timeout(timeout);
       if (_disposed) return result(ProbeState.cancelled);
       final code = response.status;
+      observedStatus = code;
+      observedUri = response.requestUri ?? targetUri;
+      if (observedUri != configuration.healthUri) {
+        return result(ProbeState.domainMismatch, code);
+      }
       if (code == 401 || code == 403) {
         return result(ProbeState.unauthorized, code);
       }
       if (code == 429) return result(ProbeState.rateLimited, code);
       if (code >= 300 && code < 400) return result(ProbeState.redirect, code);
       if (code >= 500) return result(ProbeState.serverError, code);
+      if (code >= 400) return result(ProbeState.httpError, code);
       if (code != 200) return result(ProbeState.unexpected, code);
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic> ||
@@ -165,14 +233,17 @@ class HealthApiProbe implements ApiProbe {
       return result(ProbeState.ready, code);
     } on TimeoutException {
       return result(ProbeState.timeout);
-    } on HandshakeException {
+    } on TlsException {
       return result(ProbeState.tlsError);
     } on SocketException {
       return result(ProbeState.networkError);
     } on HttpException {
       return result(ProbeState.networkError);
+    } on ObservedResponseFormatException catch (error) {
+      observedUri = error.uri;
+      return result(ProbeState.unexpected, error.status);
     } on FormatException {
-      return result(ProbeState.unexpected);
+      return result(ProbeState.unexpected, observedStatus);
     } catch (_) {
       return result(_disposed ? ProbeState.cancelled : ProbeState.unexpected);
     } finally {

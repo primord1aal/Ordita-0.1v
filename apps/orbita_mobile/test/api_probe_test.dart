@@ -45,13 +45,65 @@ void main() {
     expect(transport.closes, 1);
   });
 
+  test(
+    'Фактический адрес сверяется до HTTP, несовпадение запрещает запрос',
+    () async {
+      final transport = FakeProbeTransport();
+      final probe = HealthApiProbe(
+        configuration: fixtureConfig,
+        transport: transport,
+        requestUri: Uri.https(
+          'bbbbbbbbbbbbbbbbbbbb.supabase.co',
+          '/auth/v1/health',
+        ),
+      );
+      expect(probe.domainMatches, isFalse);
+      expect((await probe.check()).state, ProbeState.domainMismatch);
+      expect(transport.calls, isEmpty);
+    },
+  );
+
+  test('Неожиданный ответ сохраняет наблюдаемый HTTP-код', () async {
+    final transport = FakeProbeTransport()
+      ..response = const ProbeResponse(200, '<html>fixture</html>');
+    final probe = HealthApiProbe(
+      configuration: fixtureConfig,
+      transport: transport,
+    );
+    final result = await probe.check();
+    expect(result.state, ProbeState.unexpected);
+    expect(result.httpStatus, 200);
+    expect(result.requestUri, fixtureConfig.healthUri);
+  });
+
+  test(
+    'Отчёт транспорта о другом адресе не выдаётся за корректный ответ',
+    () async {
+      final transport = FakeProbeTransport()
+        ..response = ProbeResponse(
+          200,
+          '{"name":"GoTrue","version":"fixture"}',
+          requestUri: Uri.https('other.invalid', '/auth/v1/health'),
+        );
+      final probe = HealthApiProbe(
+        configuration: fixtureConfig,
+        transport: transport,
+      );
+      final result = await probe.check();
+      expect(result.state, ProbeState.domainMismatch);
+      expect(result.httpStatus, 200);
+      expect(result.success, isFalse);
+    },
+  );
+
   for (final (status, expected) in [
     (401, ProbeState.unauthorized),
     (403, ProbeState.unauthorized),
     (429, ProbeState.rateLimited),
     (302, ProbeState.redirect),
     (503, ProbeState.serverError),
-    (404, ProbeState.unexpected),
+    (404, ProbeState.httpError),
+    (408, ProbeState.httpError),
   ]) {
     test(
       'HTTP $status не выдаётся за успешную связь со службой входа',
