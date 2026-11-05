@@ -1,7 +1,7 @@
 name: orbita_mobile
 description: 'Тестовая Android-основа местного сервиса такси «Орбита».'
 publish_to: none
-version: 0.5.3+4
+version: 0.5.4+5
 
 environment:
   sdk: '>=3.13.7 <4.0.0'
@@ -13,6 +13,8 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   flutter_secure_storage: 11.2.0
+  supabase_flutter: 2.18.3
+  http: 1.6.0
 
 dev_dependencies:
   flutter_test:

@@ -6,8 +6,9 @@ import '../ui/components.dart';
 import '../ui/theme.dart';
 
 class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({required this.device, super.key});
+  const WelcomeScreen({required this.device, this.onSignIn, super.key});
   final DeviceGateway device;
+  final VoidCallback? onSignIn;
   void _open(BuildContext context, PreviewRole role) => Navigator.push(
     context,
     MaterialPageRoute<void>(
@@ -28,6 +29,10 @@ class WelcomeScreen extends StatelessWidget {
           const SizedBox(height: 8),
           const Text('Чик, Прокудское и рядом'),
           const SizedBox(height: 28),
+          if (onSignIn != null) ...[
+            FullWidthAction('Войти в аккаунт', onPressed: onSignIn),
+            const SizedBox(height: 20),
+          ],
           Text(
             'Выберите интерфейс',
             style: Theme.of(context).textTheme.titleLarge,
@@ -64,9 +69,15 @@ class WelcomeScreen extends StatelessWidget {
 }
 
 class PreviewShell extends StatefulWidget {
-  const PreviewShell({required this.role, required this.device, super.key});
+  const PreviewShell({
+    required this.role,
+    required this.device,
+    this.accountPanel,
+    super.key,
+  });
   final PreviewRole role;
   final DeviceGateway device;
+  final Widget? accountPanel;
   @override
   State<PreviewShell> createState() => _PreviewShellState();
 }
@@ -85,7 +96,11 @@ class _PreviewShellState extends State<PreviewShell> {
           children: [
             driver ? const DriverScreen() : const PassengerScreen(),
             const HistoryScreen(),
-            ProfileScreen(driver: driver, device: widget.device),
+            ProfileScreen(
+              driver: driver,
+              device: widget.device,
+              accountPanel: widget.accountPanel,
+            ),
           ],
         ),
       ),
@@ -246,7 +261,7 @@ class HistoryScreen extends StatelessWidget {
             const SizedBox(height: 16),
             const SurfaceCard(
               child: Text(
-                'История появится после входа. В тестовой версии поездок нет.',
+                'История появится после подключения заказов. В тестовой версии поездок нет.',
               ),
             ),
           ],
@@ -257,9 +272,15 @@ class HistoryScreen extends StatelessWidget {
 }
 
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({required this.driver, required this.device, super.key});
+  const ProfileScreen({
+    required this.driver,
+    required this.device,
+    this.accountPanel,
+    super.key,
+  });
   final bool driver;
   final DeviceGateway device;
+  final Widget? accountPanel;
   Future<void> _settings(BuildContext context) async {
     try {
       await device.openSettings();
@@ -287,20 +308,21 @@ class ProfileScreen extends StatelessWidget {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 14),
-            SurfaceCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const StateBadge('Просмотр без входа', good: false),
-                  const SizedBox(height: 12),
-                  Text(
-                    driver
-                        ? 'Аккаунт и данные автомобиля подключит администратор.'
-                        : 'Вход и данные пассажира будут подключены на следующем этапе.',
+            accountPanel ??
+                SurfaceCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const StateBadge('Просмотр без входа', good: false),
+                      const SizedBox(height: 12),
+                      Text(
+                        driver
+                            ? 'Аккаунт и данные автомобиля подключит администратор.'
+                            : 'Вход и данные пассажира будут подключены на следующем этапе.',
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
+                ),
             const SizedBox(height: 20),
             Text(
               'Настройки и проверки',
@@ -353,10 +375,11 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            TextButton(
-              onPressed: () => Navigator.maybePop(context),
-              child: const Text('Сменить интерфейс просмотра'),
-            ),
+            if (accountPanel == null)
+              TextButton(
+                onPressed: () => Navigator.maybePop(context),
+                child: const Text('Сменить интерфейс просмотра'),
+              ),
           ],
         ),
       ),

@@ -7,3 +7,5 @@
 *.p12
 key.properties
 **/local.properties
+/build/
+**/__pycache__/

@@ -3,16 +3,24 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'backend/api_probe.dart';
 import 'backend/probe_journal.dart';
+import 'auth/auth_repository.dart';
 import 'platform/device_gateway.dart';
 import 'screens/api_check_screen.dart';
+import 'screens/auth_screen.dart';
 import 'screens/device_check_screen.dart';
 import 'screens/preview_screens.dart';
 import 'ui/theme.dart';
 
 class OrbitaApp extends StatefulWidget {
-  const OrbitaApp({required this.device, this.apiProbeFactory, super.key});
+  const OrbitaApp({
+    required this.device,
+    this.apiProbeFactory,
+    this.authRepository,
+    super.key,
+  });
   final DeviceGateway device;
   final ApiProbe Function()? apiProbeFactory;
+  final AuthRepository? authRepository;
   @override
   State<OrbitaApp> createState() => _OrbitaAppState();
 }
@@ -52,7 +60,12 @@ class _OrbitaAppState extends State<OrbitaApp> {
     navigatorKey: _navigator,
     theme: orbitaTheme(),
     routes: {
-      '/': (_) => WelcomeScreen(device: widget.device),
+      '/': (_) => widget.authRepository == null
+          ? WelcomeScreen(device: widget.device)
+          : AuthScreen(
+              repository: widget.authRepository!,
+              device: widget.device,
+            ),
       '/api-check': (_) => ApiCheckScreen(
         probe: (widget.apiProbeFactory ?? createApiProbe)(),
         journal: _apiJournal,

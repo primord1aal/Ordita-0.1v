@@ -1,10 +1,11 @@
-name: Орбита 3Б — изолированные проверки и API APK
+name: Орбита 3Б — SQL, авторизация и тестовый APK
 
 on:
   push:
     branches: [codex/orbita-stage-3b-auth]
     paths:
       - 'apps/orbita_mobile/**'
+      - 'supabase/**'
       - '.github/workflows/orbita-stage-3b.yml'
       - 'docs/STAGE_3B_API_CHECK.md'
       - 'docs/STAGE_3B_API_SERIES.md'
@@ -19,7 +20,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  sql:
+    name: Изолированная PostgreSQL и клиентские роли
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Получить исходники
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Загрузить закреплённую PostgreSQL
+        run: docker pull postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
+      - name: SQL и RLS без сети и облачной конфигурации
+        shell: bash
+        run: |
+          mkdir -p build
+          python3 -m unittest discover -s supabase/tests -p test_auth_sql.py -v 2>&1 | tee build/stage3b-sql-console.txt
+      - name: Сохранить вымышленные результаты SQL
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ORBITA-3B-local-sql-report
+          path: build/stage3b-sql-*
+          if-no-files-found: error
+          retention-days: 14
   verify-and-build:
+    needs: sql
     name: Изоляция, регрессии и защищённая сборка
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -94,14 +118,15 @@ jobs:
       - name: Подготовить APK для владельца
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk dist/ORBITA-0.5.3-api-check.apk
-          cp ../../docs/STAGE_3B_API_SERIES.md dist/INSTALL-ANDROID.md
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk dist/ORBITA-0.5.4-auth-preparation.apk
+          cp ../../docs/ANDROID_0.5.4_PREPARATION.md dist/INSTALL-ANDROID.md
           cp ../../docs/SUPABASE_FREE_RELIABILITY.md dist/SUPABASE_FREE_RELIABILITY.md
-          (cd dist && sha256sum ORBITA-0.5.3-api-check.apk > SHA256SUMS.txt)
+          cp ../../docs/STAGE_3B_APPROVAL_PACKAGE.md dist/STAGE_3B_APPROVAL_PACKAGE.md
+          (cd dist && sha256sum ORBITA-0.5.4-auth-preparation.apk > SHA256SUMS.txt)
       - name: Сохранить APK и инструкцию
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: ORBITA-0.5.3-api-check-apk
+          name: ORBITA-0.5.4-auth-preparation-apk
           path: apps/orbita_mobile/dist/
           if-no-files-found: error
           retention-days: 14
