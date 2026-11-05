@@ -41,7 +41,9 @@ class AuthSQLTests(unittest.TestCase):
                     raise RuntimeError('Одноразовая PostgreSQL не запустилась')
                 time.sleep(.2)
             cls.owner((ROOT / 'supabase/tests/bootstrap_local.sql').read_text())
-            cls.owner((ROOT / 'supabase/migrations/202611050001_stage3b_auth.sql').read_text())
+            # В рабочем пути транзакцией владеет CLI. Здесь psql воспроизводит
+            # эту внешнюю границу; прямой запуск файла без неё не используется.
+            cls.owner('begin;\n' + (ROOT / 'supabase/migrations/202611050001_stage3b_auth.sql').read_text() + '\ncommit;')
             # Шаблон без профильных/ролевых данных, отдельная БД для каждого теста.
             cls.owner("select pg_terminate_backend(pid) from pg_stat_activity where datname='orbita_test' and pid<>pg_backend_pid();")
         except BaseException:
@@ -198,7 +200,7 @@ class AuthSQLTests(unittest.TestCase):
         self.admin(f"delete from public.orbita_account_access where user_id='{N}';")
         self.assertEqual(self.access(N)['status'],'inconsistent')
         self.client('select * from public.orbita_profiles;',uid=N,expected=[])
-        r=self.sql((ROOT/'supabase/migrations/202611050001_stage3b_auth.sql').read_text(),db=self.db)
+        r=self.sql('begin;\n'+(ROOT/'supabase/migrations/202611050001_stage3b_auth.sql').read_text()+'\ncommit;',db=self.db)
         self.assertNotEqual(r.returncode,0)
         self.assertIn('Объекты уже существуют',r.stderr)
         self.assertEqual(self.access(B)['role'],'passenger')

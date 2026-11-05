@@ -1,0 +1,12 @@
+{
+  "cli_version": "3.0.0",
+  "cli_archive": "supabase_3.0.0_linux_amd64.tar.gz",
+  "cli_sha256": "eeb61edcd59a4735fcb5e58596574f25d03d420efca779f43ddb307e1cc5c754",
+  "migration": "202611050001_stage3b_auth.sql",
+  "version": "202611050001",
+  "migration_sha256": "31bf9839b8574680ace8cb168317a158b41e94a31a789f192033720afb36d79b",
+  "branch": "codex/orbita-stage-3b-auth",
+  "environment": "orbita-mobile-test-migrations",
+  "workflow": "orbita-stage-3b.yml",
+  "postgres_image": "postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5"
+}

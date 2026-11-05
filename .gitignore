@@ -9,3 +9,4 @@ key.properties
 **/local.properties
 /build/
 **/__pycache__/
+supabase/.temp/
