@@ -5,11 +5,33 @@ import json
 import os
 import subprocess
 import re
+import math
+import tempfile
+import uuid
 
 from policy import LOCK,GuardError,require,validate_connection
 
 DOCKER=['env','-u','DOCKER_HOST','-u','DOCKER_CONTEXT','-u','DOCKER_TLS','-u','DOCKER_TLS_VERIFY',
         '-u','DOCKER_CERT_PATH','docker','--host=unix:///var/run/docker.sock']
+OWNER_LABEL='orbita.migration.operation'
+
+
+class _DockerCleanupUncertain(GuardError):
+    pass
+
+
+def _new_operation_token():
+    return 'orbita_mig_'+uuid.uuid4().hex
+
+
+def _timeout_options(timeout):
+    require(isinstance(timeout,(int,float)) and math.isfinite(timeout) and timeout>=1,
+            'Некорректный бюджет времени клиента.')
+    statement=min(30000,int(timeout*500))
+    lock=min(5000,statement//3)
+    # Это служебные соединения без ожидания человека: забытая транзакция не должна жить долго.
+    idle=min(15000,int(timeout*250))
+    return f'-c statement_timeout={statement} -c lock_timeout={lock} -c idle_in_transaction_session_timeout={idle}'
 
 
 def checked(args,*,input=None,env=None,cwd=None,timeout=60):
@@ -33,11 +55,113 @@ class Database:
                          'PGSSLROOTCERT':str(self.ca_file),'SUPABASE_TELEMETRY_OPTOUT':'1'})
 
     def tool(self,program,args,*,input=None,timeout=60):
-        env=self.env.copy();env['PGSSLROOTCERT']='/run/orbita-ca.pem'
-        command=DOCKER+['run','--rm','-i','--env','PGPASSWORD','--env','PGSSLMODE','--env','PGCONNECT_TIMEOUT',
-            '--env','PGSSLROOTCERT','--mount',f'type=bind,src={self.ca_file},dst=/run/orbita-ca.pem,readonly',
-            LOCK['postgres_image'],program,*args]
-        return checked(command,input=input,env=env,timeout=timeout)
+        token=_new_operation_token()
+        require(bool(re.fullmatch(r'orbita_[a-z0-9_]{1,54}',token)),'Некорректная метка SQL-операции.')
+        try:
+            return self._owned_tool(program,args,token,input=input,timeout=timeout)
+        except BaseException as error:
+            # Убийство Docker CLI не отменяет SQL. После попытки закрыть контейнер
+            # backend может ещё выполнять pg_sleep или ждать блокировку.
+            try:self._end_sql(token)
+            except Exception:
+                raise GuardError('Завершение SQL не подтверждено; результат неизвестен. '
+                                 'Автоматический повтор запрещён.') from None
+            if isinstance(error,(KeyboardInterrupt,SystemExit)):raise
+            if isinstance(error,_DockerCleanupUncertain):raise error from None
+            raise GuardError('Команда прервана; результат операции требует проверки. '
+                             'Автоматический повтор запрещён.') from None
+
+    def _owned_tool(self,program,args,token,*,input=None,timeout=60):
+        env=self.env.copy()
+        env.update(PGSSLROOTCERT='/run/orbita-ca.pem',PGAPPNAME=token,PGOPTIONS=_timeout_options(timeout),
+                   PGCONNECT_TIMEOUT=str(min(10,max(2,int(timeout/4)))))
+        # create даёт точный CID. Без --rm ресурс не исчезнет до проверки ownership.
+        # Имя само по себе никогда не является основанием для удаления.
+        cid=None
+        with tempfile.TemporaryDirectory(prefix='orbita-db-client-') as directory:
+            cidfile=Path(directory)/'client.cid'
+            name='orbita-db-'+uuid.uuid4().hex
+            command=DOCKER+['create','--cidfile',str(cidfile),'--name',name,
+                '--label',OWNER_LABEL+'='+token,'-i']
+            for key in ('PGPASSWORD','PGSSLMODE','PGCONNECT_TIMEOUT','PGSSLROOTCERT','PGAPPNAME','PGOPTIONS'):
+                command+=['--env',key]
+            command+=['--mount',f'type=bind,src={self.ca_file},dst=/run/orbita-ca.pem,readonly',
+                      LOCK['postgres_image'],program,*args]
+            try:
+                raw=checked(command,env=env,timeout=15).decode().strip()
+                require(bool(re.fullmatch(r'[a-f0-9]{64}',raw)),'Не получен точный CID клиента.')
+                cid=raw
+                self._check_owner(cid,token)
+                return checked(DOCKER+['start','--attach','--interactive',cid],input=input,env=env,timeout=timeout)
+            finally:
+                try:
+                    # CLI мог получить CID и записать файл до собственного таймаута.
+                    if cid is None and cidfile.is_file():
+                        raw=cidfile.read_text().strip()
+                        require(bool(re.fullmatch(r'[a-f0-9]{64}',raw)),'Создание Docker-клиента не подтверждено.')
+                        cid=raw
+                    if cid is None:
+                        # create мог завершиться на daemon до записи cidfile. Имя
+                        # используется только для поиска: метка обязательна, rm — по CID.
+                        cid=self._check_owner(name,token,allow_name=True)
+                    self._check_owner(cid,token)
+                    checked(DOCKER+['rm','--force','--volumes',cid],env=env,timeout=15)
+                except Exception:
+                    raise _DockerCleanupUncertain('Очистка Docker-клиента не подтверждена; результат неизвестен. '
+                                                  'Автоматический повтор запрещён.') from None
+
+    def _check_owner(self,reference,token,*,allow_name=False):
+        template='{{json .Id}}\n{{json (index .Config.Labels "'+OWNER_LABEL+'")}}'
+        raw=checked(DOCKER+['inspect','--format',template,reference],env=self.env,timeout=10).decode().splitlines()
+        require(len(raw)==2,'Не подтверждена идентичность Docker-ресурса.')
+        cid=json.loads(raw[0])
+        require(isinstance(cid,str) and bool(re.fullmatch(r'[a-f0-9]{64}',cid)) and
+                (cid==reference or (allow_name and bool(re.fullmatch(r'orbita-db-[a-f0-9]{32}',reference)))) and
+                json.loads(raw[1])==token,
+                'Docker-ресурс не принадлежит этой операции; остановка запрещена.')
+        return cid
+
+    def _control(self,sql):
+        # Не вызывать tool(): это сделало бы очистку рекурсивной. Собственная метка
+        # контроллера не совпадает с меткой отменяемой операции.
+        token='orbita_ctl_'+uuid.uuid4().hex
+        return self._owned_tool('psql',['--no-psqlrc','--set','ON_ERROR_STOP=1','-Atq','--dbname',self.url],
+                                token,input=sql.encode(),timeout=10).decode().strip()
+
+    @staticmethod
+    def _session_filter(token):
+        require(bool(re.fullmatch(r'orbita_[a-z0-9_]{1,54}',token)),'Некорректная метка SQL-операции.')
+        return ("application_name='"+token+"' and datname=current_database() and usename=session_user "
+                "and backend_type='client backend' and pid<>pg_backend_pid()")
+
+    def _sessions(self,token):
+        return json.loads(self._control("select coalesce(json_agg(json_build_object('pid',pid,"
+            "'backend_start',backend_start::text)), '[]') from pg_catalog.pg_stat_activity where "+
+            self._session_filter(token)+';'))
+
+    def _signal(self,token,sessions,terminate=False):
+        identities=[]
+        for row in sessions:
+            pid=row.get('pid');start=row.get('backend_start')
+            require(type(pid) is int and pid>0 and isinstance(start,str) and
+                    bool(re.fullmatch(r'[0-9 .:+-]{1,64}',start)),'Не подтверждена идентичность SQL-сеанса.')
+            identities.append(f"(pid={pid} and backend_start='{start}'::timestamptz)")
+        require(bool(identities),'Нет подтверждённых SQL-сеансов для отмены.')
+        function='pg_terminate_backend(pid,1000)' if terminate else 'pg_cancel_backend(pid)'
+        self._control('select pg_catalog.'+function+' from pg_catalog.pg_stat_activity where '+
+                      self._session_filter(token)+' and ('+' or '.join(identities)+');')
+
+    def _end_sql(self,token):
+        sessions=self._sessions(token)
+        if sessions:
+            self._signal(token,sessions)
+            sessions=self._sessions(token)
+        if sessions:
+            # cancel может оставить idle in transaction; terminate адресует ту же
+            # подтверждённую пару PID/backend_start и освобождает её блокировки.
+            self._signal(token,sessions,terminate=True)
+        require(self._sessions(token)==[],
+                'SQL-сеанс остался после отмены; завершение операции не подтверждено.')
 
     def query(self,sql):
         raw=self.tool('psql',['--no-psqlrc','--set','ON_ERROR_STOP=1','-Atq','--dbname',self.url],input=sql.encode())
@@ -47,13 +171,27 @@ class Database:
         # Все параметры определены кодом. Ни reset/repair, ни seeds/roles/Vault.
         args=['supabase','db','push','--remote='+self.url,'--skip-vault']
         args+=['--dry-run'] if dry_run else ['--yes']
-        try:result=subprocess.run(args,cwd=workdir,env=self.env,capture_output=True,timeout=120)
-        except (OSError,subprocess.SubprocessError):raise GuardError('Результат CLI неизвестен; автоматический повтор запрещён.') from None
+        # CLI 3.0.0 не читает PGOPTIONS, но читает libpq service options.
+        # Только фиксированные GUC: адрес, Ref, пользователь и TLS не переопределяются.
+        with tempfile.TemporaryDirectory(prefix='orbita-cli-session-') as directory:
+            service=Path(directory)/'pg_service.conf'
+            with service.open('x') as stream:
+                service.chmod(0o600)
+                stream.write('[orbita_b1]\noptions='+_timeout_options(120)+'\n')
+            env=self.env.copy();env.update(PGSERVICEFILE=str(service),PGSERVICE='orbita_b1')
+            try:result=subprocess.run(args,cwd=workdir,env=env,capture_output=True,timeout=120)
+            except (OSError,subprocess.SubprocessError):
+                # CLI заменяет PGAPPNAME общим @effect/sql-pg: по нему нельзя
+                # безопасно отменять backend. Не объявляем SQL завершённым.
+                raise GuardError('Результат CLI неизвестен; завершение его SQL не подтверждено. '
+                                 'Автоматический повтор запрещён.') from None
         require(result.returncode==0,'CLI завершился с ошибкой; автоматический повтор запрещён.')
         return (result.stdout+result.stderr).decode(errors='replace')
 
     def dump(self,schemas):
-        args=['--format=custom','--dbname',self.url]
+        # pg_dump сбрасывает GUC timeouts в 0. Этот параметр ограничивает его
+        # начальные table locks; общий deadline и _end_sql остаются обязательными.
+        args=['--format=custom','--lock-wait-timeout=5000','--dbname',self.url]
         for schema in schemas:args+=['--schema',schema]
         return self.tool('pg_dump',args,timeout=120)
 

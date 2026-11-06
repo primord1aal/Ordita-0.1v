@@ -90,12 +90,22 @@ class PolicyTests(unittest.TestCase):
                 'a'*20,'artificial-db-secret','/tmp/artificial-ca.pem')
             self.assertNotIn('SUPABASE_ACCESS_TOKEN',db.env);self.assertNotIn('GH_TOKEN',db.env)
             self.assertNotIn('ORBITA_BACKUP_PASSPHRASE',db.env)
-            result=subprocess.CompletedProcess([],0,stdout=b'safe',stderr=b'')
-            with patch('subprocess.run',return_value=result) as run:
+            # B1: теперь клиент создаётся, проверяется по CID/метке и удаляется.
+            # Проверка отсутствия секрета охватывает каждую из этих команд.
+            ownership={}
+            def command_result(args,**kwargs):
+                if 'create' in args:
+                    ownership['token']=kwargs['env']['PGAPPNAME'];output=('c'*64).encode()
+                elif 'inspect' in args:
+                    output=(json.dumps('c'*64)+'\n'+json.dumps(ownership['token'])+'\n').encode()
+                else:output=b'safe'
+                return subprocess.CompletedProcess(args,0,stdout=output,stderr=b'')
+            with patch('subprocess.run',side_effect=command_result) as run:
                 db.tool('psql',['-Atq'])
-                args=run.call_args.args[0]
-                self.assertNotIn('artificial-db-secret',' '.join(args))
-                self.assertEqual(run.call_args.kwargs['env']['PGPASSWORD'],'artificial-db-secret')
+                self.assertGreaterEqual(run.call_count,5)
+                for call in run.call_args_list:
+                    self.assertNotIn('artificial-db-secret',' '.join(call.args[0]))
+                    self.assertEqual(call.kwargs['env']['PGPASSWORD'],'artificial-db-secret')
 
     def test_raw_failed_command_output_is_never_in_exception(self):
         result=subprocess.CompletedProcess([],1,stdout=b'artificial-secret',stderr=b'password=artificial-secret')
