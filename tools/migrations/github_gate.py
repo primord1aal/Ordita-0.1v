@@ -25,7 +25,8 @@ def context_from_env():
     sha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
     require(not subprocess.check_output(['git','status','--porcelain'],cwd=root,text=True).strip(),
             'Checkout содержит незакоммиченные изменения.')
-    mapping={'event':'GITHUB_EVENT_NAME','operation':'ORBITA_OPERATION','enabled':'ORBITA_CLOUD_ENABLED',
+    mapping={'event':'GITHUB_EVENT_NAME','operation':'ORBITA_OPERATION',
+        'repo_enabled':'ORBITA_REPO_ENABLED','env_enabled':'ORBITA_ENV_ENABLED',
         'repository':'GITHUB_REPOSITORY','git_ref':'GITHUB_REF','attempt':'GITHUB_RUN_ATTEMPT',
         'sha':'GITHUB_SHA','approved_sha':'ORBITA_REQUEST_SHA','allowed_sha':'ORBITA_ALLOWED_SHA',
         'expected_ref':'ORBITA_EXPECTED_REF','forbidden_ref':'ORBITA_FORBIDDEN_REF',

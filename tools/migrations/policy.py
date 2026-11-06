@@ -9,6 +9,7 @@ LOCK=json.loads((Path(__file__).parent/'lock.json').read_text())
 REPOSITORY='primord1aal/Ordita-0.1v'
 REF_PATTERN=re.compile(r'^[a-z0-9]{20}$')
 SHA_PATTERN=re.compile(r'^[a-f0-9]{40}$')
+ENVIRONMENT_ONLY_VARIABLES=('ORBITA_CLOUD_MIGRATIONS_ENABLED','ORBITA_ALLOWED_MIGRATION_SHA')
 
 
 class GuardError(Exception):
@@ -19,17 +20,29 @@ def require(condition,message):
     if not condition:raise GuardError(message)
 
 
-def validate_request(context,repository_root):
+def validate_source(context):
     require(context.get('event')=='workflow_dispatch','Облачный режим допустим только при ручном событии.')
     require(context.get('operation') in ('preview','apply','inspect'),'Неизвестный режим миграции.')
-    require(context.get('enabled')=='true','Облачные миграции выключены. Подготовка не даёт разрешения.')
+    require(context.get('repo_enabled')=='true','Предварительный допуск репозитория выключен.')
     require(context.get('repository')==REPOSITORY,'Неверный репозиторий.')
     require(context.get('git_ref')=='refs/heads/'+LOCK['branch'],'Эта ветка не разрешена для миграции.')
     require(str(context.get('attempt'))=='1','Повтор запуска запрещён; сначала расследуйте предыдущий результат.')
     sha=context.get('sha','')
     require(bool(SHA_PATTERN.fullmatch(sha)),'Нужен полный SHA коммита.')
-    require(context.get('approved_sha')==sha==context.get('allowed_sha')==context.get('checkout_sha'),
-            'Коммит запроса, допуска, checkout и запуска не совпадает.')
+    require(context.get('approved_sha')==sha==context.get('checkout_sha'),
+            'Коммит запроса, checkout и запуска не совпадает.')
+
+
+def validate_repository_admission(context,outside_environment):
+    validate_source(context)
+    require(all(outside_environment.get(name,'')=='' for name in ENVIRONMENT_ONLY_VARIABLES),
+            'Флаг или SHA Environment заданы вне Environment; предварительный допуск запрещён.')
+
+
+def validate_request(context,repository_root):
+    validate_source(context)
+    require(context.get('env_enabled')=='true','Допуск Environment выключен. Подготовка не даёт разрешения.')
+    require(context.get('allowed_sha')==context['sha'],'Коммит не совпадает с разрешённым SHA Environment.')
     expected=context.get('expected_ref','');forbidden=context.get('forbidden_ref','')
     require(bool(REF_PATTERN.fullmatch(expected)) and bool(REF_PATTERN.fullmatch(forbidden)),
             'Не заданы корректные разрешённый и запрещённый Ref.')

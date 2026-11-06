@@ -184,9 +184,35 @@ jobs:
         if: always()
         run: rm -f -- "$RUNNER_TEMP/orbita-stage3b-defines.json"
 
+  # Этот job не объявляет Environment: здесь видны только Repository/Organization Variables.
+  migration_entry:
+    if: github.event_name == 'workflow_dispatch' && (inputs.migration_operation == 'preview' || inputs.migration_operation == 'apply' || inputs.migration_operation == 'inspect') && vars.ORBITA_REPO_MIGRATIONS_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-stage-3b-auth'
+    name: Предварительный допуск репозитория — без Environment и секретов
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    outputs:
+      repo_enabled: ${{ steps.check.outputs.repo_enabled }}
+    steps:
+      - name: Получить точный коммит
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Проверить предварительный допуск и отсутствие подмены уровней
+        id: check
+        env:
+          ORBITA_OPERATION: ${{ inputs.migration_operation }}
+          ORBITA_REPO_ENABLED: ${{ vars.ORBITA_REPO_MIGRATIONS_ENABLED }}
+          ORBITA_REQUEST_SHA: ${{ inputs.approved_sha }}
+          ORBITA_OUTSIDE_ENV_ENABLED: ${{ vars.ORBITA_CLOUD_MIGRATIONS_ENABLED }}
+          ORBITA_OUTSIDE_ENV_ALLOWED_SHA: ${{ vars.ORBITA_ALLOWED_MIGRATION_SHA }}
+        run: python3 tools/migrations/repository_gate.py
+
   migration-preview:
-    if: github.event_name == 'workflow_dispatch' && (inputs.migration_operation == 'preview' || inputs.migration_operation == 'inspect') && vars.ORBITA_CLOUD_MIGRATIONS_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-stage-3b-auth'
-    needs: [sql, cli-safety]
+    if: github.event_name == 'workflow_dispatch' && (inputs.migration_operation == 'preview' || inputs.migration_operation == 'inspect') && vars.ORBITA_REPO_MIGRATIONS_ENABLED == 'true' && needs.migration_entry.outputs.repo_enabled == 'true' && github.ref == 'refs/heads/codex/orbita-stage-3b-auth'
+    needs: [sql, cli-safety, migration_entry]
     name: Ручной допуск — preview или проверка состояния
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -205,7 +231,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ORBITA_OPERATION: ${{ inputs.migration_operation }}
-          ORBITA_CLOUD_ENABLED: ${{ vars.ORBITA_CLOUD_MIGRATIONS_ENABLED }}
+          ORBITA_REPO_ENABLED: ${{ needs.migration_entry.outputs.repo_enabled }}
+          ORBITA_ENV_ENABLED: ${{ vars.ORBITA_CLOUD_MIGRATIONS_ENABLED }}
           ORBITA_REQUEST_SHA: ${{ inputs.approved_sha }}
           ORBITA_ALLOWED_SHA: ${{ vars.ORBITA_ALLOWED_MIGRATION_SHA }}
           ORBITA_EXPECTED_REF: ${{ vars.SUPABASE_TEST_PROJECT_REF }}
@@ -259,8 +286,8 @@ jobs:
           retention-days: 14
 
   migration-apply:
-    if: github.event_name == 'workflow_dispatch' && inputs.migration_operation == 'apply' && vars.ORBITA_CLOUD_MIGRATIONS_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-stage-3b-auth'
-    needs: [sql, cli-safety]
+    if: github.event_name == 'workflow_dispatch' && inputs.migration_operation == 'apply' && vars.ORBITA_REPO_MIGRATIONS_ENABLED == 'true' && needs.migration_entry.outputs.repo_enabled == 'true' && github.ref == 'refs/heads/codex/orbita-stage-3b-auth'
+    needs: [sql, cli-safety, migration_entry]
     name: Отдельный ручной допуск — одно применение
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -279,7 +306,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ORBITA_OPERATION: apply
-          ORBITA_CLOUD_ENABLED: ${{ vars.ORBITA_CLOUD_MIGRATIONS_ENABLED }}
+          ORBITA_REPO_ENABLED: ${{ needs.migration_entry.outputs.repo_enabled }}
+          ORBITA_ENV_ENABLED: ${{ vars.ORBITA_CLOUD_MIGRATIONS_ENABLED }}
           ORBITA_REQUEST_SHA: ${{ inputs.approved_sha }}
           ORBITA_ALLOWED_SHA: ${{ vars.ORBITA_ALLOWED_MIGRATION_SHA }}
           ORBITA_EXPECTED_REF: ${{ vars.SUPABASE_TEST_PROJECT_REF }}

@@ -17,7 +17,7 @@ from dbtools import checked,Database,require_initial
 
 
 def request():
-    return {'event':'workflow_dispatch','operation':'preview','enabled':'true','repository':REPOSITORY,
+    return {'event':'workflow_dispatch','operation':'preview','repo_enabled':'true','env_enabled':'true','repository':REPOSITORY,
         'git_ref':'refs/heads/'+LOCK['branch'],'attempt':'1','sha':'a'*40,'approved_sha':'a'*40,
         'allowed_sha':'a'*40,'checkout_sha':'a'*40,'expected_ref':'a'*20,'forbidden_ref':'b'*20,
         'requested_ref':'a'*20,'preview_run_id':'10','backup_sha256':'c'*64}
@@ -36,7 +36,8 @@ class PolicyTests(unittest.TestCase):
                 with self.assertRaises(GuardError):validate_request(context,ROOT)
 
     def test_disabled_missing_unknown_and_wrong_repository_are_rejected(self):
-        for key,value in [('enabled',''),('enabled','false'),('operation','verify'),('operation','repair'),
+        for key,value in [('repo_enabled',''),('repo_enabled','false'),('env_enabled',''),('env_enabled','false'),
+            ('operation','verify'),('operation','repair'),
             ('repository','other/repo'),('git_ref','refs/heads/main'),('git_ref','refs/tags/any'),('attempt','2')]:
             with self.subTest(key=key,value=value):
                 context=request();context[key]=value
@@ -158,7 +159,8 @@ class PolicyTests(unittest.TestCase):
         for name in ['migration-preview','migration-apply']:
             section=text.split('\n  '+name+':',1)[1].split('\n  migration-',1)[0]
             self.assertIn("if: github.event_name == 'workflow_dispatch'",section)
-            self.assertIn("vars.ORBITA_CLOUD_MIGRATIONS_ENABLED == 'true'",section)
+            self.assertIn("vars.ORBITA_REPO_MIGRATIONS_ENABLED == 'true'",section)
+            self.assertIn("needs.migration_entry.outputs.repo_enabled == 'true'",section)
             self.assertIn('environment: '+LOCK['environment'],section)
             self.assertLess(section.index('github_gate.py'),section.index('secrets.ORBITA_TEST_DB_PASSWORD'))
             self.assertIn('persist-credentials: false',section)
