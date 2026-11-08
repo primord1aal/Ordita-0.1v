@@ -90,7 +90,12 @@ def main():
         ca=os.environ.get('ORBITA_DATABASE_CA_PEM','')
         require(ca.startswith('-----BEGIN CERTIFICATE-----'),'Нужен проверенный публичный сертификат CA из Dashboard.')
         ca_file=temporary/'ca.pem';ca_file.write_text(ca)
-        db=Database(os.environ['ORBITA_DATABASE_URL'],context['expected_ref'],os.environ.get('PGPASSWORD',''),ca_file)
+        read_only=context['operation'] in ('preview','inspect')
+        db=Database(os.environ['ORBITA_DATABASE_URL'],context['expected_ref'],os.environ.get('PGPASSWORD',''),ca_file,
+                    read_only=read_only)
+        if read_only:
+            require(db.query('show default_transaction_read_only;')=='on',
+                    'Сервер не подтвердил READ ONLY для предварительных подключений.')
         work=workspace(root,temporary)
         receipt=execute(context,db,work,root,temporary,public_dir,backup_dir,
             os.environ.get('ORBITA_BACKUP_PASSPHRASE',''),approved.get('preview'))

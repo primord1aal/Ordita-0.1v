@@ -79,9 +79,24 @@ class PolicyTests(unittest.TestCase):
             f'postgresql://postgres:artificial-password@db.{ref}.supabase.co:5432/postgres?sslmode=verify-full',
             f'postgresql://postgres@db.{ref}.supabase.co:5432/postgres?sslmode=require',
             f'postgresql://postgres@db.{ref}.supabase.co:5432/postgres?sslmode=disable',
+            f'postgresql://postgres@db.{ref}.supabase.co:5432/postgres?sslmode=verify-full&sslmode=',
+            f'postgresql://postgres@db.{ref}.supabase.co:5432/postgres?sslmode=verify-full&sslmode=verify-full',
+            f'postgresql://postgres@db.{ref}.supabase.co:5432/postgres?sslmode=verify-full&options=',
+            f'postgresql://postgres@db.{ref}.supabase.co:5432/postgres?sslmode=verify-full&password=',
+            f'postgresql://postgres@db.{ref}.supabase.co:5432/postgres;options=evil?sslmode=verify-full',
             f'postgresql://postgres@db.{ref}.supabase.co:5432/postgres?sslmode=verify-full&options=evil',
             f'postgresql://postgres.{ref}@evil.example.test:5432/postgres?sslmode=verify-full']:
             with self.subTest(url=url),self.assertRaises(GuardError):validate_connection(url,ref)
+
+    def test_preview_is_read_only_and_workflow_ignores_unmasked_url_variable(self):
+        from dbtools import _timeout_options
+        self.assertIn('default_transaction_read_only=on',_timeout_options(60,read_only=True))
+        self.assertNotIn('default_transaction_read_only',_timeout_options(60))
+        workflow=(ROOT/'.github/workflows/orbita-stage-3b.yml').read_text()
+        self.assertNotIn('vars.ORBITA_TEST_DB_URL',workflow)
+        self.assertEqual(workflow.count('ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full'),5)
+        cloud=(ROOT/'tools/migrations/cloud_run.py').read_text()
+        self.assertIn("read_only=context['operation'] in ('preview','inspect')",cloud)
 
     def test_no_password_in_argv_and_other_secrets_not_forwarded(self):
         with patch.dict(os.environ,{'PGPASSWORD':'old-fake','SUPABASE_ACCESS_TOKEN':'fake-token',

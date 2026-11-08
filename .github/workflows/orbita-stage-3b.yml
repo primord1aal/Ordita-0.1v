@@ -185,6 +185,8 @@ jobs:
         run: rm -f -- "$RUNNER_TEMP/orbita-stage3b-defines.json"
 
   # Этот job не объявляет Environment: здесь видны только Repository/Organization Variables.
+  # Cloud jobs используют только закреплённый публичный endpoint: обычная URL Variable
+  # намеренно никогда не интерполируется в шаги (иначе ошибочный пароль попал бы в лог).
   migration_entry:
     if: github.event_name == 'workflow_dispatch' && (inputs.migration_operation == 'preview' || inputs.migration_operation == 'apply' || inputs.migration_operation == 'inspect') && vars.ORBITA_REPO_MIGRATIONS_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-stage-3b-auth'
     name: Предварительный допуск репозитория — без Environment и секретов
@@ -238,7 +240,7 @@ jobs:
           ORBITA_EXPECTED_REF: ${{ vars.SUPABASE_TEST_PROJECT_REF }}
           ORBITA_FORBIDDEN_REF: ${{ vars.SUPABASE_FORBIDDEN_PROJECT_REF }}
           ORBITA_REQUEST_REF: ${{ inputs.requested_project_ref }}
-          ORBITA_DATABASE_URL: ${{ vars.ORBITA_TEST_DB_URL }}
+          ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
         run: python3 tools/migrations/github_gate.py
       - name: Подготовить проверенные инструменты
         run: |
@@ -249,14 +251,14 @@ jobs:
         env:
           PGPASSWORD: ${{ secrets.ORBITA_TEST_DB_PASSWORD }}
           ORBITA_BACKUP_PASSPHRASE: ${{ secrets.ORBITA_BACKUP_PASSPHRASE }}
-          ORBITA_DATABASE_URL: ${{ vars.ORBITA_TEST_DB_URL }}
+          ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
           ORBITA_DATABASE_CA_PEM: ${{ vars.ORBITA_TEST_DB_CA_PEM }}
         run: python3 tools/migrations/cloud_run.py
       - name: Только проверка состояния без повторного применения
         if: inputs.migration_operation == 'inspect'
         env:
           PGPASSWORD: ${{ secrets.ORBITA_TEST_DB_PASSWORD }}
-          ORBITA_DATABASE_URL: ${{ vars.ORBITA_TEST_DB_URL }}
+          ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
           ORBITA_DATABASE_CA_PEM: ${{ vars.ORBITA_TEST_DB_CA_PEM }}
         run: python3 tools/migrations/cloud_run.py
       - name: Сохранить безопасный предварительный отчёт
@@ -313,7 +315,7 @@ jobs:
           ORBITA_EXPECTED_REF: ${{ vars.SUPABASE_TEST_PROJECT_REF }}
           ORBITA_FORBIDDEN_REF: ${{ vars.SUPABASE_FORBIDDEN_PROJECT_REF }}
           ORBITA_REQUEST_REF: ${{ inputs.requested_project_ref }}
-          ORBITA_DATABASE_URL: ${{ vars.ORBITA_TEST_DB_URL }}
+          ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
           ORBITA_PREVIEW_RUN_ID: ${{ inputs.preview_run_id }}
           ORBITA_BACKUP_SHA256: ${{ inputs.backup_sha256 }}
         run: python3 tools/migrations/github_gate.py
@@ -324,7 +326,7 @@ jobs:
       - name: Единственное применение и read-only проверка результата
         env:
           PGPASSWORD: ${{ secrets.ORBITA_TEST_DB_PASSWORD }}
-          ORBITA_DATABASE_URL: ${{ vars.ORBITA_TEST_DB_URL }}
+          ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
           ORBITA_DATABASE_CA_PEM: ${{ vars.ORBITA_TEST_DB_CA_PEM }}
         run: python3 tools/migrations/cloud_run.py
       - name: Сохранить результат или признак неизвестного исхода

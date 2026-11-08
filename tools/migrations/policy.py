@@ -1,6 +1,6 @@
 """Проверки до подключения к БД. Никаких Cloud SDK или секретов в сообщениях."""
 from pathlib import Path
-from urllib.parse import urlparse,parse_qs
+from urllib.parse import urlparse
 import hashlib
 import json
 import re
@@ -58,15 +58,15 @@ def validate_request(context,repository_root):
 def validate_connection(url,expected_ref):
     # Пароль должен быть только PGPASSWORD, поэтому его нет даже в argv.
     try:
-        uri=urlparse(url);port=uri.port;query=parse_qs(uri.query,strict_parsing=True)
+        uri=urlparse(url);port=uri.port
     except (ValueError,TypeError):raise GuardError('Некорректные параметры соединения.') from None
     require(uri.scheme in ('postgresql','postgres'),'Нужен URL PostgreSQL.')
     require(uri.password is None,'Пароль в URL запрещён; используйте защищённый PGPASSWORD.')
-    require(port==5432 and uri.path=='/postgres' and not uri.fragment,'Нужны Session/direct, порт 5432 и база postgres.')
+    require(port==5432 and uri.path=='/postgres' and not uri.fragment and not uri.params,'Нужны Session/direct, порт 5432 и база postgres.')
     direct=uri.hostname==f'db.{expected_ref}.supabase.co' and uri.username=='postgres'
     pooler=bool(re.fullmatch(r'[a-z0-9.-]+\.pooler\.supabase\.com',uri.hostname or '')) and uri.username==f'postgres.{expected_ref}'
     require(direct or pooler,'Адрес или пользователь соединения не соответствует разрешённому Ref.')
-    require(query=={'sslmode':['verify-full']},'Разрешена только полная проверка TLS, без дополнительных параметров URL.')
+    require(uri.query=='sslmode=verify-full','Разрешён только точный параметр sslmode=verify-full, без повторов и пустых значений.')
 
 
 def validate_environment(environment,branch_policies,reviews,owner):

@@ -24,14 +24,16 @@ def _new_operation_token():
     return 'orbita_mig_'+uuid.uuid4().hex
 
 
-def _timeout_options(timeout):
+def _timeout_options(timeout,*,read_only=False):
     require(isinstance(timeout,(int,float)) and math.isfinite(timeout) and timeout>=1,
             'Некорректный бюджет времени клиента.')
     statement=min(30000,int(timeout*500))
     lock=min(5000,statement//3)
     # Это служебные соединения без ожидания человека: забытая транзакция не должна жить долго.
     idle=min(15000,int(timeout*250))
-    return f'-c statement_timeout={statement} -c lock_timeout={lock} -c idle_in_transaction_session_timeout={idle}'
+    options=f'-c statement_timeout={statement} -c lock_timeout={lock} -c idle_in_transaction_session_timeout={idle}'
+    # Запрет записи задаётся на сервере при старте каждого соединения.
+    return options+(' -c default_transaction_read_only=on' if read_only else '')
 
 
 def checked(args,*,input=None,env=None,cwd=None,timeout=60):
@@ -42,10 +44,11 @@ def checked(args,*,input=None,env=None,cwd=None,timeout=60):
 
 
 class Database:
-    def __init__(self,url,project_ref,password,ca_file):
+    def __init__(self,url,project_ref,password,ca_file,*,read_only=False):
         validate_connection(url,project_ref)
         require(bool(password) and '\x00' not in password,'Не предоставлен корректный защищённый пароль БД.')
-        self.url=url;self.password=password;self.ca_file=Path(ca_file)
+        require(type(read_only) is bool,'Некорректный режим подключения.')
+        self.url=url;self.password=password;self.ca_file=Path(ca_file);self.read_only=read_only
         self.env=os.environ.copy()
         # Никаких сохранённых linked-проектов, альтернативных подключений и API-токенов.
         for key in list(self.env):
@@ -73,8 +76,9 @@ class Database:
 
     def _owned_tool(self,program,args,token,*,input=None,timeout=60):
         env=self.env.copy()
-        env.update(PGSSLROOTCERT='/run/orbita-ca.pem',PGAPPNAME=token,PGOPTIONS=_timeout_options(timeout),
+        env.update(PGSSLROOTCERT='/run/orbita-ca.pem',PGAPPNAME=token,PGOPTIONS=_timeout_options(timeout,read_only=self.read_only),
                    PGCONNECT_TIMEOUT=str(min(10,max(2,int(timeout/4)))))
+        if self.read_only:env['PGTARGETSESSIONATTRS']='read-only'
         # create даёт точный CID. Без --rm ресурс не исчезнет до проверки ownership.
         # Имя само по себе никогда не является основанием для удаления.
         cid=None
@@ -83,8 +87,8 @@ class Database:
             name='orbita-db-'+uuid.uuid4().hex
             command=DOCKER+['create','--cidfile',str(cidfile),'--name',name,
                 '--label',OWNER_LABEL+'='+token,'-i']
-            for key in ('PGPASSWORD','PGSSLMODE','PGCONNECT_TIMEOUT','PGSSLROOTCERT','PGAPPNAME','PGOPTIONS'):
-                command+=['--env',key]
+            for key in ('PGPASSWORD','PGSSLMODE','PGCONNECT_TIMEOUT','PGSSLROOTCERT','PGAPPNAME','PGOPTIONS','PGTARGETSESSIONATTRS'):
+                if key in env:command+=['--env',key]
             command+=['--mount',f'type=bind,src={self.ca_file},dst=/run/orbita-ca.pem,readonly',
                       LOCK['postgres_image'],program,*args]
             try:
@@ -164,10 +168,14 @@ class Database:
                 'SQL-сеанс остался после отмены; завершение операции не подтверждено.')
 
     def query(self,sql):
+        # Даже если session default меняется, каждая preview/inspect проверка
+        # выполняется в явно READ ONLY транзакции с безусловным ROLLBACK.
+        if self.read_only:sql='BEGIN TRANSACTION READ ONLY;\n'+sql+'\nROLLBACK;'
         raw=self.tool('psql',['--no-psqlrc','--set','ON_ERROR_STOP=1','-Atq','--dbname',self.url],input=sql.encode())
         return raw.decode().strip()
 
     def cli(self,workdir,dry_run):
+        require(not(self.read_only and not dry_run),'Read-only режим запрещает применение миграций.')
         # Все параметры определены кодом. Ни reset/repair, ни seeds/roles/Vault.
         args=['supabase','db','push','--remote='+self.url,'--skip-vault']
         args+=['--dry-run'] if dry_run else ['--yes']
@@ -177,8 +185,9 @@ class Database:
             service=Path(directory)/'pg_service.conf'
             with service.open('x') as stream:
                 service.chmod(0o600)
-                stream.write('[orbita_b1]\noptions='+_timeout_options(120)+'\n')
+                stream.write('[orbita_b1]\noptions='+_timeout_options(120,read_only=self.read_only)+'\n')
             env=self.env.copy();env.update(PGSERVICEFILE=str(service),PGSERVICE='orbita_b1')
+            if self.read_only:env['PGTARGETSESSIONATTRS']='read-only'
             try:result=subprocess.run(args,cwd=workdir,env=env,capture_output=True,timeout=120)
             except (OSError,subprocess.SubprocessError):
                 # CLI заменяет PGAPPNAME общим @effect/sql-pg: по нему нельзя

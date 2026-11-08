@@ -101,6 +101,22 @@ class B1CleanupGuards(unittest.TestCase):
                 self.db._signal(self.token,[{'pid':1,'backend_start':"x';select 1;--"}])
         control.assert_not_called()
 
+    def test_preview_cli_service_is_read_only_and_apply_is_rejected(self):
+        db=dbtools.Database(self.db.url,'a'*20,'artificial-db-secret',
+                            '/tmp/artificial-ca.pem',read_only=True)
+        observed=[]
+        def run(args,**kwargs):
+            env=kwargs['env'];service=Path(env['PGSERVICEFILE'])
+            observed.append(service.read_text())
+            self.assertEqual(env['PGTARGETSESSIONATTRS'],'read-only')
+            return subprocess.CompletedProcess(args,0,stdout=b'dry run',stderr=b'')
+        with patch('subprocess.run',side_effect=run):
+            self.assertEqual(db.cli('/tmp',True),'dry run')
+        self.assertEqual(len(observed),1)
+        self.assertIn('default_transaction_read_only=on',observed[0])
+        with self.assertRaises(GuardError):
+            db.cli('/tmp',False)
+
     def test_cli_private_service_has_only_limits_and_is_removed_after_call(self):
         observed=[]
         def run(args,**kwargs):

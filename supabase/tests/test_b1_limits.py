@@ -65,6 +65,16 @@ class B1LiveLimitsTests(unittest.TestCase):
         self.assertFalse(thread.is_alive());self.assertEqual(errors,[]);self.assertTrue(seen)
         return seen
 
+    def test_read_only_preview_rejects_ddl_inside_real_postgresql(self):
+        preview=dbtools.Database(self.db.url,FAKE_REF,'local-fixture-only',
+                                 self.fixture.path/'ca.pem',read_only=True)
+        self.assertEqual(preview.query('reset all; show default_transaction_read_only;'),'on')
+        target='b1_ro_'+self.token[:16]
+        with self.assertRaises(GuardError):
+            preview.query('create table public.'+target+'(n integer);')
+        self.assertEqual(self.fixture.query("select to_regclass('public."+target+"') is null;"),'t')
+        self.records.append({'test':self.id(),'server_read_only':True,'ddl_blocked':True})
+
     def test_psql_limits_are_server_settings_and_survive_reset_all(self):
         result=json.loads(self.db.query("reset all; select json_build_object("
             "'statement',current_setting('statement_timeout'),'lock',current_setting('lock_timeout'),"
