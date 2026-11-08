@@ -131,7 +131,13 @@ def main(on_phase=None):
                     read_only=read_only)
         if read_only:
             on_phase('READ_ONLY_CONNECTION')
-            require(db.query('show default_transaction_read_only;')=='on',
+            try:
+                setting=db.query('show default_transaction_read_only;')
+            except Exception:
+                print('ORBITA_CONNECTION_ERROR_CATEGORY='+db.failure_category)
+                raise
+            if setting!='on':print('ORBITA_CONNECTION_ERROR_CATEGORY=READ_ONLY_NOT_CONFIRMED')
+            require(setting=='on',
                     'Сервер не подтвердил READ ONLY для предварительных подключений.')
         on_phase('WORKSPACE')
         work=workspace(root,temporary)

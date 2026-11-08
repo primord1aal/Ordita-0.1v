@@ -15,6 +15,35 @@ DOCKER=['env','-u','DOCKER_HOST','-u','DOCKER_CONTEXT','-u','DOCKER_TLS','-u','D
         '-u','DOCKER_CERT_PATH','docker','--host=unix:///var/run/docker.sock']
 OWNER_LABEL='orbita.migration.operation'
 
+# Only fixed categories may leave the process; raw client errors stay private.
+CONNECTION_ERROR_PATTERNS=(
+    ('DOCKER_CLIENT_FAILED',r'error response from daemon|cannot connect to the docker daemon|oci runtime'),
+    ('TLS_HOSTNAME_MISMATCH',r'server certificate .*does not match host name'),
+    ('TLS_CA_FILE_INVALID',r'root certificate file .*does not exist|could not (?:read|load) root certificate|no certificate or crl found'),
+    ('TLS_CERTIFICATE_VERIFY_FAILED',r'certificate verif(?:y|ication) failed|self.signed certificate|unable to get local issuer|certificate has expired'),
+    ('TLS_NEGOTIATION_FAILED',r'ssl error:|ssl syscall error:|server does not support ssl'),
+    ('DB_PASSWORD_REJECTED',r'password authentication failed'),
+    ('POOLER_TENANT_OR_USER_NOT_FOUND',r'tenant or user not found'),
+    ('DB_CONNECTION_POLICY_REJECTED',r'no pg_hba.conf entry'),
+    ('STARTUP_PARAMETER_REJECTED',r'unsupported startup parameter|unrecognized configuration parameter|invalid value for parameter'),
+    ('READ_ONLY_SESSION_REJECTED',r'session is not read.only'),
+    ('DNS_LOOKUP_FAILED',r'could not translate host name|temporary failure in name resolution|name or service not known'),
+    ('TCP_CONNECTION_REFUSED',r'connection refused'),
+    ('NETWORK_UNREACHABLE',r'network is unreachable|no route to host'),
+    ('CONNECTION_TIMEOUT',r'timeout expired|connection timed out'),
+    ('CONNECTION_CLOSED',r'server closed the connection unexpectedly|connection reset by peer'),
+)
+SAFE_CONNECTION_CATEGORIES=frozenset(code for code,_ in CONNECTION_ERROR_PATTERNS)|{
+    'UNKNOWN_PRIVATE_ERROR','CLIENT_DEADLINE_UNCERTAIN','LOCAL_CLIENT_EXECUTION_FAILED',
+    'CLIENT_INTERRUPTED_UNCERTAIN'}
+
+
+def _connection_error_category(stderr):
+    text=(stderr or b'')[:65536].decode(errors='replace').lower()
+    for code,pattern in CONNECTION_ERROR_PATTERNS:
+        if re.search(pattern,text):return code
+    return 'UNKNOWN_PRIVATE_ERROR'
+
 
 class _DockerCleanupUncertain(GuardError):
     pass
@@ -47,9 +76,17 @@ def restricted_process_env():
     return env
 
 
-def checked(args,*,input=None,env=None,cwd=None,timeout=60):
+def checked(args,*,input=None,env=None,cwd=None,timeout=60,on_failure=None):
     try:result=subprocess.run(args,input=input,capture_output=True,env=env,cwd=cwd,timeout=timeout)
-    except (OSError,subprocess.SubprocessError):raise GuardError('Команда не завершилась; результат требует проверки.') from None
+    except subprocess.TimeoutExpired:
+        if on_failure is not None:on_failure('CLIENT_DEADLINE_UNCERTAIN')
+        raise GuardError('Команда не завершилась; результат требует проверки.') from None
+    except (OSError,subprocess.SubprocessError):
+        if on_failure is not None:on_failure('LOCAL_CLIENT_EXECUTION_FAILED')
+        raise GuardError('Команда не завершилась; результат требует проверки.') from None
+    if result.returncode!=0 and on_failure is not None:
+        local_docker=args[:len(DOCKER)]==DOCKER and args[len(DOCKER):len(DOCKER)+1]!=['start']
+        on_failure('DOCKER_CLIENT_FAILED' if local_docker else _connection_error_category(result.stderr))
     require(result.returncode==0,'Команда завершилась с ошибкой; сырые данные и секреты скрыты.')
     return result.stdout
 
@@ -60,17 +97,30 @@ class Database:
         require(bool(password) and '\x00' not in password,'Не предоставлен корректный защищённый пароль БД.')
         require(type(read_only) is bool,'Некорректный режим подключения.')
         self.url=url;self.password=password;self.ca_file=Path(ca_file);self.read_only=read_only
+        self._failure_code=None
         self.env=restricted_process_env()
         # Никаких сохранённых linked-проектов, альтернативных подключений и API-токенов.
         self.env.update({'PGPASSWORD':password,'PGSSLMODE':'verify-full','PGCONNECT_TIMEOUT':'10',
                          'PGSSLROOTCERT':str(self.ca_file)})
 
+    @property
+    def failure_category(self):
+        code=self._failure_code
+        return code if isinstance(code,str) and code in SAFE_CONNECTION_CATEGORIES else 'UNKNOWN_PRIVATE_ERROR'
+
+    def _record_failure(self,code):
+        # Preserve the first cause even when cleanup/control connections fail.
+        if self._failure_code is None:
+            self._failure_code=code if isinstance(code,str) and code in SAFE_CONNECTION_CATEGORIES else 'UNKNOWN_PRIVATE_ERROR'
+
     def tool(self,program,args,*,input=None,timeout=60):
+        self._failure_code=None
         token=_new_operation_token()
         require(bool(re.fullmatch(r'orbita_[a-z0-9_]{1,54}',token)),'Некорректная метка SQL-операции.')
         try:
             return self._owned_tool(program,args,token,input=input,timeout=timeout)
         except BaseException as error:
+            self._record_failure('UNKNOWN_PRIVATE_ERROR')
             # Убийство Docker CLI не отменяет SQL. После попытки закрыть контейнер
             # backend может ещё выполнять pg_sleep или ждать блокировку.
             try:self._end_sql(token)
@@ -100,11 +150,16 @@ class Database:
             command+=['--mount',f'type=bind,src={self.ca_file},dst=/run/orbita-ca.pem,readonly',
                       LOCK['postgres_image'],program,*args]
             try:
-                raw=checked(command,env=env,timeout=15).decode().strip()
+                raw=checked(command,env=env,timeout=15,on_failure=self._record_failure).decode().strip()
                 require(bool(re.fullmatch(r'[a-f0-9]{64}',raw)),'Не получен точный CID клиента.')
                 cid=raw
                 self._check_owner(cid,token)
-                return checked(DOCKER+['start','--attach','--interactive',cid],input=input,env=env,timeout=timeout)
+                return checked(DOCKER+['start','--attach','--interactive',cid],input=input,env=env,timeout=timeout,
+                               on_failure=self._record_failure)
+            except BaseException as error:
+                self._record_failure('CLIENT_INTERRUPTED_UNCERTAIN' if isinstance(error,(KeyboardInterrupt,SystemExit))
+                                     else 'UNKNOWN_PRIVATE_ERROR')
+                raise
             finally:
                 try:
                     # CLI мог получить CID и записать файл до собственного таймаута.
@@ -117,14 +172,15 @@ class Database:
                         # используется только для поиска: метка обязательна, rm — по CID.
                         cid=self._check_owner(name,token,allow_name=True)
                     self._check_owner(cid,token)
-                    checked(DOCKER+['rm','--force','--volumes',cid],env=env,timeout=15)
+                    checked(DOCKER+['rm','--force','--volumes',cid],env=env,timeout=15,on_failure=self._record_failure)
                 except Exception:
                     raise _DockerCleanupUncertain('Очистка Docker-клиента не подтверждена; результат неизвестен. '
                                                   'Автоматический повтор запрещён.') from None
 
     def _check_owner(self,reference,token,*,allow_name=False):
         template='{{json .Id}}\n{{json (index .Config.Labels "'+OWNER_LABEL+'")}}'
-        raw=checked(DOCKER+['inspect','--format',template,reference],env=self.env,timeout=10).decode().splitlines()
+        raw=checked(DOCKER+['inspect','--format',template,reference],env=self.env,timeout=10,
+                    on_failure=self._record_failure).decode().splitlines()
         require(len(raw)==2,'Не подтверждена идентичность Docker-ресурса.')
         cid=json.loads(raw[0])
         require(isinstance(cid,str) and bool(re.fullmatch(r'[a-f0-9]{64}',cid)) and
