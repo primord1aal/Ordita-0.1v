@@ -94,7 +94,15 @@ class PolicyTests(unittest.TestCase):
         self.assertNotIn('default_transaction_read_only',_timeout_options(60))
         workflow=(ROOT/'.github/workflows/orbita-stage-3b.yml').read_text()
         self.assertNotIn('vars.ORBITA_TEST_DB_URL',workflow)
-        self.assertEqual(workflow.count('ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full'),5)
+        pooler='ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full'
+        direct='ORBITA_DATABASE_URL: postgresql://postgres@db.fjqghohhohgvwlmefdmo.supabase.co:5432/postgres?sslmode=verify-full'
+        read_jobs=workflow.split('\n  migration-preview:',1)[1].split('\n  migration-apply:',1)[0]
+        apply_job=workflow.split('\n  migration-apply:',1)[1]
+        self.assertEqual(read_jobs.count(direct),3)
+        self.assertNotIn(pooler,read_jobs)
+        self.assertEqual(apply_job.count(pooler),2)
+        self.assertNotIn(direct,apply_job)
+        self.assertEqual(workflow.count('ORBITA_DATABASE_URL:'),5)
         cloud=(ROOT/'tools/migrations/cloud_run.py').read_text()
         self.assertIn("read_only=context['operation'] in ('preview','inspect')",cloud)
 
