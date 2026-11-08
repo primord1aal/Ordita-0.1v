@@ -15,6 +15,28 @@ from backup import create_backup
 from dbtools import Database,inspect,require_initial,postflight,baseline_fingerprint,restricted_process_env
 from policy import LOCK,GuardError,require,validate_request,validate_connection,parse_dry_run
 
+# Fixed, non-sensitive diagnostic codes. Never print exception text, SQL, paths or URLs.
+SAFE_PHASES=frozenset({
+    'START','GATE_FILE','SOURCE_VALIDATION','DATABASE_URL','CLI_VERSION',
+    'CA_CONFIG','DB_CLIENT_CONFIG','READ_ONLY_CONNECTION','WORKSPACE',
+    'DB_INSPECT','BASELINE','CLI_DRY_RUN','BACKUP','PUBLIC_RECEIPT'
+})
+
+
+def run_safely(action):
+    """Report only the last fixed phase; raw cloud errors may contain credentials."""
+    phase=['START']
+    def mark(name):
+        require(name in SAFE_PHASES,'Неизвестный этап диагностики.')
+        phase[0]=name
+    try:
+        action(mark)
+        return 0
+    except Exception:
+        print('ORBITA_CLOUD_FAILURE_PHASE='+phase[0])
+        print('Процесс остановлен. Причина и сырые ответы скрыты; автоматического повтора нет.')
+        return 1
+
 
 def workspace(root,temporary):
     work=Path(temporary)/'cli';(work/'supabase/migrations').mkdir(parents=True)
@@ -23,10 +45,13 @@ def workspace(root,temporary):
     return work
 
 
-def execute(context,db,workdir,root,temporary,public_dir,backup_dir,passphrase,preview=None):
+def execute(context,db,workdir,root,temporary,public_dir,backup_dir,passphrase,preview=None,on_phase=None):
     """Зависимости передаются явно для отрицательных локальных тестов."""
+    if on_phase is None:on_phase=lambda phase:None
+    on_phase('DB_INSPECT')
     before=inspect(db)
     if context['operation']=='inspect':
+        on_phase('PUBLIC_RECEIPT')
         receipt={'status':'read_only_inspection','run_id':context['run_id'],'source_sha':context['sha'],
             'project_ref':context['expected_ref'],'observed':before,
             'next':'Оценка оператором; этот режим не разрешает повторное применение или repair.'}
@@ -34,10 +59,14 @@ def execute(context,db,workdir,root,temporary,public_dir,backup_dir,passphrase,p
         (Path(public_dir)/'inspection.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
         return receipt
     require_initial(before)
+    on_phase('BASELINE')
     baseline=baseline_fingerprint(db)
+    on_phase('CLI_DRY_RUN')
     plan=parse_dry_run(db.cli(workdir,True))
     if context['operation']=='preview':
+        on_phase('BACKUP')
         backup=create_backup(db,before,passphrase,temporary,backup_dir,root)
+        on_phase('PUBLIC_RECEIPT')
         receipt={'status':'preview_passed','run_id':context['run_id'],'source_sha':context['sha'],
             'project_ref':context['expected_ref'],'migration_sha256':LOCK['migration_sha256'],
             'version':LOCK['version'],'pending':plan,'auth_users':before['auth_users'],
@@ -71,34 +100,43 @@ def execute(context,db,workdir,root,temporary,public_dir,backup_dir,passphrase,p
         raise GuardError('Итог применения требует расследования. Автоматический повтор запрещён.') from None
 
 
-def main():
+def main(on_phase=None):
+    if on_phase is None:on_phase=lambda phase:None
+    on_phase('GATE_FILE')
     os.umask(0o077)
     root=Path(os.environ['GITHUB_WORKSPACE'])
     gate=Path(os.environ['RUNNER_TEMP'])/'orbita-migration-gate.json'
     require(gate.is_file(),'До выдачи секретов должен пройти независимый GitHub gate.')
     approved=json.loads(gate.read_text());context=approved['context']
+    on_phase('SOURCE_VALIDATION')
     validate_request(context,root)
     actual=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
     require(actual==context['sha'],'После допуска checkout изменился.')
+    on_phase('DATABASE_URL')
     validate_connection(os.environ.get('ORBITA_DATABASE_URL',''),context['expected_ref'])
+    on_phase('CLI_VERSION')
     binary=shutil.which('supabase');require(binary is not None,'CLI не установлен.')
     result=subprocess.run([binary,'--version'],env=restricted_process_env(),capture_output=True,text=True,timeout=10)
     require(result.returncode==0 and result.stdout.strip()==LOCK['cli_version'],'Неподходящая версия CLI.')
     public_dir=root/'build/migration-public';backup_dir=root/'build/migration-backup'
     with tempfile.TemporaryDirectory(prefix='orbita-migration-',dir=os.environ['RUNNER_TEMP']) as directory:
         temporary=Path(directory)
+        on_phase('CA_CONFIG')
         ca=os.environ.get('ORBITA_DATABASE_CA_PEM','')
         require(ca.startswith('-----BEGIN CERTIFICATE-----'),'Нужен проверенный публичный сертификат CA из Dashboard.')
         ca_file=temporary/'ca.pem';ca_file.write_text(ca)
         read_only=context['operation'] in ('preview','inspect')
+        on_phase('DB_CLIENT_CONFIG')
         db=Database(os.environ['ORBITA_DATABASE_URL'],context['expected_ref'],os.environ.get('PGPASSWORD',''),ca_file,
                     read_only=read_only)
         if read_only:
+            on_phase('READ_ONLY_CONNECTION')
             require(db.query('show default_transaction_read_only;')=='on',
                     'Сервер не подтвердил READ ONLY для предварительных подключений.')
+        on_phase('WORKSPACE')
         work=workspace(root,temporary)
         receipt=execute(context,db,work,root,temporary,public_dir,backup_dir,
-            os.environ.get('ORBITA_BACKUP_PASSPHRASE',''),approved.get('preview'))
+            os.environ.get('ORBITA_BACKUP_PASSPHRASE',''),approved.get('preview'),on_phase=on_phase)
     messages={'preview_passed':'Предварительная проверка завершена.',
         'applied_and_catalog_verified':'Миграция применена; структура проверена.',
         'read_only_inspection':'Read-only состояние получено; повторное применение не разрешено.'}
@@ -106,7 +144,4 @@ def main():
 
 
 if __name__=='__main__':
-    try:main()
-    except Exception:
-        print('Процесс остановлен. Проверьте безопасный отчёт; сырые ответы и секреты скрыты. Автоматического повтора нет.')
-        raise SystemExit(1)
+    raise SystemExit(run_safely(main))
