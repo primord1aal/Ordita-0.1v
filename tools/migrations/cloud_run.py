@@ -13,13 +13,13 @@ import tempfile
 
 from backup import create_backup
 from dbtools import Database,inspect,require_initial,postflight,baseline_fingerprint,restricted_process_env
-from policy import LOCK,GuardError,require,validate_request,validate_connection,parse_dry_run
+from policy import LOCK,GuardError,require,validate_request,validate_connection,parse_dry_run,validate_local_plan
 
 # Fixed, non-sensitive diagnostic codes. Never print exception text, SQL, paths or URLs.
 SAFE_PHASES=frozenset({
     'START','GATE_FILE','SOURCE_VALIDATION','DATABASE_URL','CLI_VERSION',
     'CA_CONFIG','DB_CLIENT_CONFIG','READ_ONLY_CONNECTION','WORKSPACE',
-    'DB_INSPECT','BASELINE','CLI_DRY_RUN','BACKUP','PUBLIC_RECEIPT'
+    'DB_INSPECT','BASELINE','CLI_DRY_RUN','BACKUP','LOCAL_RESTORE','LOCAL_CLI_DRY_RUN','POST_BACKUP_READBACK','PUBLIC_RECEIPT'
 })
 
 
@@ -45,7 +45,7 @@ def workspace(root,temporary):
     return work
 
 
-def execute(context,db,workdir,root,temporary,public_dir,backup_dir,passphrase,preview=None,on_phase=None):
+def execute(context,db,workdir,root,temporary,public_dir,backup_dir,passphrase,preview=None,on_phase=None,cli_binary=None):
     """Зависимости передаются явно для отрицательных локальных тестов."""
     if on_phase is None:on_phase=lambda phase:None
     on_phase('DB_INSPECT')
@@ -61,20 +61,26 @@ def execute(context,db,workdir,root,temporary,public_dir,backup_dir,passphrase,p
     require_initial(before)
     on_phase('BASELINE')
     baseline=baseline_fingerprint(db)
-    on_phase('CLI_DRY_RUN')
-    plan=parse_dry_run(db.cli(workdir,True))
     if context['operation']=='preview':
         on_phase('BACKUP')
-        backup=create_backup(db,before,passphrase,temporary,backup_dir,root)
+        require(cli_binary is not None,'Для плана нужна проверенная локальная копия CLI.')
+        backup=create_backup(db,before,passphrase,temporary,backup_dir,root,cli_binary=cli_binary,on_phase=on_phase)
+        validate_local_plan(backup.get('local_plan'),before['versions'])
+        plan=backup['local_plan']['pending']
+        on_phase('POST_BACKUP_READBACK')
+        require(inspect(db)==before and baseline_fingerprint(db)==baseline,
+                'Облачное состояние изменилось во время подготовки копии; предварительный отчёт не выдаётся.')
         on_phase('PUBLIC_RECEIPT')
         receipt={'status':'preview_passed','run_id':context['run_id'],'source_sha':context['sha'],
             'project_ref':context['expected_ref'],'migration_sha256':LOCK['migration_sha256'],
-            'version':LOCK['version'],'pending':plan,'auth_users':before['auth_users'],
+            'version':LOCK['version'],'pending':plan,'cli_dry_run_target':'isolated_restored_snapshot','auth_users':before['auth_users'],
             'objects_absent':True,'baseline_fingerprint':baseline,'backup':backup,
-            'limitation':'Dry-run не исполняет все SQL. Scoped restore не доказывает полное восстановление Supabase.'}
+            'limitation':'CLI dry-run выполнен на локально восстановленном снимке, не в облаке; SQL миграции не исполняется. Scoped restore не доказывает полное восстановление Supabase.'}
         Path(public_dir).mkdir(parents=True,exist_ok=True)
         (Path(public_dir)/'preview.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
         return receipt
+    on_phase('CLI_DRY_RUN')
+    parse_dry_run(db.cli(workdir,True))
     require(context['operation']=='apply' and preview is not None,'Применение без предварительного отчёта запрещено.')
     require(preview.get('baseline_fingerprint')==baseline,'Исходная схема или строки изменились после снимка; нужен новый preview.')
     # После этой отметки любой неизвестный исход рассматривается консервативно.
@@ -128,14 +134,13 @@ def main(on_phase=None):
         read_only=context['operation'] in ('preview','inspect')
         on_phase('DB_CLIENT_CONFIG')
         db=Database(os.environ['ORBITA_DATABASE_URL'],context['expected_ref'],os.environ.get('PGPASSWORD',''),ca_file,
-                    read_only=read_only,check_read_only_session=context['operation']!='inspect')
+                    read_only=read_only,check_read_only_session=not read_only)
         if read_only:
             on_phase('READ_ONLY_CONNECTION')
             try:
-                # Inspect SQL is wrapped in an explicit READ ONLY transaction.
-                # Check transaction safety without requiring a read-only pooler session.
-                check='show transaction_read_only;' if context['operation']=='inspect' else 'show default_transaction_read_only;'
-                setting=db.query(check)
+                # Every SQL read has its own explicit READ ONLY transaction.
+                # Preview runs CLI only on the isolated restored snapshot.
+                setting=db.query('show transaction_read_only;')
             except Exception:
                 print('ORBITA_CONNECTION_ERROR_CATEGORY='+db.failure_category)
                 raise
@@ -145,7 +150,7 @@ def main(on_phase=None):
         on_phase('WORKSPACE')
         work=workspace(root,temporary)
         receipt=execute(context,db,work,root,temporary,public_dir,backup_dir,
-            os.environ.get('ORBITA_BACKUP_PASSPHRASE',''),approved.get('preview'),on_phase=on_phase)
+            os.environ.get('ORBITA_BACKUP_PASSPHRASE',''),approved.get('preview'),on_phase=on_phase,cli_binary=binary)
     messages={'preview_passed':'Предварительная проверка завершена.',
         'applied_and_catalog_verified':'Миграция применена; структура проверена.',
         'read_only_inspection':'Read-only состояние получено; повторное применение не разрешено.'}

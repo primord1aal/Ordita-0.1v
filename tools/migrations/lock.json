@@ -8,5 +8,6 @@
   "branch": "codex/orbita-stage-3b-auth",
   "environment": "orbita-mobile-test-migrations",
   "workflow": "orbita-stage-3b.yml",
-  "postgres_image": "postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5"
+  "postgres_image": "postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5",
+  "test_pooler_image": "supabase/supavisor@sha256:07f1a6098ffc04b80263bca4eb5c3e7bd2e03dfd1fc465aa108d7329000a1a4e"
 }

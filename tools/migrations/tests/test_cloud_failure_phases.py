@@ -61,9 +61,23 @@ class CloudFailurePhaseTests(unittest.TestCase):
              patch.object(cloud_run,'require_initial'),\
              patch.object(cloud_run,'baseline_fingerprint',return_value='fake-fingerprint'):
             with self.assertRaises(RuntimeError):
-                cloud_run.execute({'operation':'preview'},FakeDb(),'/tmp','/tmp',
+                cloud_run.execute({'operation':'apply'},FakeDb(),'/tmp','/tmp',
                     '/tmp','/tmp','/tmp','fake-passphrase',on_phase=phases.append)
         self.assertEqual(phases,['DB_INSPECT','BASELINE','CLI_DRY_RUN'])
+
+    def test_local_plan_failure_is_distinct_from_cloud_dry_run(self):
+        phases=[]
+        def local_failure(*args,**kwargs):
+            kwargs['on_phase']('LOCAL_CLI_DRY_RUN')
+            raise RuntimeError('artificial-secret')
+        with patch.object(cloud_run,'inspect',return_value={'auth_users':0}),\
+             patch.object(cloud_run,'require_initial'),\
+             patch.object(cloud_run,'baseline_fingerprint',return_value='fake-fingerprint'),\
+             patch.object(cloud_run,'create_backup',side_effect=local_failure):
+            with self.assertRaises(RuntimeError):
+                cloud_run.execute({'operation':'preview'},object(),'/tmp','/tmp','/tmp','/tmp','/tmp',
+                    'fake-passphrase',on_phase=phases.append,cli_binary='/artificial/supabase')
+        self.assertEqual(phases,['DB_INSPECT','BASELINE','BACKUP','LOCAL_CLI_DRY_RUN'])
 
 
 if __name__=='__main__':unittest.main(verbosity=2)

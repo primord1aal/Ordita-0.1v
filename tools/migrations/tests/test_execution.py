@@ -31,13 +31,16 @@ class ExecutionTests(unittest.TestCase):
         with patch.object(cloud_run,'inspect',return_value=self.initial),\
              patch.object(cloud_run,'baseline_fingerprint',return_value='stable'),\
              patch.object(cloud_run,'postflight',return_value={'verified':True}),\
-             patch.object(cloud_run,'create_backup',return_value={'verified':True}):
+             patch.object(cloud_run,'create_backup',return_value={'verified':True,'local_plan':{
+                 'target':'isolated_restored_snapshot','network':'none','tls':'verify-full',
+                 'versions':[],'pending':[LOCK['version']],'scoped_state_unchanged':True}}):
             return cloud_run.execute(self.context,db,self.root,ROOT,self.root,self.root/'public',self.root/'backup',
-                'artificial-passphrase-only',preview)
+                'artificial-passphrase-only',preview,cli_binary='/artificial/supabase')
 
     def test_preview_never_calls_mutating_cli(self):
         db=FakeDatabase();receipt=self.execute(db)
-        self.assertEqual(db.calls,[True]);self.assertEqual(receipt['status'],'preview_passed')
+        self.assertEqual(db.calls,[]);self.assertEqual(receipt['status'],'preview_passed')
+        self.assertEqual(receipt['cli_dry_run_target'],'isolated_restored_snapshot')
 
     def test_apply_has_one_preliminary_and_exactly_one_mutation(self):
         db=FakeDatabase();self.context['operation']='apply'

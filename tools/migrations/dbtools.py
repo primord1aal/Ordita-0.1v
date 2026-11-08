@@ -18,6 +18,8 @@ OWNER_LABEL='orbita.migration.operation'
 # Only fixed categories may leave the process; raw client errors stay private.
 CONNECTION_ERROR_PATTERNS=(
     ('DOCKER_CLIENT_FAILED',r'error response from daemon|cannot connect to the docker daemon|oci runtime'),
+    ('SERVER_STATEMENT_TIMEOUT',r'canceling statement due to statement timeout'),
+    ('SERVER_LOCK_TIMEOUT',r'canceling statement due to lock timeout|could not obtain lock on relation'),
     ('TLS_HOSTNAME_MISMATCH',r'server certificate .*does not match host name'),
     ('TLS_CA_FILE_INVALID',r'root certificate file .*does not exist|could not (?:read|load) root certificate|no certificate or crl found'),
     ('TLS_CERTIFICATE_VERIFY_FAILED',r'certificate verif(?:y|ication) failed|self.signed certificate|unable to get local issuer|certificate has expired'),
@@ -63,6 +65,14 @@ def _timeout_options(timeout,*,read_only=False):
     options=f'-c statement_timeout={statement} -c lock_timeout={lock} -c idle_in_transaction_session_timeout={idle}'
     # Запрет записи задаётся на сервере при старте каждого соединения.
     return options+(' -c default_transaction_read_only=on' if read_only else '')
+
+
+def _read_only_sql(sql,token,timeout):
+    require(bool(re.fullmatch(r'orbita_[a-z0-9_]{1,54}',token)),'Некорректная метка SQL-операции.')
+    options=_timeout_options(timeout)
+    settings='\n'.join('SET LOCAL '+name+'='+value+';' for name,value in
+                      re.findall(r'-c ([a-z_]+)=([0-9]+)',options))
+    return ("BEGIN TRANSACTION READ ONLY;\nSET LOCAL application_name='"+token+"';\n"+settings+'\n').encode()+sql+b'\nROLLBACK;'
 
 
 def restricted_process_env():
@@ -114,10 +124,11 @@ class Database:
         if self._failure_code is None:
             self._failure_code=code if isinstance(code,str) and code in SAFE_CONNECTION_CATEGORIES else 'UNKNOWN_PRIVATE_ERROR'
 
-    def tool(self,program,args,*,input=None,timeout=60):
+    def tool(self,program,args,*,input=None,timeout=60,read_only_sql=False):
         self._failure_code=None
         token=_new_operation_token()
         require(bool(re.fullmatch(r'orbita_[a-z0-9_]{1,54}',token)),'Некорректная метка SQL-операции.')
+        if read_only_sql:input=_read_only_sql(input,token,timeout)
         try:
             return self._owned_tool(program,args,token,input=input,timeout=timeout)
         except BaseException as error:
@@ -195,7 +206,7 @@ class Database:
         # контроллера не совпадает с меткой отменяемой операции.
         token='orbita_ctl_'+uuid.uuid4().hex
         return self._owned_tool('psql',['--no-psqlrc','--set','ON_ERROR_STOP=1','-Atq','--dbname',self.url],
-                                token,input=sql.encode(),timeout=10).decode().strip()
+                                token,input=_read_only_sql(sql.encode(),token,10),timeout=10).decode().strip()
 
     @staticmethod
     def _session_filter(token):
@@ -235,12 +246,12 @@ class Database:
     def query(self,sql):
         # Даже если session default меняется, каждая preview/inspect проверка
         # выполняется в явно READ ONLY транзакции с безусловным ROLLBACK.
-        if self.read_only:sql='BEGIN TRANSACTION READ ONLY;\n'+sql+'\nROLLBACK;'
-        raw=self.tool('psql',['--no-psqlrc','--set','ON_ERROR_STOP=1','-Atq','--dbname',self.url],input=sql.encode())
+        raw=self.tool('psql',['--no-psqlrc','--set','ON_ERROR_STOP=1','-Atq','--dbname',self.url],
+                      input=sql.encode(),read_only_sql=True)
         return raw.decode().strip()
 
     def cli(self,workdir,dry_run):
-        require(not(self.read_only and not dry_run),'Read-only режим запрещает применение миграций.')
+        require(not self.read_only,'Preview/inspect не запускают CLI против облака; используйте изолированную копию.')
         # Все параметры определены кодом. Ни reset/repair, ни seeds/roles/Vault.
         args=['supabase','db','push','--remote='+self.url,'--skip-vault']
         args+=['--dry-run'] if dry_run else ['--yes']

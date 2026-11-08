@@ -152,7 +152,10 @@ class ConnectionDiagnosticTests(unittest.TestCase):
         starts=[kw for args,kw in self.calls if 'start' in args]
         self.assertEqual(len(starts),1)
         kw=starts[0]
-        self.assertEqual(kw['input'],b'BEGIN TRANSACTION READ ONLY;\nshow default_transaction_read_only;\nROLLBACK;')
+        self.assertEqual(kw['input'].decode().splitlines(),['BEGIN TRANSACTION READ ONLY;',
+            "SET LOCAL application_name='"+kw['env']['PGAPPNAME']+"';",'SET LOCAL statement_timeout=30000;',
+            'SET LOCAL lock_timeout=5000;','SET LOCAL idle_in_transaction_session_timeout=15000;',
+            'show default_transaction_read_only;','ROLLBACK;'])
         for name,value in [('PGSSLMODE','verify-full'),('PGTARGETSESSIONATTRS','read-only'),
                 ('PGSSLROOTCERT','/run/orbita-ca.pem'),('PGCONNECT_TIMEOUT','10')]:self.assertEqual(kw['env'][name],value)
         self.assertIn('default_transaction_read_only=on',kw['env']['PGOPTIONS'])
@@ -171,8 +174,10 @@ class ConnectionDiagnosticTests(unittest.TestCase):
         starts=[kw for args,kw in self.calls if 'start' in args]
         self.assertEqual(len(starts),1)
         self.assertNotIn('PGTARGETSESSIONATTRS',starts[0]['env'])
-        self.assertEqual(starts[0]['input'],
-            b'BEGIN TRANSACTION READ ONLY;\nshow transaction_read_only;\nROLLBACK;')
+        self.assertEqual(starts[0]['input'].decode().splitlines(),['BEGIN TRANSACTION READ ONLY;',
+            "SET LOCAL application_name='"+starts[0]['env']['PGAPPNAME']+"';",'SET LOCAL statement_timeout=30000;',
+            'SET LOCAL lock_timeout=5000;','SET LOCAL idle_in_transaction_session_timeout=15000;',
+            'show transaction_read_only;','ROLLBACK;'])
         self.assertIn('default_transaction_read_only=on',starts[0]['env']['PGOPTIONS'])
         self.assertEqual(starts[0]['env']['PGSSLMODE'],'verify-full')
 

@@ -111,6 +111,17 @@ def validate_preview(run,receipt,context):
     backup=receipt.get('backup',{})
     require(backup.get('encrypted_sha256')==context['backup_sha256'] and backup.get('decryption_checked') is True
             and backup.get('local_restore_checked') is True,'Резервный снимок не подтверждён.')
+    require(receipt.get('cli_dry_run_target')=='isolated_restored_snapshot','Не подтверждён явно указанный локальный режим dry-run.')
+    validate_local_plan(backup.get('local_plan'),[])
+
+
+def validate_local_plan(plan,expected_versions):
+    require(isinstance(plan,dict),'Не найден план на восстановленной локальной копии.')
+    require(plan.get('target')=='isolated_restored_snapshot' and plan.get('network')=='none'
+            and plan.get('tls')=='verify-full','Локальный план должен выполняться изолированно с проверкой TLS.')
+    require(plan.get('versions')==expected_versions,'История локального плана не совпала с облачной.')
+    require(plan.get('pending')==[LOCK['version']] and plan.get('scoped_state_unchanged') is True,
+            'Локальный dry-run должен показать одну миграцию и сохранить проверяемое состояние копии.')
 
 
 def parse_dry_run(output):

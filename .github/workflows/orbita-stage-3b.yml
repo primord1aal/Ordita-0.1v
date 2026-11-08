@@ -54,19 +54,27 @@ jobs:
       - name: Подготовить закреплённый CLI 3.0.0
         run: python3 tools/migrations/install_cli.py "$RUNNER_TEMP/orbita-cli"
       - name: Подготовить локальную PostgreSQL
-        run: docker pull postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
+        run: |
+          docker pull postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
+          docker pull supabase/supavisor@sha256:07f1a6098ffc04b80263bca4eb5c3e7bd2e03dfd1fc465aa108d7329000a1a4e
       - name: Проверить ограничения без облачных данных
         run: python3 -m unittest discover -s tools/migrations/tests -v
       - name: CLI и история в контейнере без сети
         env:
           ORBITA_SUPABASE_CLI: ${{ runner.temp }}/orbita-cli/supabase
         run: python3 -m unittest discover -s supabase/tests -p test_migration_cli.py -v
+      - name: Preview через настоящий Session pooler без внешней сети
+        env:
+          ORBITA_SUPABASE_CLI: ${{ runner.temp }}/orbita-cli/supabase
+        run: python3 -m unittest discover -s supabase/tests -p test_preview_pooler.py -v
       - name: Сохранить только вымышленные результаты
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ORBITA-migration-local-tests
-          path: build/migration-cli-results.json
+          path: |
+            build/migration-cli-results.json
+            build/preview-pooler-results.json
           if-no-files-found: error
           retention-days: 14
   sql:
@@ -246,7 +254,7 @@ jobs:
         run: |
           python3 tools/migrations/install_cli.py "$RUNNER_TEMP/orbita-cli"
           docker pull postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
-      - name: Только чтение, зашифрованный снимок и dry-run
+      - name: Только чтение, зашифрованная копия и локальный dry-run
         if: inputs.migration_operation == 'preview'
         env:
           PGPASSWORD: ${{ secrets.ORBITA_TEST_DB_PASSWORD }}
