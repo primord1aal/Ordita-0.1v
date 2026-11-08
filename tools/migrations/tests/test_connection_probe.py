@@ -162,6 +162,26 @@ class ConnectionDiagnosticTests(unittest.TestCase):
             for name in ['GH_TOKEN','SUPABASE_ACCESS_TOKEN','ORBITA_BACKUP_PASSPHRASE','PGSERVICE']:
                 self.assertNotIn(name,kw['env'])
 
+    def test_inspect_uses_explicit_read_only_transaction_without_pooler_session_filter(self):
+        db=dbtools.Database(URL,'a'*20,SECRET,'/tmp/artificial-ca.pem',
+                            read_only=True,check_read_only_session=False)
+        self.calls=[]
+        with patch('subprocess.run',side_effect=self.processes(stdout=b'on\n')):
+            self.assertEqual(db.query('show transaction_read_only;'),'on')
+        starts=[kw for args,kw in self.calls if 'start' in args]
+        self.assertEqual(len(starts),1)
+        self.assertNotIn('PGTARGETSESSIONATTRS',starts[0]['env'])
+        self.assertEqual(starts[0]['input'],
+            b'BEGIN TRANSACTION READ ONLY;\nshow transaction_read_only;\nROLLBACK;')
+        self.assertIn('default_transaction_read_only=on',starts[0]['env']['PGOPTIONS'])
+        self.assertEqual(starts[0]['env']['PGSSLMODE'],'verify-full')
+
+    def test_preview_keeps_session_filter_and_inspect_does_not_change_apply(self):
+        preview=dbtools.Database(URL,'a'*20,SECRET,'/tmp/artificial-ca.pem',read_only=True)
+        apply=dbtools.Database(URL,'a'*20,SECRET,'/tmp/artificial-ca.pem',read_only=False)
+        self.assertTrue(preview.check_read_only_session)
+        self.assertFalse(apply.read_only)
+
     def test_next_operation_does_not_reuse_old_error_category(self):
         with patch('subprocess.run',side_effect=self.processes(stderr=b'certificate verify failed',returncode=2)),\
              patch.object(self.db,'_end_sql'),self.assertRaises(GuardError):self.db.query('show default_transaction_read_only;')

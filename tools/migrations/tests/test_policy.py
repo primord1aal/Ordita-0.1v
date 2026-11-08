@@ -98,8 +98,8 @@ class PolicyTests(unittest.TestCase):
         direct='ORBITA_DATABASE_URL: postgresql://postgres@db.fjqghohhohgvwlmefdmo.supabase.co:5432/postgres?sslmode=verify-full'
         read_jobs=workflow.split('\n  migration-preview:',1)[1].split('\n  migration-apply:',1)[0]
         apply_job=workflow.split('\n  migration-apply:',1)[1]
-        self.assertEqual(read_jobs.count(direct),3)
-        self.assertNotIn(pooler,read_jobs)
+        self.assertEqual(read_jobs.count(pooler),3)
+        self.assertNotIn(direct,read_jobs)
         self.assertEqual(apply_job.count(pooler),2)
         self.assertNotIn(direct,apply_job)
         self.assertEqual(workflow.count('ORBITA_DATABASE_URL:'),5)

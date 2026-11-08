@@ -128,11 +128,14 @@ def main(on_phase=None):
         read_only=context['operation'] in ('preview','inspect')
         on_phase('DB_CLIENT_CONFIG')
         db=Database(os.environ['ORBITA_DATABASE_URL'],context['expected_ref'],os.environ.get('PGPASSWORD',''),ca_file,
-                    read_only=read_only)
+                    read_only=read_only,check_read_only_session=context['operation']!='inspect')
         if read_only:
             on_phase('READ_ONLY_CONNECTION')
             try:
-                setting=db.query('show default_transaction_read_only;')
+                # Inspect SQL is wrapped in an explicit READ ONLY transaction.
+                # Check transaction safety without requiring a read-only pooler session.
+                check='show transaction_read_only;' if context['operation']=='inspect' else 'show default_transaction_read_only;'
+                setting=db.query(check)
             except Exception:
                 print('ORBITA_CONNECTION_ERROR_CATEGORY='+db.failure_category)
                 raise

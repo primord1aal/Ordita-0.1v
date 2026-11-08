@@ -240,7 +240,7 @@ jobs:
           ORBITA_EXPECTED_REF: ${{ vars.SUPABASE_TEST_PROJECT_REF }}
           ORBITA_FORBIDDEN_REF: ${{ vars.SUPABASE_FORBIDDEN_PROJECT_REF }}
           ORBITA_REQUEST_REF: ${{ inputs.requested_project_ref }}
-          ORBITA_DATABASE_URL: postgresql://postgres@db.fjqghohhohgvwlmefdmo.supabase.co:5432/postgres?sslmode=verify-full
+          ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
         run: python3 tools/migrations/github_gate.py
       - name: Подготовить проверенные инструменты
         run: |
@@ -251,14 +251,14 @@ jobs:
         env:
           PGPASSWORD: ${{ secrets.ORBITA_TEST_DB_PASSWORD }}
           ORBITA_BACKUP_PASSPHRASE: ${{ secrets.ORBITA_BACKUP_PASSPHRASE }}
-          ORBITA_DATABASE_URL: postgresql://postgres@db.fjqghohhohgvwlmefdmo.supabase.co:5432/postgres?sslmode=verify-full
+          ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
           ORBITA_DATABASE_CA_PEM: ${{ vars.ORBITA_TEST_DB_CA_PEM }}
         run: python3 tools/migrations/cloud_run.py
       - name: Только проверка состояния без повторного применения
         if: inputs.migration_operation == 'inspect'
         env:
           PGPASSWORD: ${{ secrets.ORBITA_TEST_DB_PASSWORD }}
-          ORBITA_DATABASE_URL: postgresql://postgres@db.fjqghohhohgvwlmefdmo.supabase.co:5432/postgres?sslmode=verify-full
+          ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
           ORBITA_DATABASE_CA_PEM: ${{ vars.ORBITA_TEST_DB_CA_PEM }}
         run: python3 tools/migrations/cloud_run.py
       - name: Сохранить безопасный предварительный отчёт

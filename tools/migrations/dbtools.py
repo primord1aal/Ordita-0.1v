@@ -92,11 +92,12 @@ def checked(args,*,input=None,env=None,cwd=None,timeout=60,on_failure=None):
 
 
 class Database:
-    def __init__(self,url,project_ref,password,ca_file,*,read_only=False):
+    def __init__(self,url,project_ref,password,ca_file,*,read_only=False,check_read_only_session=True):
         validate_connection(url,project_ref)
         require(bool(password) and '\x00' not in password,'Не предоставлен корректный защищённый пароль БД.')
-        require(type(read_only) is bool,'Некорректный режим подключения.')
+        require(type(read_only) is bool and type(check_read_only_session) is bool,'Некорректный режим подключения.')
         self.url=url;self.password=password;self.ca_file=Path(ca_file);self.read_only=read_only
+        self.check_read_only_session=check_read_only_session
         self._failure_code=None
         self.env=restricted_process_env()
         # Никаких сохранённых linked-проектов, альтернативных подключений и API-токенов.
@@ -136,7 +137,7 @@ class Database:
         env=self.env.copy()
         env.update(PGSSLROOTCERT='/run/orbita-ca.pem',PGAPPNAME=token,PGOPTIONS=_timeout_options(timeout,read_only=self.read_only),
                    PGCONNECT_TIMEOUT=str(min(10,max(2,int(timeout/4)))))
-        if self.read_only:env['PGTARGETSESSIONATTRS']='read-only'
+        if self.read_only and self.check_read_only_session:env['PGTARGETSESSIONATTRS']='read-only'
         # create даёт точный CID. Без --rm ресурс не исчезнет до проверки ownership.
         # Имя само по себе никогда не является основанием для удаления.
         cid=None
@@ -251,7 +252,7 @@ class Database:
                 service.chmod(0o600)
                 stream.write('[orbita_b1]\noptions='+_timeout_options(120,read_only=self.read_only)+'\n')
             env=self.env.copy();env.update(PGSERVICEFILE=str(service),PGSERVICE='orbita_b1')
-            if self.read_only:env['PGTARGETSESSIONATTRS']='read-only'
+            if self.read_only and self.check_read_only_session:env['PGTARGETSESSIONATTRS']='read-only'
             try:result=subprocess.run(args,cwd=workdir,env=env,capture_output=True,timeout=120)
             except (OSError,subprocess.SubprocessError):
                 # CLI заменяет PGAPPNAME общим @effect/sql-pg: по нему нельзя
