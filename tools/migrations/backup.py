@@ -14,14 +14,27 @@ import tempfile
 import time
 import uuid
 
-from dbtools import DOCKER,checked,public_rows,restricted_process_env
+from dbtools import DOCKER,checked,public_rows,restricted_process_env,SAFE_CONNECTION_CATEGORIES
 from policy import LOCK,require,GuardError
 from local_plan import RESTORE_LABEL,verify_restore,cleanup_restore,run_local_plan
 
 
-def crypt_file(source,destination,passphrase,home,decrypt=False):
+def validate_passphrase(passphrase):
     require(len(passphrase)>=24 and '\n' not in passphrase and '\x00' not in passphrase,
             'Для снимка нужна отдельная длинная секретная фраза.')
+
+
+def _backup_read(db,action):
+    try:return action()
+    except Exception:
+        category=getattr(db,'failure_category','UNKNOWN_PRIVATE_ERROR')
+        if not isinstance(category,str) or category not in SAFE_CONNECTION_CATEGORIES:category='UNKNOWN_PRIVATE_ERROR'
+        print('ORBITA_BACKUP_ERROR_CATEGORY='+category)
+        raise
+
+
+def crypt_file(source,destination,passphrase,home,decrypt=False):
+    validate_passphrase(passphrase)
     env=restricted_process_env();env['GNUPGHOME']=str(home)
     Path(home).mkdir(mode=0o700,exist_ok=True)
     args=['gpg','--batch','--yes','--pinentry-mode','loopback','--passphrase-fd','0','--output',str(destination)]
@@ -85,15 +98,24 @@ def restore_local(dump_file,expected_rows,roles,root,*,cli_binary=None,expected_
 
 def create_backup(db,state,passphrase,temporary,output_dir,root,*,cli_binary=None,on_phase=None):
     temporary=Path(temporary);output_dir=Path(output_dir);output_dir.mkdir(parents=True,exist_ok=True)
+    mark=on_phase if on_phase is not None else lambda phase:None
+    mark('BACKUP_PASSPHRASE')
+    validate_passphrase(passphrase)
     schemas=['public']+(['supabase_migrations'] if state['history_table'] else [])
-    rows=public_rows(db)
+    mark('BACKUP_PUBLIC_ROWS')
+    rows=_backup_read(db,lambda:public_rows(db))
     # Этот путь намеренно ограничен первой миграцией пустого тестового проекта.
+    mark('BACKUP_EMPTY_CHECK')
     require(all(count==0 for count in rows.values()),'В публичных таблицах есть данные; нужен отдельный план резервирования.')
-    roles=json.loads(db.query("select json_agg(rolname order by rolname) from pg_roles;"))
-    auth_triggers=json.loads(db.query("""select coalesce(json_agg(json_build_object('name',t.tgname,
+    mark('BACKUP_ROLES')
+    roles=json.loads(_backup_read(db,lambda:db.query("select json_agg(rolname order by rolname) from pg_roles;")))
+    mark('BACKUP_AUTH_TRIGGERS')
+    auth_triggers=json.loads(_backup_read(db,lambda:db.query("""select coalesce(json_agg(json_build_object('name',t.tgname,
       'definition',pg_get_triggerdef(t.oid)) order by t.tgname),'[]')
-      from pg_trigger t where t.tgrelid='auth.users'::regclass and not t.tgisinternal;"""))
-    dump_file=temporary/'before.dump';dump_file.write_bytes(db.dump(schemas));dump_file.chmod(0o600)
+      from pg_trigger t where t.tgrelid='auth.users'::regclass and not t.tgisinternal;""")))
+    mark('BACKUP_DUMP')
+    dump_file=temporary/'before.dump';dump_file.write_bytes(_backup_read(db,lambda:db.dump(schemas)));dump_file.chmod(0o600)
+    mark('BACKUP_ARCHIVE')
     payload=temporary/'snapshot.tar'
     manifest={'schemas':schemas,'public_rows':rows,'roles_names_only':roles,'auth_trigger_definitions':auth_triggers,
         'excluded':['managed Auth/Storage data and schemas','cluster roles/passwords/membership',
@@ -103,9 +125,12 @@ def create_backup(db,state,passphrase,temporary,output_dir,root,*,cli_binary=Non
         data=json.dumps(manifest,ensure_ascii=False).encode();entry=tarfile.TarInfo('manifest.json');entry.size=len(data)
         archive.addfile(entry,io.BytesIO(data))
     encrypted=output_dir/'snapshot.tar.gpg'
+    mark('BACKUP_ENCRYPT')
     crypt_file(payload,encrypted,passphrase,temporary/'gpg')
     decrypted=temporary/'checked.tar'
+    mark('BACKUP_DECRYPT')
     crypt_file(encrypted,decrypted,passphrase,temporary/'gpg',True)
+    mark('BACKUP_VERIFY')
     require(hashlib.sha256(payload.read_bytes()).digest()==hashlib.sha256(decrypted.read_bytes()).digest(),
             'Проверка расшифровки снимка не прошла.')
     with tarfile.open(decrypted) as archive:

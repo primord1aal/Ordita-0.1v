@@ -20,6 +20,8 @@ CONNECTION_ERROR_PATTERNS=(
     ('DOCKER_CLIENT_FAILED',r'error response from daemon|cannot connect to the docker daemon|oci runtime'),
     ('SERVER_STATEMENT_TIMEOUT',r'canceling statement due to statement timeout'),
     ('SERVER_LOCK_TIMEOUT',r'canceling statement due to lock timeout|could not obtain lock on relation'),
+    ('PG_DUMP_VERSION_MISMATCH',r'aborting because of server version mismatch'),
+    ('DB_PERMISSION_DENIED',r'permission denied for|must be owner of|must be superuser'),
     ('TLS_HOSTNAME_MISMATCH',r'server certificate .*does not match host name'),
     ('TLS_CA_FILE_INVALID',r'root certificate file .*does not exist|could not (?:read|load) root certificate|no certificate or crl found'),
     ('TLS_CERTIFICATE_VERIFY_FAILED',r'certificate verif(?:y|ication) failed|self.signed certificate|unable to get local issuer|certificate has expired'),
