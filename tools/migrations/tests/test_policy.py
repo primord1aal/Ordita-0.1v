@@ -174,13 +174,15 @@ class PolicyTests(unittest.TestCase):
         context=request();context['operation']='apply'
         run={'id':10,'conclusion':'success','event':'workflow_dispatch','head_sha':'a'*40,
             'head_branch':LOCK['branch'],'run_attempt':1,'display_title':'Орбита 3Б: preview @ '+('a'*40)}
-        receipt={'run_id':'10','source_sha':'a'*40,'project_ref':'a'*20,'migration_sha256':LOCK['migration_sha256'],
+        receipt={'status':'preview_passed','apply_executor':'postgres_transaction_v1',
+            'run_id':'10','source_sha':'a'*40,'project_ref':'a'*20,'migration_sha256':LOCK['migration_sha256'],
             'pending':[LOCK['version']],'auth_users':0,'objects_absent':True,'cli_dry_run_target':'isolated_restored_snapshot',
             'backup':{'encrypted_sha256':'c'*64,'decryption_checked':True,'local_restore_checked':True,
                 'local_plan':{'target':'isolated_restored_snapshot','network':'none','tls':'verify-full',
                     'versions':[],'pending':[LOCK['version']],'scoped_state_unchanged':True}}}
         validate_preview(run,receipt,context)
-        for key,value in [('source_sha','b'*40),('project_ref','b'*20),('pending',[]),('auth_users',1),('objects_absent',False)]:
+        for key,value in [('source_sha','b'*40),('project_ref','b'*20),('pending',[]),('auth_users',1),('objects_absent',False),
+                ('apply_executor',None),('apply_executor','legacy_cli'),('status','apply_outcome_unknown')]:
             changed=copy.deepcopy(receipt);changed[key]=value
             with self.subTest(key=key),self.assertRaises(GuardError):validate_preview(run,changed,context)
         changed=copy.deepcopy(receipt);changed['backup']['local_restore_checked']=False

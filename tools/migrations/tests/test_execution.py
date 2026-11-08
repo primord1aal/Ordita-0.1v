@@ -13,9 +13,9 @@ from policy import LOCK,GuardError
 
 class FakeDatabase:
     def __init__(self,fail_apply=False):self.calls=[];self.fail_apply=fail_apply
-    def cli(self,work,dry_run):
-        self.calls.append(dry_run)
-        if dry_run:return 'Would push these migrations:\n'+LOCK['migration']
+    def cli(self,*args):raise AssertionError('Cloud CLI is forbidden, including dry-run')
+    def apply_migration(self,root):
+        self.calls.append('atomic')
         if self.fail_apply:raise GuardError('Artificial uncertain result')
         return 'applied'
 
@@ -43,22 +43,23 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual(receipt['cli_dry_run_target'],'isolated_restored_snapshot')
 
     def test_apply_has_one_preliminary_and_exactly_one_mutation(self):
-        db=FakeDatabase();self.context['operation']='apply'
-        receipt=self.execute(db,{'baseline_fingerprint':'stable'})
-        self.assertEqual(db.calls,[True,False]);self.assertEqual(receipt['status'],'applied_and_catalog_verified')
+        db=FakeDatabase();proof=self.execute(db);self.context['operation']='apply'
+        receipt=self.execute(db,proof)
+        self.assertEqual(db.calls,['atomic']);self.assertEqual(receipt['status'],'applied_and_catalog_verified')
 
     def test_unknown_result_is_recorded_and_never_retried(self):
-        db=FakeDatabase(True);self.context['operation']='apply'
-        with self.assertRaises(GuardError):self.execute(db,{'baseline_fingerprint':'stable'})
-        self.assertEqual(db.calls,[True,False])
+        db=FakeDatabase(True);proof=self.execute(db);self.context['operation']='apply'
+        with self.assertRaises(GuardError):self.execute(db,proof)
+        self.assertEqual(db.calls,['atomic'])
         receipt=json.loads((self.root/'public/apply.json').read_text())
         self.assertEqual(receipt['status'],'apply_outcome_unknown')
 
     def test_changed_baseline_or_missing_preview_never_apply(self):
-        for preview in [None,{'baseline_fingerprint':'changed'}]:
+        valid=self.execute(FakeDatabase())
+        for preview in [None,dict(valid,baseline_fingerprint='changed')]:
             db=FakeDatabase();self.context['operation']='apply'
             with self.subTest(preview=preview),self.assertRaises(GuardError):self.execute(db,preview)
-            self.assertEqual(db.calls,[True])
+            self.assertEqual(db.calls,[])
 
     def test_inspection_after_unknown_result_never_retries_or_runs_cli(self):
         self.context['operation']='inspect';self.initial.update({'app_tables':4,'versions':[LOCK['version']]})

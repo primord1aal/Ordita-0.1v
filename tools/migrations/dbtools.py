@@ -69,12 +69,26 @@ def _timeout_options(timeout,*,read_only=False):
     return options+(' -c default_transaction_read_only=on' if read_only else '')
 
 
-def _read_only_sql(sql,token,timeout):
+def _transaction_prefix(token,timeout,read_only):
     require(bool(re.fullmatch(r'orbita_[a-z0-9_]{1,54}',token)),'Некорректная метка SQL-операции.')
     options=_timeout_options(timeout)
     settings='\n'.join('SET LOCAL '+name+'='+value+';' for name,value in
                       re.findall(r'-c ([a-z_]+)=([0-9]+)',options))
-    return ("BEGIN TRANSACTION READ ONLY;\nSET LOCAL application_name='"+token+"';\n"+settings+'\n').encode()+sql+b'\nROLLBACK;'
+    mode='READ ONLY' if read_only else 'READ WRITE'
+    return ('BEGIN TRANSACTION '+mode+";\nSET LOCAL application_name='"+token+"';\n"+settings+'\n').encode()
+
+
+def _read_only_sql(sql,token,timeout):
+    return _transaction_prefix(token,timeout,True)+sql+b'\nROLLBACK;'
+
+
+def _atomic_write_sql(sql,token,timeout):
+    limits=re.findall(r'-c ([a-z_]+)=([0-9]+)',_timeout_options(timeout))
+    checks=' OR '.join("(SELECT setting::bigint FROM pg_catalog.pg_settings WHERE name='"+name+
+        "') IS DISTINCT FROM "+value for name,value in limits)
+    guard=("DO $orbita_limits$ BEGIN IF pg_catalog.current_setting('transaction_read_only') <> 'off' OR "+
+        checks+" THEN RAISE EXCEPTION 'Server limits were not confirmed'; END IF; END; $orbita_limits$;\n").encode()
+    return _transaction_prefix(token,timeout,False)+guard+sql+b'\nCOMMIT;'
 
 
 def restricted_process_env():
@@ -126,11 +140,18 @@ class Database:
         if self._failure_code is None:
             self._failure_code=code if isinstance(code,str) and code in SAFE_CONNECTION_CATEGORIES else 'UNKNOWN_PRIVATE_ERROR'
 
-    def tool(self,program,args,*,input=None,timeout=60,read_only_sql=False):
+    def tool(self,program,args,*,input=None,timeout=60,read_only_sql=False,atomic_write=False):
         self._failure_code=None
+        require(type(read_only_sql) is bool and type(atomic_write) is bool and not(read_only_sql and atomic_write),
+                'Некорректная граница SQL-транзакции.')
+        if atomic_write:
+            require(not self.read_only and program=='psql' and isinstance(input,bytes)
+                    and args==['--no-psqlrc','--set','ON_ERROR_STOP=1','-Atq','--dbname',self.url],
+                    'Запись допустима только через ограниченную psql-транзакцию с остановкой при ошибке.')
         token=_new_operation_token()
         require(bool(re.fullmatch(r'orbita_[a-z0-9_]{1,54}',token)),'Некорректная метка SQL-операции.')
         if read_only_sql:input=_read_only_sql(input,token,timeout)
+        if atomic_write:input=_atomic_write_sql(input,token,timeout)
         try:
             return self._owned_tool(program,args,token,input=input,timeout=timeout)
         except BaseException as error:
@@ -274,6 +295,12 @@ class Database:
                                  'Автоматический повтор запрещён.') from None
         require(result.returncode==0,'CLI завершился с ошибкой; автоматический повтор запрещён.')
         return (result.stdout+result.stderr).decode(errors='replace')
+
+    def apply_migration(self,root,*,timeout=120):
+        require(not self.read_only,'Read-only клиент не применяет миграции.')
+        from atomic_apply import migration_body
+        return self.tool('psql',['--no-psqlrc','--set','ON_ERROR_STOP=1','-Atq','--dbname',self.url],
+                         input=migration_body(root),timeout=timeout,atomic_write=True)
 
     def dump(self,schemas):
         # pg_dump сбрасывает GUC timeouts в 0. Этот параметр ограничивает его

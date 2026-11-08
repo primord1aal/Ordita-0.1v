@@ -7,6 +7,7 @@ import re
 
 LOCK=json.loads((Path(__file__).parent/'lock.json').read_text())
 REPOSITORY='primord1aal/Ordita-0.1v'
+APPLY_EXECUTOR='postgres_transaction_v1'
 REF_PATTERN=re.compile(r'^[a-z0-9]{20}$')
 SHA_PATTERN=re.compile(r'^[a-f0-9]{40}$')
 ENVIRONMENT_ONLY_VARIABLES=('ORBITA_CLOUD_MIGRATIONS_ENABLED','ORBITA_ALLOWED_MIGRATION_SHA')
@@ -108,6 +109,8 @@ def validate_preview(run,receipt,context):
             'Предварительный отчёт не соответствует допускаемой миграции.')
     require(receipt.get('pending')==[LOCK['version']] and receipt.get('auth_users')==0
             and receipt.get('objects_absent') is True,'Предварительные условия не выполнены.')
+    require(receipt.get('status')=='preview_passed' and receipt.get('apply_executor')==APPLY_EXECUTOR,
+            'Preview должен подтверждать текущий атомарный исполнитель.')
     backup=receipt.get('backup',{})
     require(backup.get('encrypted_sha256')==context['backup_sha256'] and backup.get('decryption_checked') is True
             and backup.get('local_restore_checked') is True,'Резервный снимок не подтверждён.')

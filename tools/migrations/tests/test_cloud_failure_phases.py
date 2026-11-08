@@ -11,6 +11,7 @@ from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[3]
 sys.path.insert(0,str(ROOT/'tools/migrations'))
 import cloud_run
+from policy import GuardError
 
 
 class CloudFailurePhaseTests(unittest.TestCase):
@@ -52,18 +53,18 @@ class CloudFailurePhaseTests(unittest.TestCase):
             self.assertIn('ORBITA_CLOUD_FAILURE_PHASE=CLI_VERSION',output.getvalue())
             self.assertNotIn('artificial-secret',output.getvalue())
 
-    def test_execute_marks_dry_run_failure(self):
+    def test_execute_marks_missing_apply_proof_before_any_cloud_cli(self):
         class FakeDb:
             def cli(self,*args):
-                raise RuntimeError('artificial-secret')
+                raise AssertionError('Cloud CLI must never run')
         phases=[]
         with patch.object(cloud_run,'inspect',return_value={'auth_users':0}),\
              patch.object(cloud_run,'require_initial'),\
              patch.object(cloud_run,'baseline_fingerprint',return_value='fake-fingerprint'):
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(GuardError):
                 cloud_run.execute({'operation':'apply'},FakeDb(),'/tmp','/tmp',
                     '/tmp','/tmp','/tmp','fake-passphrase',on_phase=phases.append)
-        self.assertEqual(phases,['DB_INSPECT','BASELINE','CLI_DRY_RUN'])
+        self.assertEqual(phases,['DB_INSPECT','BASELINE','APPLY_PREFLIGHT'])
 
     def test_local_plan_failure_is_distinct_from_cloud_dry_run(self):
         phases=[]

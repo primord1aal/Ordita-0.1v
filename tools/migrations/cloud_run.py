@@ -1,6 +1,6 @@
 """Будущий защищённый runner. Сейчас не запускать против облака.
 
-Preview: только SELECT/экспорт/dry-run. Apply: один вызов CLI после GitHub gate.
+Preview: только SELECT/экспорт/локальный dry-run. Apply: одна PostgreSQL-транзакция после GitHub gate.
 Сырые ответы CLI/БД, дампы и пароли не попадают в публичный отчёт.
 """
 from pathlib import Path
@@ -12,8 +12,9 @@ import subprocess
 import tempfile
 
 from backup import create_backup
-from dbtools import Database,inspect,require_initial,postflight,baseline_fingerprint,restricted_process_env
-from policy import LOCK,GuardError,require,validate_request,validate_connection,parse_dry_run,validate_local_plan
+from dbtools import Database,inspect,require_initial,postflight,baseline_fingerprint,restricted_process_env,SAFE_CONNECTION_CATEGORIES
+from policy import LOCK,APPLY_EXECUTOR,GuardError,require,validate_request,validate_connection,validate_local_plan
+from atomic_apply import migration_body
 
 # Fixed, non-sensitive diagnostic codes. Never print exception text, SQL, paths or URLs.
 SAFE_PHASES=frozenset({
@@ -21,7 +22,8 @@ SAFE_PHASES=frozenset({
     'CA_CONFIG','DB_CLIENT_CONFIG','READ_ONLY_CONNECTION','WORKSPACE',
     'DB_INSPECT','BASELINE','CLI_DRY_RUN','BACKUP','LOCAL_RESTORE','LOCAL_CLI_DRY_RUN','POST_BACKUP_READBACK','PUBLIC_RECEIPT',
     'BACKUP_PASSPHRASE','BACKUP_PUBLIC_ROWS','BACKUP_EMPTY_CHECK','BACKUP_ROLES','BACKUP_AUTH_TRIGGERS',
-    'BACKUP_DUMP','BACKUP_ARCHIVE','BACKUP_ENCRYPT','BACKUP_DECRYPT','BACKUP_VERIFY'
+    'BACKUP_DUMP','BACKUP_ARCHIVE','BACKUP_ENCRYPT','BACKUP_DECRYPT','BACKUP_VERIFY',
+    'APPLY_PREFLIGHT','APPLY_SQL','APPLY_POSTFLIGHT'
 })
 
 
@@ -75,30 +77,44 @@ def execute(context,db,workdir,root,temporary,public_dir,backup_dir,passphrase,p
         on_phase('PUBLIC_RECEIPT')
         receipt={'status':'preview_passed','run_id':context['run_id'],'source_sha':context['sha'],
             'project_ref':context['expected_ref'],'migration_sha256':LOCK['migration_sha256'],
-            'version':LOCK['version'],'pending':plan,'cli_dry_run_target':'isolated_restored_snapshot','auth_users':before['auth_users'],
+            'version':LOCK['version'],'pending':plan,'apply_executor':APPLY_EXECUTOR,
+            'cli_dry_run_target':'isolated_restored_snapshot','auth_users':before['auth_users'],
             'objects_absent':True,'baseline_fingerprint':baseline,'backup':backup,
             'limitation':'CLI dry-run выполнен на локально восстановленном снимке, не в облаке; SQL миграции не исполняется. Scoped restore не доказывает полное восстановление Supabase.'}
         Path(public_dir).mkdir(parents=True,exist_ok=True)
         (Path(public_dir)/'preview.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
         return receipt
-    on_phase('CLI_DRY_RUN')
-    parse_dry_run(db.cli(workdir,True))
-    require(context['operation']=='apply' and preview is not None,'Применение без предварительного отчёта запрещено.')
+    on_phase('APPLY_PREFLIGHT')
+    require(context['operation']=='apply' and isinstance(preview,dict),'Применение без предварительного отчёта запрещено.')
+    require(preview.get('status')=='preview_passed' and preview.get('apply_executor')==APPLY_EXECUTOR
+            and preview.get('pending')==[LOCK['version']] and preview.get('source_sha')==context['sha']
+            and preview.get('project_ref')==context['expected_ref'] and preview.get('migration_sha256')==LOCK['migration_sha256'],
+            'Preview не соответствует текущему исполнителю, коммиту, проекту или файлу.')
+    require(isinstance(preview.get('backup'),dict),'Не подтверждена проверенная копия.')
+    validate_local_plan(preview['backup'].get('local_plan'),before['versions'])
     require(preview.get('baseline_fingerprint')==baseline,'Исходная схема или строки изменились после снимка; нужен новый preview.')
+    migration_body(root)  # Fail before the write-attempt receipt if the source changed.
     # После этой отметки любой неизвестный исход рассматривается консервативно.
     receipt={'status':'apply_outcome_unknown','run_id':context['run_id'],'source_sha':context['sha'],
-        'project_ref':context['expected_ref'],'version':LOCK['version'],'migration_sha256':LOCK['migration_sha256']}
+        'project_ref':context['expected_ref'],'version':LOCK['version'],'migration_sha256':LOCK['migration_sha256'],
+        'executor':APPLY_EXECUTOR,'server_limits_ms':{'statement':30000,'lock':5000,'idle_in_transaction':15000}}
     Path(public_dir).mkdir(parents=True,exist_ok=True)
     target=Path(public_dir)/'apply.json'
     target.write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
     try:
-        db.cli(workdir,False)  # Ровно один вызов; ни повторов, ни repair/reset.
+        on_phase('APPLY_SQL')
+        db.apply_migration(root)  # One transaction, including version registration. Never retry.
+        on_phase('APPLY_POSTFLIGHT')
         details=postflight(db)
         receipt.update({'status':'applied_and_catalog_verified','catalog':details})
         target.write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
         return receipt
     except Exception:
         # Даже если следующий SELECT возможен, не возобновляем запись.
+        category=getattr(db,'failure_category','UNKNOWN_PRIVATE_ERROR')
+        if not isinstance(category,str) or category not in SAFE_CONNECTION_CATEGORIES:category='UNKNOWN_PRIVATE_ERROR'
+        receipt['failure_category']=category
+        print('ORBITA_APPLY_ERROR_CATEGORY='+category)
         try:
             state=inspect(db)
             receipt['observed_after_error']={k:state[k] for k in ['auth_users','app_tables','private_schema','access_rpc','versions']}
