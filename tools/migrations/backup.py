@@ -13,14 +13,14 @@ import tarfile
 import time
 import uuid
 
-from dbtools import DOCKER,checked,public_rows
+from dbtools import DOCKER,checked,public_rows,restricted_process_env
 from policy import LOCK,require,GuardError
 
 
 def crypt_file(source,destination,passphrase,home,decrypt=False):
     require(len(passphrase)>=24 and '\n' not in passphrase and '\x00' not in passphrase,
             'Для снимка нужна отдельная длинная секретная фраза.')
-    env=os.environ.copy();env['GNUPGHOME']=str(home)
+    env=restricted_process_env();env['GNUPGHOME']=str(home)
     Path(home).mkdir(mode=0o700,exist_ok=True)
     args=['gpg','--batch','--yes','--pinentry-mode','loopback','--passphrase-fd','0','--output',str(destination)]
     args+=['--decrypt'] if decrypt else ['--symmetric','--cipher-algo','AES256','--s2k-digest-algo','SHA256']

@@ -36,6 +36,17 @@ def _timeout_options(timeout,*,read_only=False):
     return options+(' -c default_transaction_read_only=on' if read_only else '')
 
 
+def restricted_process_env():
+    """Окружение дочерних инструментов без секретов другого назначения."""
+    env=os.environ.copy()
+    for key in list(env):
+        if key.startswith(('PG','SUPABASE_','ORBITA_')) or key in ('GH_TOKEN','GITHUB_TOKEN'):
+            env.pop(key)
+    # Поддерживаемые CLI 3.0.0 переключатели, включая самый первый --version.
+    env.update(SUPABASE_TELEMETRY_DISABLED='1',DO_NOT_TRACK='1')
+    return env
+
+
 def checked(args,*,input=None,env=None,cwd=None,timeout=60):
     try:result=subprocess.run(args,input=input,capture_output=True,env=env,cwd=cwd,timeout=timeout)
     except (OSError,subprocess.SubprocessError):raise GuardError('Команда не завершилась; результат требует проверки.') from None
@@ -49,13 +60,10 @@ class Database:
         require(bool(password) and '\x00' not in password,'Не предоставлен корректный защищённый пароль БД.')
         require(type(read_only) is bool,'Некорректный режим подключения.')
         self.url=url;self.password=password;self.ca_file=Path(ca_file);self.read_only=read_only
-        self.env=os.environ.copy()
+        self.env=restricted_process_env()
         # Никаких сохранённых linked-проектов, альтернативных подключений и API-токенов.
-        for key in list(self.env):
-            if key.startswith(('PG','SUPABASE_')) or key in ('GH_TOKEN','GITHUB_TOKEN','ORBITA_BACKUP_PASSPHRASE'):
-                self.env.pop(key)
         self.env.update({'PGPASSWORD':password,'PGSSLMODE':'verify-full','PGCONNECT_TIMEOUT':'10',
-                         'PGSSLROOTCERT':str(self.ca_file),'SUPABASE_TELEMETRY_OPTOUT':'1'})
+                         'PGSSLROOTCERT':str(self.ca_file)})
 
     def tool(self,program,args,*,input=None,timeout=60):
         token=_new_operation_token()

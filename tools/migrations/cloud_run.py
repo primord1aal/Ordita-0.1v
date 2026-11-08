@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 
 from backup import create_backup
-from dbtools import Database,inspect,require_initial,postflight,baseline_fingerprint
+from dbtools import Database,inspect,require_initial,postflight,baseline_fingerprint,restricted_process_env
 from policy import LOCK,GuardError,require,validate_request,validate_connection,parse_dry_run
 
 
@@ -82,7 +82,7 @@ def main():
     require(actual==context['sha'],'После допуска checkout изменился.')
     validate_connection(os.environ.get('ORBITA_DATABASE_URL',''),context['expected_ref'])
     binary=shutil.which('supabase');require(binary is not None,'CLI не установлен.')
-    result=subprocess.run([binary,'--version'],capture_output=True,text=True,timeout=10)
+    result=subprocess.run([binary,'--version'],env=restricted_process_env(),capture_output=True,text=True,timeout=10)
     require(result.returncode==0 and result.stdout.strip()==LOCK['cli_version'],'Неподходящая версия CLI.')
     public_dir=root/'build/migration-public';backup_dir=root/'build/migration-backup'
     with tempfile.TemporaryDirectory(prefix='orbita-migration-',dir=os.environ['RUNNER_TEMP']) as directory:
