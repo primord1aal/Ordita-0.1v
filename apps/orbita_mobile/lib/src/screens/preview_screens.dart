@@ -1,19 +1,33 @@
 import 'package:flutter/material.dart';
 
 import '../domain/contracts.dart';
+import '../maps/map_settings.dart';
+import '../maps/map_tiles.dart';
+import '../maps/geoapify_service.dart';
 import '../platform/device_gateway.dart';
 import '../ui/components.dart';
 import '../ui/theme.dart';
+import 'passenger_screen.dart';
+
+export 'passenger_screen.dart';
 
 class PreviewShell extends StatefulWidget {
   const PreviewShell({
     required this.role,
     required this.device,
+    required this.mapSettings,
+    this.mapAccessAllowed = true,
+    this.addressServiceFactory,
+    this.tileSessionFactory,
     this.accountPanel,
     super.key,
   });
   final PreviewRole role;
   final DeviceGateway device;
+  final MapSettings mapSettings;
+  final bool mapAccessAllowed;
+  final AddressService Function(String)? addressServiceFactory;
+  final MapTileSession Function(String)? tileSessionFactory;
   final Widget? accountPanel;
   @override
   State<PreviewShell> createState() => _PreviewShellState();
@@ -36,7 +50,14 @@ class _PreviewShellState extends State<PreviewShell> {
           child: IndexedStack(
             index: _index,
             children: [
-              driver ? const DriverScreen() : const PassengerScreen(),
+              driver
+                  ? const DriverScreen()
+                  : PassengerScreen(
+                      mapSettings: widget.mapSettings,
+                      enabled: widget.mapAccessAllowed && _index == 0,
+                      serviceFactory: widget.addressServiceFactory,
+                      tileSessionFactory: widget.tileSessionFactory,
+                    ),
               const HistoryScreen(),
               ProfileScreen(
                 driver: driver,
@@ -51,7 +72,10 @@ class _PreviewShellState extends State<PreviewShell> {
             : AdaptiveNavigation(
                 driver: driver,
                 selected: _index,
-                onSelected: (i) => setState(() => _index = i),
+                onSelected: (i) {
+                  FocusScope.of(context).unfocus();
+                  setState(() => _index = i);
+                },
               ),
       ),
     );
@@ -125,68 +149,6 @@ class CurrentOrderCard extends StatelessWidget {
         ],
       ],
     ),
-  );
-}
-
-class PassengerScreen extends StatelessWidget {
-  const PassengerScreen({super.key});
-  @override
-  Widget build(BuildContext context) => CustomScrollView(
-    key: const Key('passenger-scroll'),
-    slivers: [
-      const SliverToBoxAdapter(child: BrandHeader()),
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-        sliver: SliverList.list(
-          children: [
-            const MapPlaceholder(key: Key('passenger-map'), minimumHeight: 230),
-            const SizedBox(height: 16),
-            SurfaceCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const TextField(
-                    key: Key('pickup'),
-                    maxLines: null,
-                    maxLength: 250,
-                    textInputAction: TextInputAction.next,
-                    decoration: InputDecoration(
-                      labelText: 'Откуда',
-                      prefixIcon: Icon(Icons.trip_origin),
-                      counterText: '',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    key: const Key('destination'),
-                    maxLines: null,
-                    maxLength: 250,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => FocusScope.of(context).unfocus(),
-                    decoration: const InputDecoration(
-                      labelText: 'Куда',
-                      prefixIcon: Icon(Icons.place_outlined),
-                      counterText: '',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const FullWidthAction(
-                    'Заказать такси',
-                    key: Key('create-order'),
-                    onPressed: null,
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Заказы недоступны в режиме просмотра.',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    ],
   );
 }
 

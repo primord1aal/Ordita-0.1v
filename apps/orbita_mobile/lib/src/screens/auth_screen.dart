@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import '../auth/auth_controller.dart';
 import '../auth/auth_repository.dart';
 import '../domain/contracts.dart';
+import '../maps/map_settings.dart';
+import '../maps/map_tiles.dart';
+import '../maps/geoapify_service.dart';
 import '../platform/device_gateway.dart';
 import '../ui/components.dart';
 import '../ui/orbita_brand.dart';
@@ -13,9 +16,19 @@ import '../ui/theme.dart';
 import 'preview_screens.dart';
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({required this.repository, required this.device, super.key});
+  const AuthScreen({
+    required this.repository,
+    required this.device,
+    required this.mapSettings,
+    this.addressServiceFactory,
+    this.tileSessionFactory,
+    super.key,
+  });
   final AuthRepository repository;
   final DeviceGateway device;
+  final MapSettings mapSettings;
+  final AddressService Function(String)? addressServiceFactory;
+  final MapTileSession Function(String)? tileSessionFactory;
   @override
   State<AuthScreen> createState() => _AuthScreenState();
 }
@@ -102,6 +115,10 @@ class _AuthScreenState extends State<AuthScreen> {
                                 ? PreviewRole.driver
                                 : PreviewRole.passenger,
                             device: widget.device,
+                            mapSettings: widget.mapSettings,
+                            mapAccessAllowed: _controller.canUseRole,
+                            addressServiceFactory: widget.addressServiceFactory,
+                            tileSessionFactory: widget.tileSessionFactory,
                             accountPanel: _accountPanel(visible),
                           ),
                   ),

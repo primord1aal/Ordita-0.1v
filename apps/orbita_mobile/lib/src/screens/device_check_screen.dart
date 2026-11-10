@@ -121,6 +121,17 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 12),
                                 child: FullWidthAction(
+                                  'Настройка карт',
+                                  secondary: true,
+                                  onPressed: () => Navigator.pushNamed(
+                                    context,
+                                    '/map-settings',
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: FullWidthAction(
                                   'Проверка API',
                                   secondary: true,
                                   onPressed: () => Navigator.pushNamed(
