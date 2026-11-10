@@ -95,7 +95,7 @@ void main() {
       checkHorizontalBounds(tester);
       await scrollTo(tester, find.byKey(const Key('current-order')));
       checkHorizontalBounds(tester);
-      await openCheck(tester, 'Проверка телефона');
+      await openCheck(tester, 'Проверка устройства');
       for (final key in [
         'notifications-card',
         'location-card',
@@ -124,7 +124,7 @@ void main() {
       setViewport(tester, const Size(320, 568), scale);
       final device = FakeDevice()..state = const DeviceState(sdk: 34);
       await openPreview(tester, 'Водитель', device: device);
-      await openCheck(tester, 'Проверка телефона');
+      await openCheck(tester, 'Проверка устройства');
       await scrollTo(tester, find.byKey(const Key('notification-permission')));
       checkHorizontalBounds(tester);
       await scrollTo(tester, find.byKey(const Key('location-permissions')));

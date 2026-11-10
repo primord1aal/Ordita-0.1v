@@ -26,8 +26,10 @@ class PageHeader extends StatelessWidget {
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const BackButton(),
-        const SizedBox(width: 4),
+        if (Navigator.canPop(context)) ...[
+          const BackButton(),
+          const SizedBox(width: 4),
+        ],
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),

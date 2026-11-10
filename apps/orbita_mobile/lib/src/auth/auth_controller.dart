@@ -19,6 +19,8 @@ enum AuthPhase {
   failure,
 }
 
+enum AuthCheckKind { restoring, signingIn, validating, signingOut }
+
 /// Отмена совместная: рабочая операция должна подключить реальную отмену I/O.
 /// На 3Б заказов нет; контракт заранее проверяет сброс временного состояния.
 class RoleWorkLease {
@@ -54,8 +56,10 @@ class AuthController extends ChangeNotifier with WidgetsBindingObserver {
   final AuthRepository repository;
   final Duration timeout, pollInterval;
   AuthPhase phase = AuthPhase.checking;
+  AuthCheckKind checkKind = AuthCheckKind.restoring;
   AuthSession? session;
   ServerAccess? access;
+  ServerAccess? _presentationAccess;
   AuthFailure? failure;
   bool foreground = true, _disposed = false;
   int _epoch = 0;
@@ -72,6 +76,24 @@ class AuthController extends ChangeNotifier with WidgetsBindingObserver {
       access!.userId == session!.userId &&
       (access!.role == UserRole.passenger || access!.role == UserRole.driver);
 
+  /// Снимок только для сохранения вкладки. Он не разрешает рабочие действия:
+  /// canUseRole и guardAction остаются закрыты во время перепроверки и в фоне.
+  ServerAccess? get presentationAccess {
+    final current = session;
+    if (_disposed || current == null || current.expired) return null;
+    final visible = switch (phase) {
+      AuthPhase.active || AuthPhase.admin => access,
+      AuthPhase.checking => _presentationAccess,
+      _ => null,
+    };
+    if (visible == null ||
+        !visible.active ||
+        visible.userId != current.userId) {
+      return null;
+    }
+    return visible;
+  }
+
   void _invalidate() {
     _poll?.cancel();
     for (final lease in _work) {
@@ -79,6 +101,7 @@ class AuthController extends ChangeNotifier with WidgetsBindingObserver {
     }
     _work.clear();
     access = null;
+    _presentationAccess = null;
   }
 
   bool _current(int epoch) => !_disposed && foreground && _epoch == epoch;
@@ -101,11 +124,18 @@ class AuthController extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     if (_disposed || !foreground) return;
     final old = access;
+    final presentation = credentials == null ? presentationAccess : null;
     final previousUser = session?.userId;
     final epoch = ++_epoch;
     _invalidate();
+    _presentationAccess = presentation;
     repository.cancelPending();
     failure = null;
+    checkKind = credentials != null
+        ? AuthCheckKind.signingIn
+        : restore
+        ? AuthCheckKind.restoring
+        : AuthCheckKind.validating;
     phase = AuthPhase.checking;
     _emit();
     try {
@@ -119,6 +149,7 @@ class AuthController extends ChangeNotifier with WidgetsBindingObserver {
         if (!_current(epoch)) return;
         session = current;
         if (current == null) {
+          _presentationAccess = null;
           phase = AuthPhase.signedOut;
           return;
         }
@@ -159,6 +190,7 @@ class AuthController extends ChangeNotifier with WidgetsBindingObserver {
             AuthFailureKind.sessionExpired,
           ),
         };
+        _presentationAccess = null;
       })().timeout(timeout);
       if (_current(epoch) && session != null) {
         final untilExpiry = session!.expiresAt.difference(DateTime.now());
@@ -213,6 +245,7 @@ class AuthController extends ChangeNotifier with WidgetsBindingObserver {
     repository.cancelPending();
     session = null;
     failure = null;
+    checkKind = AuthCheckKind.signingOut;
     phase = AuthPhase.checking;
     _emit();
     try {
@@ -238,10 +271,13 @@ class AuthController extends ChangeNotifier with WidgetsBindingObserver {
       // Старый интерфейс уже закрыт на уходе, пока выполняется новая проверка.
       _check(restore: session == null);
     } else {
+      final presentation = presentationAccess;
       foreground = false;
       ++_epoch;
       _invalidate();
+      _presentationAccess = presentation;
       repository.cancelPending();
+      checkKind = AuthCheckKind.validating;
       phase = AuthPhase.checking;
       _emit();
     }

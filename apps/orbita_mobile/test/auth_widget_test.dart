@@ -57,7 +57,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(PassengerScreen), findsNothing);
         expect(find.byType(DriverScreen), findsNothing);
-        expect(find.text('Выйти на этом телефоне'), findsOneWidget);
+        expect(find.text('Выйти'), findsOneWidget);
         await tester.pumpWidget(const SizedBox());
       },
     );
@@ -71,9 +71,6 @@ void main() {
       await tester.pumpWidget(
         OrbitaApp(device: FakeDevice(), authRepository: repo),
       );
-      await tester.pumpAndSettle();
-      await scrollTo(tester, find.text('Войти в аккаунт'));
-      await tester.tap(find.text('Войти в аккаунт'));
       await tester.pumpAndSettle();
       await scrollTo(tester, find.byKey(const Key('login-email')));
       await tester.enterText(

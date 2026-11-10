@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../platform/device_gateway.dart';
@@ -63,7 +64,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
     listenable: _controller,
     builder: (context, _) {
       final title = switch (widget.section) {
-        DeviceCheckSection.all => 'Проверка телефона',
+        DeviceCheckSection.all => 'Проверка устройства',
         DeviceCheckSection.notifications => 'Уведомления',
         DeviceCheckSection.location => 'Геолокация',
       };
@@ -104,6 +105,33 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
                         _location(),
                         const SizedBox(height: 16),
                         _service(),
+                      ],
+                      if (kDebugMode &&
+                          widget.section == DeviceCheckSection.all) ...[
+                        const SizedBox(height: 16),
+                        SurfaceCard(
+                          child: ExpansionTile(
+                            key: const Key('advanced-diagnostics'),
+                            tilePadding: EdgeInsets.zero,
+                            title: const Text('Расширенная диагностика'),
+                            subtitle: const Text(
+                              'Для проверки тестовой версии',
+                            ),
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: FullWidthAction(
+                                  'Проверка API',
+                                  secondary: true,
+                                  onPressed: () => Navigator.pushNamed(
+                                    context,
+                                    '/api-check',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -214,7 +242,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
           const Padding(
             padding: EdgeInsets.only(top: 10),
             child: Text(
-              'Геопозиция телефона выключена.',
+              'Геопозиция устройства выключена.',
               style: TextStyle(color: OrbitaColors.warning),
             ),
           ),
@@ -271,20 +299,20 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
         _MetricGrid(
           metrics: [
             _Metric(
-              'GPS',
+              'Обновления позиции',
               _controller.available ? '${state.fixCount}' : '—',
               _controller.available
-                  ? 'Обновлений GPS: ${state.fixCount}'
-                  : 'Обновлений GPS: нет данных',
+                  ? 'Получено обновлений позиции: ${state.fixCount}'
+                  : 'Обновлений позиции: нет данных',
               emphasis: true,
             ),
             _Metric(
-              'Позиция',
+              'Последняя позиция',
               _controller.available ? _time(state.lastFix) : '—',
               'Последняя позиция: ${_controller.available ? _spokenTime(state.lastFix) : 'нет данных'}',
             ),
             _Metric(
-              'Сигнал',
+              'Сигнал службы',
               _controller.available ? _time(state.lastHeartbeat) : '—',
               'Последний сигнал службы: ${_controller.available ? _spokenTime(state.lastHeartbeat) : 'нет данных'}',
             ),
@@ -335,7 +363,7 @@ class _DeviceCheckScreenState extends State<DeviceCheckScreen> {
             ),
             const SizedBox(height: 10),
             const Text(
-              'Отсутствие свежего GPS в помещении не означает остановку службы. Длительная работа под блокировкой проверяется отдельно на Tecno.',
+              'Отсутствие свежей позиции в помещении не означает остановку службы. Длительная работа под блокировкой проверяется отдельно на каждом устройстве.',
             ),
           ],
         ),

@@ -5,69 +5,6 @@ import '../platform/device_gateway.dart';
 import '../ui/components.dart';
 import '../ui/theme.dart';
 
-class WelcomeScreen extends StatelessWidget {
-  const WelcomeScreen({required this.device, this.onSignIn, super.key});
-  final DeviceGateway device;
-  final VoidCallback? onSignIn;
-  void _open(BuildContext context, PreviewRole role) => Navigator.push(
-    context,
-    MaterialPageRoute<void>(
-      builder: (_) => PreviewShell(role: role, device: device),
-    ),
-  );
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const SizedBox(height: 24),
-          const Text(
-            'Орбита',
-            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          const Text('Чик, Прокудское и рядом'),
-          const SizedBox(height: 28),
-          if (onSignIn != null) ...[
-            FullWidthAction('Войти в аккаунт', onPressed: onSignIn),
-            const SizedBox(height: 20),
-          ],
-          Text(
-            'Выберите интерфейс',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Тестовый просмотр. Это не вход в аккаунт, заказы пока недоступны.',
-          ),
-          const SizedBox(height: 20),
-          _MenuTile(
-            icon: Icons.person_outline,
-            title: 'Пассажир',
-            subtitle: 'Адреса и поездки',
-            onTap: () => _open(context, PreviewRole.passenger),
-          ),
-          const SizedBox(height: 14),
-          _MenuTile(
-            icon: Icons.local_taxi_outlined,
-            title: 'Водитель',
-            subtitle: 'Рабочий экран',
-            onTap: () => _open(context, PreviewRole.driver),
-          ),
-          const SizedBox(height: 24),
-          const Text('Настройки и проверка телефона находятся в профиле.'),
-          const SizedBox(height: 12),
-          const Text(
-            'Тестовая версия $appVersion',
-            style: TextStyle(fontSize: 12),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
 class PreviewShell extends StatefulWidget {
   const PreviewShell({
     required this.role,
@@ -88,29 +25,35 @@ class _PreviewShellState extends State<PreviewShell> {
   Widget build(BuildContext context) {
     final driver = widget.role == PreviewRole.driver;
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
-    return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: IndexedStack(
-          index: _index,
-          children: [
-            driver ? const DriverScreen() : const PassengerScreen(),
-            const HistoryScreen(),
-            ProfileScreen(
-              driver: driver,
-              device: widget.device,
-              accountPanel: widget.accountPanel,
-            ),
-          ],
+    return PopScope(
+      canPop: _index == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _index != 0) setState(() => _index = 0);
+      },
+      child: Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: IndexedStack(
+            index: _index,
+            children: [
+              driver ? const DriverScreen() : const PassengerScreen(),
+              const HistoryScreen(),
+              ProfileScreen(
+                driver: driver,
+                device: widget.device,
+                accountPanel: widget.accountPanel,
+              ),
+            ],
+          ),
         ),
+        bottomNavigationBar: keyboardVisible
+            ? null
+            : AdaptiveNavigation(
+                driver: driver,
+                selected: _index,
+                onSelected: (i) => setState(() => _index = i),
+              ),
       ),
-      bottomNavigationBar: keyboardVisible
-          ? null
-          : AdaptiveNavigation(
-              driver: driver,
-              selected: _index,
-              onSelected: (i) => setState(() => _index = i),
-            ),
     );
   }
 }
@@ -324,10 +267,7 @@ class ProfileScreen extends StatelessWidget {
                   ),
                 ),
             const SizedBox(height: 20),
-            Text(
-              'Настройки и проверки',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('Настройки', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
             _MenuTile(
               icon: Icons.settings_outlined,
@@ -335,30 +275,12 @@ class ProfileScreen extends StatelessWidget {
               onTap: () => _settings(context),
             ),
             const SizedBox(height: 12),
+            Text('Диагностика', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
             _MenuTile(
               icon: Icons.phonelink_setup_outlined,
-              title: 'Проверка телефона',
+              title: 'Проверка устройства',
               onTap: () => Navigator.pushNamed(context, '/device-check'),
-            ),
-            const SizedBox(height: 12),
-            _MenuTile(
-              icon: Icons.cloud_outlined,
-              title: 'Проверка API',
-              onTap: () => Navigator.pushNamed(context, '/api-check'),
-            ),
-            const SizedBox(height: 12),
-            _MenuTile(
-              icon: Icons.notifications_outlined,
-              title: 'Проверка уведомлений',
-              onTap: () =>
-                  Navigator.pushNamed(context, '/device-check/notifications'),
-            ),
-            const SizedBox(height: 12),
-            _MenuTile(
-              icon: Icons.location_on_outlined,
-              title: 'Диагностика геолокации',
-              onTap: () =>
-                  Navigator.pushNamed(context, '/device-check/location'),
             ),
             const SizedBox(height: 12),
             const SurfaceCard(
@@ -374,12 +296,6 @@ class ProfileScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            if (accountPanel == null)
-              TextButton(
-                onPressed: () => Navigator.maybePop(context),
-                child: const Text('Сменить интерфейс просмотра'),
-              ),
           ],
         ),
       ),
@@ -392,11 +308,9 @@ class _MenuTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.onTap,
-    this.subtitle,
   });
   final IconData icon;
   final String title;
-  final String? subtitle;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => Card(
@@ -420,11 +334,6 @@ class _MenuTile extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  if (subtitle != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 5),
-                      child: Text(subtitle!),
-                    ),
                 ],
               ),
             ),

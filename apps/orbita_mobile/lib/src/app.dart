@@ -8,7 +8,6 @@ import 'platform/device_gateway.dart';
 import 'screens/api_check_screen.dart';
 import 'screens/auth_screen.dart';
 import 'screens/device_check_screen.dart';
-import 'screens/preview_screens.dart';
 import 'ui/theme.dart';
 
 class OrbitaApp extends StatefulWidget {
@@ -60,12 +59,10 @@ class _OrbitaAppState extends State<OrbitaApp> {
     navigatorKey: _navigator,
     theme: orbitaTheme(),
     routes: {
-      '/': (_) => widget.authRepository == null
-          ? WelcomeScreen(device: widget.device)
-          : AuthScreen(
-              repository: widget.authRepository!,
-              device: widget.device,
-            ),
+      '/': (_) => AuthScreen(
+        repository: widget.authRepository ?? DisconnectedAuthRepository(),
+        device: widget.device,
+      ),
       '/api-check': (_) => ApiCheckScreen(
         probe: (widget.apiProbeFactory ?? createApiProbe)(),
         journal: _apiJournal,

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbita_mobile/src/app.dart';
+import 'package:orbita_mobile/src/domain/contracts.dart';
 import 'package:orbita_mobile/src/platform/device_gateway.dart';
 
 import 'fake_device.dart';
+import 'fake_auth_repository.dart';
 
 DeviceState readyState({bool running = false, bool background = true}) =>
     DeviceState(
@@ -38,12 +40,20 @@ Future<void> openPreview(
   String role, {
   FakeDevice? device,
 }) async {
+  addTearDown(() => tester.pumpWidget(const SizedBox()));
+  // Только искусственная серверная роль; публичного выбора интерфейса нет.
+  final repository = FakeAuthRepository()
+    ..saved = testSession()
+    ..access = testAccess(
+      role == 'Водитель' ? UserRole.driver : UserRole.passenger,
+    );
   await tester.pumpWidget(
-    OrbitaApp(key: UniqueKey(), device: device ?? FakeDevice()),
+    OrbitaApp(
+      key: UniqueKey(),
+      device: device ?? FakeDevice(),
+      authRepository: repository,
+    ),
   );
-  await tester.pumpAndSettle();
-  await scrollTo(tester, find.text(role));
-  await tester.tap(find.text(role));
   await tester.pumpAndSettle();
 }
 

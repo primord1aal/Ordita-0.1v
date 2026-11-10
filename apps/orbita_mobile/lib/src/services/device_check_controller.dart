@@ -51,7 +51,7 @@ class DeviceCheckController extends ChangeNotifier with WidgetsBindingObserver {
       } catch (_) {
         if (_disposed) return;
         available = false;
-        readError = 'Не удалось обновить состояние телефона.';
+        readError = 'Не удалось обновить состояние устройства.';
       }
       loading = false;
       notifyListeners();

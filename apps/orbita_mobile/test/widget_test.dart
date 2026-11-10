@@ -2,22 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbita_mobile/src/app.dart';
 import 'package:orbita_mobile/src/screens/device_check_screen.dart';
+import 'package:orbita_mobile/src/screens/preview_screens.dart';
 import 'package:orbita_mobile/src/ui/components.dart';
 
 import 'fake_device.dart';
 import 'test_helpers.dart';
 
 void main() {
-  testWidgets('Старт предлагает просмотр без автоматических разрешений', (
-    tester,
-  ) async {
-    final device = FakeDevice();
-    await tester.pumpWidget(OrbitaApp(device: device));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Это не вход'), findsOneWidget);
-    expect(device.calls, isEmpty);
-    expect(find.text('Проверка телефона'), findsNothing);
-  });
+  testWidgets(
+    'Старт сразу показывает вход без запроса разрешений и выбора роли',
+    (tester) async {
+      final device = FakeDevice();
+      await tester.pumpWidget(OrbitaApp(device: device));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('login-email')), findsOneWidget);
+      expect(find.text('Выберите интерфейс'), findsNothing);
+      expect(device.calls, isEmpty);
+      expect(find.text('Проверка устройства'), findsNothing);
+    },
+  );
 
   testWidgets(
     'Пассажир: два адреса, выключенный заказ, сохранение ввода во вкладках',
@@ -49,7 +52,8 @@ void main() {
       expect(find.text('Учебная точка'), findsOneWidget);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
-      expect(find.text('Выберите интерфейс'), findsOneWidget);
+      expect(find.text('Выберите интерфейс'), findsNothing);
+      expect(find.byType(PassengerScreen), findsOneWidget);
     },
   );
 
@@ -67,7 +71,7 @@ void main() {
         matching: find.byType(FilledButton),
       );
       expect(tester.widget<FilledButton>(button).onPressed, isNull);
-      expect(find.byTooltip('Проверка телефона'), findsNothing);
+      expect(find.byTooltip('Проверка устройства'), findsNothing);
       expect(find.byIcon(Icons.settings_outlined), findsNothing);
       final map = tester.getRect(find.byKey(const Key('driver-map')));
       final card = tester.getRect(find.byKey(const Key('current-order')));
@@ -88,11 +92,12 @@ void main() {
       await tester.tap(find.text('Настройки приложения'));
       await tester.pumpAndSettle();
       expect(device.calls, ['settings']);
-      await scrollTo(tester, find.text('Диагностика геолокации'));
-      await tester.tap(find.text('Диагностика геолокации'));
+      await scrollTo(tester, find.text('Проверка устройства'));
+      await tester.tap(find.text('Проверка устройства'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('location-card')), findsOneWidget);
-      expect(find.byKey(const Key('notifications-card')), findsNothing);
+      expect(find.byKey(const Key('notifications-card')), findsOneWidget);
+      expect(find.byKey(const Key('service-card')), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       expect(device.calls, isNot(contains('stop')));
     },
@@ -103,7 +108,7 @@ void main() {
     (tester) async {
       final device = FakeDevice()..state = readyState();
       await openPreview(tester, 'Пассажир', device: device);
-      await openCheck(tester, 'Проверка уведомлений');
+      await openCheck(tester, 'Проверка устройства');
       expect(find.text('Разрешить уведомления'), findsNothing);
       final test = find.byKey(const Key('notification-test'));
       await scrollTo(tester, test);
@@ -123,7 +128,7 @@ void main() {
         if (action == 'notifications') device.state = readyState();
       };
       await openPreview(tester, 'Пассажир', device: device);
-      await openCheck(tester, 'Проверка уведомлений');
+      await openCheck(tester, 'Проверка устройства');
       await scrollTo(tester, find.byKey(const Key('notification-permission')));
       await tester.tap(find.byKey(const Key('notification-permission')));
       await tester.pumpAndSettle();
@@ -143,7 +148,7 @@ void main() {
         }
       };
       await openPreview(tester, 'Водитель', device: device);
-      await openCheck(tester, 'Диагностика геолокации');
+      await openCheck(tester, 'Проверка устройства');
       await scrollTo(tester, find.byKey(const Key('location-permissions')));
       await tester.tap(find.byKey(const Key('location-permissions')));
       await tester.pumpAndSettle();
@@ -187,7 +192,7 @@ void main() {
         );
       };
       await openPreview(tester, 'Водитель', device: device);
-      await openCheck(tester, 'Диагностика геолокации');
+      await openCheck(tester, 'Проверка устройства');
       await scrollTo(tester, find.byKey(const Key('start-diagnostic')));
       await tester.tap(find.byKey(const Key('start-diagnostic')));
       await tester.pumpAndSettle();
@@ -208,9 +213,9 @@ void main() {
   ) async {
     final device = FakeDevice()..failRead = true;
     await openPreview(tester, 'Водитель', device: device);
-    await openCheck(tester, 'Проверка телефона');
+    await openCheck(tester, 'Проверка устройства');
     expect(
-      find.text('Не удалось обновить состояние телефона.'),
+      find.text('Не удалось обновить состояние устройства.'),
       findsOneWidget,
     );
     expect(find.byType(LinearProgressIndicator), findsNothing);
@@ -221,7 +226,10 @@ void main() {
     device.state = readyState();
     await tester.tap(find.text('Повторить проверку'));
     await tester.pumpAndSettle();
-    expect(find.text('Не удалось обновить состояние телефона.'), findsNothing);
+    expect(
+      find.text('Не удалось обновить состояние устройства.'),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
