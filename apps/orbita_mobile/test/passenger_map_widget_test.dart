@@ -40,6 +40,46 @@ Future<void> mountMapAccount(
 
 void main() {
   testWidgets(
+    'В фоне открытый выбор точки скрывает координаты и восстанавливается без сброса',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        addTearDown(
+          () => tester.binding.handleAppLifecycleStateChanged(
+            AppLifecycleState.resumed,
+          ),
+        );
+        await mountMapAccount(tester);
+        await scrollTo(tester, find.byKey(const Key('pickup-on-map')));
+        await tester.tap(find.byKey(const Key('pickup-on-map')));
+        await tester.pumpAndSettle();
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.inactive,
+        );
+        await tester.pump();
+        await tester.pump();
+        final tree = tester
+            .getSemantics(find.byType(MapPickerScreen))
+            .toStringDeep();
+        expect(tree, isNot(contains('Выбранная точка')));
+        expect(find.byKey(const Key('map-background-cover')), findsOneWidget);
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(MapPickerScreen), findsOneWidget);
+        expect(find.byKey(const Key('map-background-cover')), findsNothing);
+        expect(
+          find.textContaining('Выбранная точка: 55.00000, 82.43000'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
+  testWidgets(
     'Ошибка карты на маленьком экране с крупным шрифтом не перекрывает форму',
     (tester) async {
       setViewport(tester, const Size(320, 568), 3.2);

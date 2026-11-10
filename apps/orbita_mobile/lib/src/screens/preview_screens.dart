@@ -17,6 +17,7 @@ class PreviewShell extends StatefulWidget {
     required this.device,
     required this.mapSettings,
     this.mapAccessAllowed = true,
+    this.mapForeground = true,
     this.addressServiceFactory,
     this.tileSessionFactory,
     this.accountPanel,
@@ -26,6 +27,7 @@ class PreviewShell extends StatefulWidget {
   final DeviceGateway device;
   final MapSettings mapSettings;
   final bool mapAccessAllowed;
+  final bool mapForeground;
   final AddressService Function(String)? addressServiceFactory;
   final MapTileSession Function(String)? tileSessionFactory;
   final Widget? accountPanel;
@@ -55,6 +57,7 @@ class _PreviewShellState extends State<PreviewShell> {
                   : PassengerScreen(
                       mapSettings: widget.mapSettings,
                       enabled: widget.mapAccessAllowed && _index == 0,
+                      foreground: widget.mapForeground,
                       serviceFactory: widget.addressServiceFactory,
                       tileSessionFactory: widget.tileSessionFactory,
                     ),

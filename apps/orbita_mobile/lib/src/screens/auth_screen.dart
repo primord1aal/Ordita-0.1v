@@ -117,6 +117,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             device: widget.device,
                             mapSettings: widget.mapSettings,
                             mapAccessAllowed: _controller.canUseRole,
+                            mapForeground: _controller.foreground,
                             addressServiceFactory: widget.addressServiceFactory,
                             tileSessionFactory: widget.tileSessionFactory,
                             accountPanel: _accountPanel(visible),

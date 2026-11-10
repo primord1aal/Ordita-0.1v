@@ -34,15 +34,18 @@ class PassengerAddressController extends ChangeNotifier {
   final pickup = AddressDraft(), destination = AddressDraft();
   AddressField activeField = AddressField.pickup;
   bool _enabled = true, _disposed = false;
+  bool _foreground = true;
   int _generation = 0;
   Timer? _timer;
-  bool get enabled => _enabled && !_disposed;
+  bool get enabled => _enabled && _foreground && !_disposed;
+  bool get foreground => _foreground && !_disposed;
   AddressDraft draft(AddressField field) =>
       field == AddressField.pickup ? pickup : destination;
-  void setEnabled(bool value) {
-    if (_enabled == value || _disposed) return;
+  void setEnabled(bool value, {bool foreground = true}) {
+    if ((_enabled == value && _foreground == foreground) || _disposed) return;
     _enabled = value;
-    if (!value) _cancel();
+    _foreground = foreground;
+    if (!enabled) _cancel();
     // Маршрут выбора точки находится вне поддерева AuthScreen. Изменение
     // полномочий действует немедленно; его перерисовка ждёт конца текущего build.
     if (SchedulerBinding.instance.schedulerPhase ==

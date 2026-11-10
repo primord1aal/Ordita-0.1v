@@ -14,12 +14,14 @@ class PassengerScreen extends StatefulWidget {
   const PassengerScreen({
     required this.mapSettings,
     this.enabled = true,
+    this.foreground = true,
     this.serviceFactory,
     this.tileSessionFactory,
     super.key,
   });
   final MapSettings mapSettings;
   final bool enabled;
+  final bool foreground;
   final AddressService Function(String)? serviceFactory;
   final MapTileSession Function(String)? tileSessionFactory;
   @override
@@ -39,7 +41,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
   @override
   void initState() {
     super.initState();
-    _controller.setEnabled(widget.enabled);
+    _controller.setEnabled(widget.enabled, foreground: widget.foreground);
     _controller.addListener(_changed);
     _changed();
   }
@@ -70,9 +72,10 @@ class _PassengerScreenState extends State<PassengerScreen> {
   @override
   void didUpdateWidget(covariant PassengerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.enabled != widget.enabled) {
-      _controller.setEnabled(widget.enabled);
-      if (!widget.enabled) _tiles?.cancel();
+    if (oldWidget.enabled != widget.enabled ||
+        oldWidget.foreground != widget.foreground) {
+      _controller.setEnabled(widget.enabled, foreground: widget.foreground);
+      if (!_controller.enabled) _tiles?.cancel();
     }
   }
 
@@ -118,7 +121,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
           controller: pickup ? _pickup : _destination,
           maxLines: null,
           maxLength: 250,
-          enabled: widget.enabled,
+          enabled: _controller.enabled,
           onTap: () => _controller.focus(field),
           onChanged: (value) => _controller.edit(field, value),
           onSubmitted: (_) => _controller.searchNow(field),
@@ -132,7 +135,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
               tooltip: pickup
                   ? 'Выбрать отправление на карте'
                   : 'Выбрать назначение на карте',
-              onPressed: _tiles == null || !widget.enabled
+              onPressed: _tiles == null || !_controller.enabled
                   ? null
                   : () => _choosePoint(field),
               icon: const Icon(Icons.map_outlined),
@@ -164,7 +167,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
                 Icons.place_outlined,
                 color: OrbitaColors.accent,
               ),
-              onTap: !widget.enabled
+              onTap: !_controller.enabled
                   ? null
                   : () {
                       _controller.select(field, place);
@@ -182,7 +185,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton(
-                onPressed: widget.enabled
+                onPressed: _controller.enabled
                     ? () => _controller.searchNow(field)
                     : null,
                 child: const Text('Повторить поиск'),
@@ -211,7 +214,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
                   420,
                 ),
                 session: _tiles,
-                enabled: widget.enabled && !_choosing,
+                enabled: _controller.enabled && !_choosing,
                 pickup: _controller.pickup.place,
                 destination: _controller.destination.place,
                 focusPoint: _controller
