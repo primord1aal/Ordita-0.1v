@@ -40,9 +40,22 @@ class _OrbitaMapState extends State<OrbitaMap> {
   bool _ready = false, _tileError = false;
   MapFailureKind _tileFailure = MapFailureKind.unavailable;
   int _reload = 0;
+  void _matchTheme() => widget.session?.setStyle(
+    Theme.of(context).brightness == Brightness.dark
+        ? MapTileStyle.darkMatter
+        : MapTileStyle.positron,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _matchTheme();
+  }
+
   @override
   void didUpdateWidget(covariant OrbitaMap oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.session != widget.session) _matchTheme();
     final point = widget.focusPoint;
     if (_ready && point != null && point != oldWidget.focusPoint) {
       _camera.move(LatLng(point.latitude, point.longitude), 16);
@@ -134,7 +147,11 @@ class _OrbitaMapState extends State<OrbitaMap> {
                       children: [
                         if (widget.enabled)
                           TileLayer(
-                            key: ValueKey((widget.session, _reload)),
+                            key: ValueKey((
+                              widget.session,
+                              widget.session!.style,
+                              _reload,
+                            )),
                             tileProvider: OrbitaTileProvider(widget.session!),
                             userAgentPackageName: 'ru.orbita.taxi.dev',
                             maxNativeZoom: 18,

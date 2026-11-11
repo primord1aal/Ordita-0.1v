@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:orbita_mobile/src/maps/address_models.dart';
 import 'package:orbita_mobile/src/maps/geoapify_service.dart';
 import 'package:orbita_mobile/src/maps/map_tiles.dart';
@@ -22,6 +24,89 @@ class FakeTileTransport extends GeoapifyTransport {
 }
 
 void main() {
+  test('Транспорт допускает только два утверждённых стиля Geoapify', () async {
+    final transport = GeoapifyTransport(
+      clientFactory: () => MockClient((_) async => http.Response('tile', 200)),
+    );
+    addTearDown(transport.close);
+    for (final style in ['positron', 'dark-matter']) {
+      final bytes = await transport.get(
+        Uri.https('maps.geoapify.com', '/v1/tile/$style/8/10/10.png', {
+          'apiKey': fakeMapKey,
+        }),
+      );
+      expect(bytes, isNotEmpty);
+    }
+    await expectLater(
+      transport.get(
+        Uri.https('maps.geoapify.com', '/v1/tile/unknown/8/10/10.png', {
+          'apiKey': fakeMapKey,
+        }),
+      ),
+      throwsA(
+        isA<MapFailure>().having(
+          (error) => error.kind,
+          'kind',
+          MapFailureKind.configuration,
+        ),
+      ),
+    );
+  });
+
+  test('Тема меняет URL и не смешивает кэш одинаковых координат', () async {
+    final transport = FakeTileTransport();
+    final session = MapTileSession(
+      fakeMapKey,
+      transport: transport,
+      minimumInterval: Duration.zero,
+    );
+    addTearDown(session.close);
+    const coordinate = TileCoordinates(10, 10, 8);
+    session.setStyle(MapTileStyle.positron);
+    await session.tile(coordinate);
+    await session.tile(coordinate);
+    session.setStyle(MapTileStyle.positron);
+    expect(transport.calls.length, 1);
+    expect(transport.calls.single.path, '/v1/tile/positron/8/10/10.png');
+    session.setStyle(MapTileStyle.darkMatter);
+    await session.tile(coordinate);
+    expect(transport.calls.length, 2);
+    expect(transport.calls.last.path, '/v1/tile/dark-matter/8/10/10.png');
+    session.setStyle(MapTileStyle.positron);
+    await session.tile(coordinate);
+    expect(transport.calls.length, 3);
+    expect(transport.calls.last.path, '/v1/tile/positron/8/10/10.png');
+  });
+
+  test('Смена темы отменяет старый ответ до записи в кэш', () async {
+    final transport = FakeTileTransport()..pending = Completer<Uint8List>();
+    final session = MapTileSession(
+      fakeMapKey,
+      transport: transport,
+      minimumInterval: Duration.zero,
+    );
+    addTearDown(session.close);
+    const coordinate = TileCoordinates(10, 10, 8);
+    final old = session.tile(coordinate);
+    final rejection = expectLater(
+      old,
+      throwsA(
+        isA<MapFailure>().having(
+          (error) => error.kind,
+          'kind',
+          MapFailureKind.cancelled,
+        ),
+      ),
+    );
+    session.setStyle(MapTileStyle.positron);
+    transport.pending!.complete(Uint8List.fromList([1]));
+    await rejection;
+    transport.pending = null;
+    await session.tile(coordinate);
+    expect(transport.calls.length, 2);
+    expect(transport.calls.last.path, '/v1/tile/positron/8/10/10.png');
+  });
+
   test('Ошибка квоты не повторяется при перестроении слоя карты', () async {
     final transport = FakeTileTransport()
       ..failure = const MapFailure(MapFailureKind.limit);

@@ -40,8 +40,9 @@ class GeoapifyTransport {
                   '/v1/geocode/reverse',
                 ].contains(uri.path)) ||
             (uri.host == 'maps.geoapify.com' &&
-                RegExp(r'^/v1/tile/dark-matter/\d{1,2}/\d+/\d+\.png$')
-                    .hasMatch(uri.path)))) {
+                RegExp(
+                  r'^/v1/tile/(positron|dark-matter)/\d{1,2}/\d+/\d+\.png$',
+                ).hasMatch(uri.path)))) {
       throw const MapFailure(MapFailureKind.configuration);
     }
     final client = _factory();

@@ -8,6 +8,15 @@ import 'package:flutter_map/flutter_map.dart';
 import 'address_models.dart';
 import 'geoapify_service.dart';
 
+/// Geoapify raster styles: https://apidocs.geoapify.com/docs/maps/map-tiles/
+enum MapTileStyle {
+  positron('positron'),
+  darkMatter('dark-matter');
+
+  const MapTileStyle(this.id);
+  final String id;
+}
+
 /// Общий ограниченный RAM-кэш. Нет фонового скачивания, дискового журнала URI или ключей.
 class MapTileSession {
   MapTileSession(
@@ -18,6 +27,8 @@ class MapTileSession {
   final String _key;
   final GeoapifyTransport _transport;
   final Duration minimumInterval;
+  MapTileStyle _style = MapTileStyle.darkMatter;
+  MapTileStyle get style => _style;
   final _cache = <String, Uint8List>{};
   final _inflight = <String, Future<Uint8List>>{};
   int _bytes = 0, _generation = 0;
@@ -26,6 +37,15 @@ class MapTileSession {
   DateTime _nextStart = DateTime.fromMillisecondsSinceEpoch(0);
   bool _closed = false;
   MapFailure? _failure;
+  void setStyle(MapTileStyle style) {
+    if (_style == style) return;
+    cancel();
+    _cache.clear();
+    _bytes = 0;
+    _failure = null;
+    _style = style;
+  }
+
   Future<Uint8List> tile(TileCoordinates coordinate) async {
     if (_closed) throw const MapFailure(MapFailureKind.cancelled);
     final id = '${coordinate.z}/${coordinate.x}/${coordinate.y}';
@@ -39,7 +59,7 @@ class MapTileSession {
     if (_failure case final failure?) throw failure;
     if (_inflight.length >= 64) throw const MapFailure(MapFailureKind.limit);
     final generation = _generation;
-    final request = _fetch(id, generation);
+    final request = _fetch(id, generation, _style);
     _inflight[id] = request;
     try {
       final bytes = await request;
@@ -57,7 +77,11 @@ class MapTileSession {
     }
   }
 
-  Future<Uint8List> _fetch(String id, int generation) async {
+  Future<Uint8List> _fetch(
+    String id,
+    int generation,
+    MapTileStyle style,
+  ) async {
     void check() {
       if (_closed || _generation != generation) {
         throw const MapFailure(MapFailureKind.cancelled);
@@ -81,7 +105,7 @@ class MapTileSession {
       if (delay > Duration.zero) await Future<void>.delayed(delay);
       check();
       return await _transport.get(
-        Uri.https('maps.geoapify.com', '/v1/tile/dark-matter/$id.png', {
+        Uri.https('maps.geoapify.com', '/v1/tile/${style.id}/$id.png', {
           'apiKey': _key,
         }),
         maxBytes: 512 * 1024,
@@ -137,14 +161,15 @@ class OrbitaTileProvider extends TileProvider {
   final MapTileSession session;
   @override
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) =>
-      _SafeTileImage(session, coordinates);
+      _SafeTileImage(session, coordinates, session.style);
 }
 
 /// В ImageProvider/Flutter error diagnostics не попадает URL с apiKey.
 class _SafeTileImage extends ImageProvider<_SafeTileImage> {
-  const _SafeTileImage(this.session, this.coordinates);
+  const _SafeTileImage(this.session, this.coordinates, this.style);
   final MapTileSession session;
   final TileCoordinates coordinates;
+  final MapTileStyle style;
   @override
   Future<_SafeTileImage> obtainKey(ImageConfiguration configuration) =>
       SynchronousFuture(this);
@@ -159,9 +184,14 @@ class _SafeTileImage extends ImageProvider<_SafeTileImage> {
   );
   Future<ui.Codec> _decode(ImageDecoderCallback decode) async {
     try {
-      return await decode(
-        await ui.ImmutableBuffer.fromUint8List(await session.tile(coordinates)),
-      );
+      if (session.style != style) {
+        throw const MapFailure(MapFailureKind.cancelled);
+      }
+      final bytes = await session.tile(coordinates);
+      if (session.style != style) {
+        throw const MapFailure(MapFailureKind.cancelled);
+      }
+      return await decode(await ui.ImmutableBuffer.fromUint8List(bytes));
     } on MapFailure {
       scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(this));
       rethrow;
@@ -176,9 +206,11 @@ class _SafeTileImage extends ImageProvider<_SafeTileImage> {
   bool operator ==(Object other) =>
       other is _SafeTileImage &&
       identical(session, other.session) &&
+      style == other.style &&
       coordinates == other.coordinates;
   @override
-  int get hashCode => Object.hash(identityHashCode(session), coordinates);
+  int get hashCode =>
+      Object.hash(identityHashCode(session), style, coordinates);
   @override
   String toString() => 'OrbitaMapTile';
 }
