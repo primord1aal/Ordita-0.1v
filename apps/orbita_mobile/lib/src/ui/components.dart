@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
+import 'orbita_brand.dart';
 
 class SurfaceCard extends StatelessWidget {
   const SurfaceCard({
@@ -51,8 +52,19 @@ class BrandHeader extends StatelessWidget {
   const BrandHeader({this.showShift = false, super.key});
   final bool showShift;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+  Widget build(BuildContext context) => Container(
+    constraints: const BoxConstraints(minHeight: 74),
+    padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
+    decoration: BoxDecoration(
+      color: Color.lerp(
+        OrbitaPalette.of(context).surface,
+        OrbitaPalette.of(context).mapLand,
+        0.1,
+      ),
+      border: Border(
+        bottom: BorderSide(color: OrbitaPalette.of(context).divider),
+      ),
+    ),
     child: LayoutBuilder(
       builder: (context, constraints) {
         const style = TextStyle(
@@ -60,21 +72,15 @@ class BrandHeader extends StatelessWidget {
           fontWeight: FontWeight.w800,
           height: 1.2,
         );
-        const labelStyle = TextStyle(fontSize: 14, fontWeight: FontWeight.w700);
-        const title = Text('Орбита', style: style);
+        const title = Row(
+          children: [
+            OrbitaLogo(size: 42),
+            SizedBox(width: 10),
+            Expanded(child: Text('орбита.', style: style)),
+          ],
+        );
         if (!showShift) {
           return const Align(alignment: Alignment.centerLeft, child: title);
-        }
-        final fits =
-            textWidth(context, 'Орбита', style) +
-                textWidth(context, 'На линию', labelStyle) +
-                56 <=
-            constraints.maxWidth;
-        if (fits) {
-          return const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [title, ShiftControl()],
-          );
         }
         return const Column(
           crossAxisAlignment: CrossAxisAlignment.start,

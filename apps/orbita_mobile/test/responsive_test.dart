@@ -88,7 +88,7 @@ void main() {
       final device = FakeDevice()..state = readyState();
       await openPreview(tester, 'Водитель', device: device);
       expect(
-        MediaQuery.textScalerOf(tester.element(find.text('Орбита'))).scale(16),
+        MediaQuery.textScalerOf(tester.element(find.text('орбита.'))).scale(16),
         closeTo(16 * scale, 0.01),
       );
       checkNavigation(tester);

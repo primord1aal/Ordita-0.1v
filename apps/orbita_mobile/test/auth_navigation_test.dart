@@ -172,7 +172,8 @@ void main() {
       expect(find.byType(BackButton), findsOneWidget);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
-      expect(find.text('Профиль пассажира'), findsOneWidget);
+      expect(find.byType(ProfileScreen), findsOneWidget);
+      expect(find.byType(DeviceCheckScreen), findsNothing);
     },
   );
 

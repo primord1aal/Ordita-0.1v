@@ -226,15 +226,24 @@ class _AuthScreenState extends State<AuthScreen> {
     final editingEnabled =
         !_controller.busy || _controller.checkKind == AuthCheckKind.validating;
     return BrandedAccountPage(
-      child: SurfaceCard(
-        padding: const EdgeInsets.all(20),
+      loginLayout: true,
+      child: Padding(
+        padding: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              showFields ? 'Вход в аккаунт' : 'Подключение к аккаунту',
+              showFields ? 'С возвращением' : 'Подключение к аккаунту',
               style: Theme.of(context).textTheme.titleLarge,
             ),
+            if (showFields) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Войди в свой аккаунт',
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: OrbitaPalette.of(context).muted),
+              ),
+            ],
             if (message != null) ...[
               const SizedBox(height: 16),
               Semantics(
@@ -247,8 +256,8 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
             ],
             if (showFields) ...[
-              const SizedBox(height: 20),
-              const Text('Электронная почта'),
+              const SizedBox(height: 32),
+              const Text('Почта'),
               const SizedBox(height: 8),
               Semantics(
                 label: 'Электронная почта',
@@ -260,7 +269,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   textInputAction: TextInputAction.next,
                   autocorrect: false,
                   enableSuggestions: false,
-                  decoration: const InputDecoration(),
+                  decoration: const InputDecoration(hintText: 'Твоя почта'),
                 ),
               ),
               const SizedBox(height: 16),
@@ -279,6 +288,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _signIn(),
                   decoration: InputDecoration(
+                    hintText: 'Пароль',
                     suffixIcon: IconButton(
                       tooltip: _obscurePassword
                           ? 'Показать пароль'

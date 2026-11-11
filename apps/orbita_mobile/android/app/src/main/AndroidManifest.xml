@@ -14,7 +14,7 @@
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="false"
-        android:icon="@drawable/ic_orbita">
+        android:icon="@mipmap/ic_launcher">
         <service
             android:name=".LocationDiagnosticService"
             android:exported="false"

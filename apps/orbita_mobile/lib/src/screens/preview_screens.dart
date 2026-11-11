@@ -7,6 +7,7 @@ import '../maps/geoapify_service.dart';
 import '../platform/device_gateway.dart';
 import '../ui/components.dart';
 import '../ui/theme.dart';
+import '../ui/theme_settings.dart';
 import 'passenger_screen.dart';
 
 export 'passenger_screen.dart';
@@ -189,6 +190,44 @@ class ProfileScreen extends StatelessWidget {
   final bool driver;
   final DeviceGateway device;
   final Widget? accountPanel;
+  String _themeLabel(ThemeMode mode) => switch (mode) {
+    ThemeMode.light => 'Светлая',
+    ThemeMode.dark => 'Тёмная',
+    ThemeMode.system => 'Как на устройстве',
+  };
+
+  Future<void> _chooseTheme(BuildContext context) async {
+    final settings = ThemeSettingsScope.of(context);
+    final choice = await showModalBottomSheet<ThemeMode>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text('Тема оформления'),
+              ),
+              for (final mode in ThemeMode.values)
+                ListTile(
+                  title: Text(_themeLabel(mode)),
+                  leading: Icon(
+                    mode == settings.mode
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                  ),
+                  onTap: () => Navigator.pop(sheetContext, mode),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (choice != null) await settings.setMode(choice);
+  }
+
   Future<void> _settings(BuildContext context) async {
     try {
       await device.openSettings();
@@ -234,6 +273,18 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: 20),
             Text('Настройки', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
+            SurfaceCard(
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.palette_outlined),
+                title: const Text('Тема оформления'),
+                subtitle: Text(
+                  _themeLabel(ThemeSettingsScope.of(context).mode),
+                ),
+                onTap: () => _chooseTheme(context),
+              ),
+            ),
+            const SizedBox(height: 12),
             _MenuTile(
               icon: Icons.settings_outlined,
               title: 'Настройки приложения',
@@ -248,16 +299,24 @@ class ProfileScreen extends StatelessWidget {
               onTap: () => Navigator.pushNamed(context, '/device-check'),
             ),
             const SizedBox(height: 12),
-            const SurfaceCard(
+            SurfaceCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'О приложении',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  SizedBox(height: 6),
-                  Text('Версия $appVersion · тестовая основа'),
+                  const SizedBox(height: 6),
+                  const Text('Версия $appVersion · тестовая основа'),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => showLicensePage(
+                      context: context,
+                      applicationName: 'орбита.',
+                    ),
+                    child: const Text('Лицензии'),
+                  ),
                 ],
               ),
             ),
