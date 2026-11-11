@@ -16,6 +16,7 @@
       --map-land:#E3E8DC; --map-park:#D0DBCA; --map-road:#FAFAF3; --map-road-edge:#C3CBBB; --map-building:#D1D9C9;
       --map-label:#58674F; --map-route:#A6533A; --map-halo:#E3E8DC; --stage:#E6E7DD;
       --brand-tile:#29382F; --brand-ring:#FAFAF4; --shadow:rgba(32,43,32,.08);
+      --position:#2F6B9A;
     }
     body[data-theme="dark"] {
       --background:#23241F; --surface:#2E3028; --surface-variant:#3C4034; --text:#F2F0E5; --muted:#BFC4B0;
@@ -24,6 +25,7 @@
       --map-land:#30382D; --map-park:#3E4A39; --map-road:#59664F; --map-road-edge:#424D38; --map-building:#3B4635;
       --map-label:#C6CBB7; --map-route:#E39272; --map-halo:#30382D; --stage:#1B1E18;
       --brand-tile:#F2F0E5; --brand-ring:#23241F; --shadow:rgba(0,0,0,.18);
+      --position:#88BDE6;
     }
     button, input, select { font:inherit; }
     button { cursor:pointer; }
@@ -65,7 +67,7 @@
     .scene-tools button[aria-pressed="true"] { border-color:var(--accent); background:var(--accent-soft); }
     .preview-zone { width:100%; display:flex; justify-content:center; padding:8px 0 20px; }
     .stage-foot { max-width:600px; text-align:center; }
-    .device { --s:1; width:var(--device-w,390px); height:var(--device-h,844px); flex:none; border:3px solid var(--text); border-radius:32px; overflow:hidden; display:flex; flex-direction:column; background:var(--background); color:var(--text); box-shadow:0 16px 40px var(--shadow); }
+    .device { --s:1; --layer-edge:color-mix(in srgb,var(--outline) 48%,var(--surface)); --header-layer:color-mix(in srgb,var(--surface) 90%,var(--map-land)); --field-layer:color-mix(in srgb,var(--surface) 78%,var(--surface-variant)); container:orbita / inline-size; width:var(--device-w,390px); height:var(--device-h,844px); flex:none; border:3px solid var(--text); border-radius:32px; overflow:hidden; display:flex; flex-direction:column; background:var(--background); color:var(--text); box-shadow:0 16px 40px var(--shadow); }
     .status-bar { flex:none; height:28px; padding:0 20px; display:flex; align-items:center; justify-content:space-between; color:var(--text); background:var(--map-land); font-size:11px; font-weight:600; }
     .status-right { display:flex; align-items:center; gap:5px; font-size:10px; }
     .signal { width:12px; height:9px; background:currentColor; clip-path:polygon(0 100%,100% 0,100% 100%); }
@@ -97,7 +99,17 @@
     .map-controls { position:absolute; right:16px; top:12px; display:grid; background:var(--surface); border:1px solid var(--outline); border-radius:16px; overflow:hidden; }
     .map-controls button { width:48px; height:48px; border:0; background:transparent; color:var(--text); font-size:22px; }
     .map-controls button+button { border-top:1px solid var(--divider); }
-    .crosshair { position:absolute; left:50%; top:50%; width:34px; height:34px; border:4px solid var(--text); outline:8px solid color-mix(in srgb,var(--accent) 18%,transparent); border-radius:50%; transform:translate(-50%,-50%); background:var(--surface); }
+    .crosshair { position:absolute; left:50%; top:50%; width:40px; height:40px; transform:translate(-50%,-50%); color:var(--text); filter:drop-shadow(0 1px 2px var(--surface)); }
+    .crosshair .icon { width:40px; height:40px; stroke-width:2.4; }
+    .crosshair-label { position:absolute; left:50%; top:calc(50% + 26px); transform:translateX(-50%); padding:5px 9px; border:1px solid var(--layer-edge); border-radius:10px; background:var(--surface); color:var(--text); font-size:11px; white-space:nowrap; }
+    .map-legend { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px 12px; padding:2px 0 13px; margin-bottom:12px; border-bottom:1px solid var(--divider); }
+    .map-legend>span { display:flex; align-items:center; gap:7px; min-width:0; color:var(--muted); font-size:calc(11px * var(--s)); line-height:1.35; overflow-wrap:anywhere; }
+    .marker-key { width:22px; height:22px; flex:none; display:grid; place-items:center; font-size:12px; font-style:normal; font-weight:650; }
+    .marker-key.position { color:var(--position); }
+    .marker-key.pickup { color:var(--surface); background:var(--text); border-radius:6px; }
+    .marker-key.destination { color:var(--accent); }
+    .marker-key.aim { color:var(--text); }
+    .map-graphic .marker-label { fill:var(--text); font-size:11px; font-weight:600; }
     .sheet { flex:none; max-height:65%; padding:8px 18px 13px; width:100%; border:0; border-top:1px solid var(--divider); border-radius:24px 24px 0 0; color:var(--text); background:var(--surface); overflow-y:auto; scrollbar-width:thin; }
     .sheet.expanded { flex:1 1 auto; max-height:none; }
     .sheet-handle { width:34px; height:4px; border-radius:100px; background:var(--outline); margin:0 auto 12px; opacity:.65; }
@@ -167,6 +179,10 @@
     .driver-status .status-symbol { width:44px; height:44px; border-radius:15px; display:grid; place-items:center; flex:none; color:var(--accent); background:var(--accent-soft); }
     .driver-status h2 { font-size:calc(19px * var(--s)); }
     .driver-status p { margin:7px 0 0; }
+    .driver-off .driver-status,.driver-online .driver-status { align-items:center; padding:2px 0; gap:12px; }
+    .driver-off .driver-status h2,.driver-online .driver-status h2 { font-size:calc(16px * var(--s)); margin-bottom:3px; }
+    .driver-off .driver-status p,.driver-online .driver-status p { font-size:calc(13px * var(--s)); margin:0; }
+    .driver-off .driver-status .status-symbol,.driver-online .driver-status .status-symbol { width:26px; height:26px; background:transparent; color:var(--muted); }
     .offer-time { display:flex; align-items:center; justify-content:space-between; gap:10px; }
     .offer-time strong { font-size:calc(25px * var(--s)); font-weight:650; color:var(--accent); font-variant-numeric:tabular-nums; white-space:nowrap; }
     .progress-track { height:4px; border-radius:10px; background:var(--surface-variant); overflow:hidden; }
@@ -187,6 +203,19 @@
     .avatar { width:54px; height:54px; border-radius:19px; display:grid; place-items:center; flex:none; background:var(--accent-soft); color:var(--accent); font-size:18px; font-weight:600; }
     .profile-identity strong { display:block; font-size:calc(20px * var(--s)); font-weight:650; line-height:1.2; overflow-wrap:anywhere; }
     .profile-identity p { margin-top:5px; }
+    .profile .profile-content { display:flex; flex-direction:column; gap:18px; }
+    .profile-content>* { flex-shrink:0; }
+    .profile-summary { padding:20px 18px; background:var(--surface); border:1px solid var(--layer-edge); border-radius:22px; box-shadow:0 5px 18px var(--shadow); }
+    .profile-summary .profile-identity { padding:0 0 14px; }
+    .profile-summary .profile-identity>div { min-width:0; }
+    .profile-summary .avatar { width:64px; height:64px; border-radius:21px; }
+    .profile-summary .badge { gap:6px; }
+    .profile .menu-group { padding:0 15px; border:1px solid var(--layer-edge); border-radius:20px; background:var(--surface); }
+    .profile .menu-row { min-height:76px; }
+    .profile .menu-row:last-child { border-bottom:0; }
+    .profile .section-label { margin:0 0 9px; }
+    .profile-footer { display:grid; gap:12px; margin-top:auto; padding-top:16px; border-top:1px solid var(--divider); }
+    .profile-footer .fine-print { text-align:center; margin:0; }
     .auth-intro { display:grid; gap:9px; padding:18px 0 8px; }
     .auth-form { display:grid; gap:10px; }
     .auth-form .primary { margin-top:14px; }
@@ -194,6 +223,17 @@
     .service-emblem { width:60px; height:60px; display:grid; place-items:center; border-radius:21px; color:var(--accent); background:var(--accent-soft); margin:12px 0 6px; }
     .service-emblem .icon { width:28px; height:28px; }
     .service-actions { display:grid; gap:10px; margin-top:12px; }
+    .status-page .service-content { align-content:safe center; }
+    .status-card { width:100%; display:grid; justify-items:center; gap:15px; padding:26px 22px 22px; border:1px solid var(--outline); border-radius:24px; background:var(--surface); box-shadow:0 9px 28px var(--shadow); text-align:center; }
+    .status-card .service-emblem { margin:0; }
+    .status-card h2,.status-card p { width:100%; }
+    .status-card .service-actions { width:100%; padding-top:18px; margin-top:4px; border-top:1px solid var(--divider); }
+    :is(.passenger-home,.passenger-map,.passenger-confirm,.driver-off,.driver-online,.driver-offer,.status-page) .app-head { position:relative; z-index:2; background:var(--header-layer); border-bottom:1px solid var(--layer-edge); box-shadow:0 3px 12px var(--shadow); }
+    :is(.passenger-home,.passenger-map,.passenger-confirm,.driver-off,.driver-online,.driver-offer) .sheet { border:1px solid var(--layer-edge); border-bottom:0; box-shadow:0 -7px 24px var(--shadow); }
+    :is(.passenger-home,.passenger-confirm,.driver-offer) .route-stack { padding:0 12px; border-radius:16px; background:var(--field-layer); box-shadow:inset 0 1px 0 var(--layer-edge); }
+    @supports (backdrop-filter:blur(8px)) {
+      :is(.passenger-home,.passenger-map,.passenger-confirm,.driver-off,.driver-online,.driver-offer) .app-head { background:color-mix(in srgb,var(--header-layer) 94%,transparent); backdrop-filter:blur(8px); }
+    }
     .welcome-content { min-height:0; flex:1; overflow-y:auto; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:0; padding:36px 24px; text-align:center; }
     .welcome-content .brand-mark { width:94px; height:94px; }
     .welcome-content h1 { margin:24px 0 15px; font-size:calc(37px * var(--s)); font-weight:670; letter-spacing:-.055em; line-height:1.15; overflow-wrap:anywhere; }
@@ -217,8 +257,10 @@
     @media (prefers-reduced-motion:reduce) { .spinner { animation:none; } .shift-thumb { transition:none; } }
     .device[data-scale="3.2"] .map-stage { flex:0 0 112px; min-height:112px; }
     .device[data-scale="3.2"] .sheet { flex:1 1 auto; max-height:none; }
-    .device[data-scale="3.2"] .bottom-nav { display:flex; overflow-x:auto; scroll-snap-type:x proximity; }
-    .device[data-scale="3.2"] .nav-item { flex:1 0 auto; flex-direction:row; gap:10px; padding:12px 18px; white-space:nowrap; scroll-snap-align:start; }
+    .device[data-scale="3.2"] .bottom-nav { display:grid; grid-template-columns:1fr; padding:4px 12px; overflow:visible; }
+    .device[data-scale="3.2"] .nav-item { flex-direction:row; justify-content:flex-start; gap:12px; padding:10px 12px; white-space:normal; border-bottom:1px solid var(--divider); }
+    .device[data-scale="3.2"] .nav-item:last-child { border-bottom:0; }
+    .device[data-scale="3.2"] .nav-item[aria-current="page"] { background:var(--surface-variant); border-radius:12px; }
     .device[data-scale="3.2"] .button-row { grid-template-columns:1fr; }
     .device[data-scale="3.2"] .address-row { grid-template-columns:minmax(0,1fr); }
     .device[data-scale="3.2"] .address-row>.icon { display:none; }
@@ -226,6 +268,17 @@
     .device[data-scale="3.2"] .keyboard { height:100px; }
     .device[data-scale="3.2"] .welcome-content { justify-content:flex-start; }
     @media (min-width:600px) { .sheet>* { max-width:620px; margin-left:auto; margin-right:auto; } .service-content { width:100%; max-width:620px; align-self:center; } }
+    @container orbita (min-width:600px) {
+      .passenger-home .sheet { padding:12px 28px 22px; }
+      .passenger-home .sheet>* { max-width:none; }
+      .passenger-home .sheet-title { font-size:calc(26px * var(--s)); margin-bottom:10px; }
+      .passenger-home .address-row { min-height:88px; gap:16px; }
+      .passenger-home .row-label { font-size:calc(13px * var(--s)); }
+      .passenger-home .row-value { font-size:calc(18px * var(--s)); }
+      .passenger-home .bottom-nav { min-height:100px; padding:8px 24px; }
+      .passenger-home .nav-item { min-height:84px; font-size:calc(16px * var(--s)); gap:7px; }
+      .passenger-home .nav-item .icon { width:28px; height:28px; }
+    }
     @media (max-width:890px) {
       .studio { display:block; } .rail { position:static; height:auto; padding:12px 16px; border-right:0; border-bottom:1px solid var(--divider); }
       .mobile-menu { display:block; min-height:48px; min-width:80px; padding:10px 12px; border:1px solid var(--outline); border-radius:14px; background:var(--surface); color:var(--text); font-size:13px; }
@@ -247,6 +300,7 @@
     <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16M14 6l6 6-6 6"/></symbol>
     <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v9M6 5a9 9 0 1 0 12 0"/></symbol>
+    <symbol id="i-aim" viewBox="0 0 24 24"><path d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5M12 8v8M8 12h8"/></symbol>
     <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
     <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/></symbol>
     <symbol id="i-map" viewBox="0 0 24 24"><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2zM9 3v16M15 5v16"/></symbol>
@@ -382,9 +436,14 @@
         `<button type="button" class="nav-item" data-go="${screen}" ${key === active ? 'aria-current="page"' : ''}>${icon(glyph)}<span>${label}</span></button>`
       ).join('')}</nav>`;
     }
-    function mapSvg(route = false) {
+    function pickerMarkers() {
+      return `<g class="marker-position" role="img" aria-label="Условная геопозиция"><circle cx="80" cy="170" r="22" fill="var(--position)" opacity=".13"/><path d="m80 155 10 27-10-5-10 5z" fill="var(--position)" stroke="var(--surface)" stroke-width="2"/><rect x="27" y="196" width="106" height="23" rx="9" fill="var(--surface)"/><text x="80" y="212" text-anchor="middle" class="marker-label">Геопозиция</text></g>
+        <g class="marker-pickup" transform="translate(70 0)" role="img" aria-label="Адрес подачи"><rect x="103" y="355" width="26" height="26" rx="7" fill="var(--text)" stroke="var(--surface)" stroke-width="2"/><text x="116" y="373" text-anchor="middle" style="fill:var(--surface);font-weight:700;font-size:14px">А</text><rect x="82" y="389" width="68" height="23" rx="9" fill="var(--surface)"/><text x="116" y="405" text-anchor="middle" class="marker-label">Подача</text></g>
+        <g class="marker-destination" role="img" aria-label="Пункт назначения"><path d="M290 280c-3-5-17-19-17-30a17 17 0 1 1 34 0c0 11-14 25-17 30Z" fill="var(--accent)"/><text x="290" y="254" text-anchor="middle" style="fill:var(--on-accent);font-size:14px;font-weight:700">Б</text><rect x="252" y="290" width="110" height="23" rx="9" fill="var(--surface)"/><text x="307" y="306" text-anchor="middle" class="marker-label">Назначение</text></g>`;
+    }
+    function mapSvg(route = false, picker = false) {
       const path = 'M116 428 160 384H215Q229 384 229 368V326L270 305 290 271';
-      return `<svg class="map-graphic" viewBox="0 0 390 560" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Условная схема улиц, не географическая карта">
+      return `<svg class="map-graphic" viewBox="${picker ? '0 115 390 330' : '0 0 390 560'}" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Условная схема улиц, не географическая карта">
         <rect x="-100" y="-100" width="650" height="800" class="land"/>
         <path d="M-40 438C60 399 110 465 207 421S356 373 445 399V437C330 407 278 452 206 470S60 433-40 480Z" class="park"/>
         <g transform="rotate(-11 195 280)">
@@ -394,11 +453,11 @@
           <text x="178" y="64">Центр</text><text x="5" y="196">Сосновая ул.</text><text x="166" y="448">Школьная ул.</text>
         </g>
         ${route ? `<path d="${path}" class="route-under"/><path d="${path}" class="route"/><g transform="translate(229 346) rotate(-8)"><rect x="-17" y="-9" width="34" height="18" rx="7" fill="var(--text)"/><rect x="-10" y="-6" width="20" height="12" rx="4" fill="var(--surface)"/></g><path d="M290 280c-3-5-17-19-17-30a17 17 0 1 1 34 0c0 11-14 25-17 30Z" fill="var(--accent)"/><circle cx="290" cy="249" r="5" fill="var(--on-accent)"/>` : ''}
-        <circle cx="116" cy="428" r="23" fill="var(--accent)" opacity=".14"/><circle cx="116" cy="428" r="11" fill="var(--surface)" stroke="var(--text)" stroke-width="4"/>
+        ${picker ? pickerMarkers() : '<circle cx="116" cy="428" r="23" fill="var(--accent)" opacity=".14"/><circle cx="116" cy="428" r="11" fill="var(--surface)" stroke="var(--text)" stroke-width="4"/>'}
       </svg>`;
     }
     function mapStage({route=false,picker=false} = {}) {
-      return `<div class="map-stage">${mapSvg(route)}${picker ? '<span class="crosshair" aria-hidden="true"></span><div class="map-controls"><button type="button" data-zoom="in" aria-label="Приблизить карту">+</button><button type="button" data-zoom="out" aria-label="Отдалить карту">−</button></div>' : ''}<span class="map-note">Карта · эскиз</span><button type="button" class="map-locate" data-demo-action="В макете показана условная точка" aria-label="Определить местоположение">${icon('locate')}</button></div>`;
+      return `<div class="map-stage">${mapSvg(picker ? false : route,picker)}${picker ? `<span class="crosshair" role="img" aria-label="Прицел выбора">${icon('aim')}</span><span class="crosshair-label">Точка выбора</span><div class="map-controls"><button type="button" data-zoom="in" aria-label="Приблизить карту">+</button><button type="button" data-zoom="out" aria-label="Отдалить карту">−</button></div>` : ''}<span class="map-note">Карта · эскиз</span><button type="button" class="map-locate" data-demo-action="В макете показана условная точка" aria-label="Определить местоположение">${icon('locate')}</button></div>`;
     }
     function routeStack(editing = false) {
       return `<div class="route-stack"><button type="button" class="address-row" ${editing ? 'data-edit="pickup"' : 'data-go="passenger-pickup"'}>${icon('dot')}<span class="row-content"><span class="row-label">Откуда</span><span class="row-value">${esc(state.pickup)}</span></span>${icon('next')}</button><button type="button" class="address-row" ${editing ? 'data-edit="destination"' : 'data-go="passenger-destination"'}>${icon('pin')}<span class="row-content"><span class="row-label">Куда</span><span class="row-value ${state.destination ? '' : 'placeholder'}">${state.destination ? esc(state.destination) : 'Введите адрес'}</span></span>${icon('next')}</button></div>`;
@@ -434,7 +493,7 @@
     }
     function mapPicker() {
       const field = state.mapField;
-      return header('Выбор точки') + mapStage({picker:true}) + sheet(`<h2 class="sheet-title">${field === 'pickup' ? 'Место подачи' : 'Пункт назначения'}</h2><p class="sheet-subtitle">Подтверди точку под прицелом</p><button class="primary" type="button" data-confirm-map>Выбрать это место</button><button class="quiet" type="button" data-back>Вернуться к адресу</button>`) + nav();
+      return header('Выбор точки') + mapStage({picker:true}) + sheet(`<div class="map-legend" aria-label="Обозначения условных точек"><span><i class="marker-key position" aria-hidden="true">${icon('arrow')}</i>Геопозиция</span><span><i class="marker-key pickup" aria-hidden="true">А</i>Подача</span><span><i class="marker-key destination" aria-hidden="true">${icon('pin')}</i>Назначение</span><span><i class="marker-key aim" aria-hidden="true">${icon('aim')}</i>Прицел выбора</span></div><h2 class="sheet-title">${field === 'pickup' ? 'Место подачи' : 'Пункт назначения'}</h2><p class="sheet-subtitle">Подтверди точку под прицелом</p><button class="primary" type="button" data-confirm-map>Выбрать это место</button><button class="quiet" type="button" data-back>Вернуться к адресу</button>`) + nav();
     }
     function confirmRoute() {
       return header() + mapStage({route:true}) + sheet(`<h2 class="sheet-title">Всё верно?</h2>${routeStack(true)}<button class="primary" type="button" disabled aria-describedby="order-unavailable" style="margin-top:12px">Заказать такси</button><p class="fine-print" id="order-unavailable">В макете заказ не отправляется.</p>`) + nav();
@@ -457,7 +516,7 @@
     function driverScreen() {
       if (state.screen === 'driver-off' || state.screen === 'driver-online') {
         const online = state.shiftOnline;
-        return header() + shiftControl() + mapStage() + sheet(`<div class="driver-status"><div><h2 class="sheet-title">${online ? 'Ждём заказ' : 'Начнём смену?'}</h2><p class="sheet-subtitle">${online ? 'Новое предложение появится здесь.' : 'Проведи ползунок, когда будешь готов.'}</p></div><span class="status-symbol" aria-hidden="true">${icon(online ? 'route' : 'power')}</span></div>`) + nav('driver');
+        return header() + shiftControl() + mapStage() + sheet(`<div class="driver-status"><div><h2 class="sheet-title">${online ? 'Предложения' : 'Заказы'}</h2><p class="sheet-subtitle">${online ? 'Новых предложений пока нет.' : 'Активных поездок нет.'}</p></div><span class="status-symbol" aria-hidden="true">${icon('route')}</span></div>`) + nav('driver');
       }
       if (state.screen === 'driver-offer') {
         return header() + mapStage({route:true}) + sheet(`<div class="driver-panel"><div class="offer-time"><h2 class="sheet-title">Новый заказ</h2><strong>25 с</strong></div><div class="progress-track" role="img" aria-label="На ответ — 25 секунд"><div class="progress-fill"></div></div><div class="route-stack"><div class="address-row">${icon('dot')}<span class="row-content"><span class="row-label">Откуда</span><span class="row-value">Прокудское, Вокзальная, 38</span></span></div><div class="address-row">${icon('pin')}<span class="row-content"><span class="row-label">Куда</span><span class="row-value">Чик, Комсомольская, 17</span></span></div></div><div class="button-row"><button class="secondary" type="button" data-go="driver-online">Отказаться</button><button class="primary" type="button" data-go="driver-gallery">Принять</button></div></div>`) + nav('driver');
@@ -471,7 +530,7 @@
       return header('Этапы поездки') + `<div class="service-content"><div class="mini-states">${stages.map(([num,title,detail,action]) => `<div class="mini-state"><span class="badge">${num}</span><strong>${title}</strong><p>${detail}</p><button class="secondary" type="button" data-demo-action="${action}">${action}</button></div>`).join('')}</div></div>` + nav('driver');
     }
     function servicePage(title, tone, message, actions, glyph='alert') {
-      return header() + `<div class="service-content"><div class="service-emblem" style="color:var(--${tone || 'accent'})">${icon(glyph)}</div><h2>${title}</h2><p>${message}</p><div class="service-actions">${actions}</div></div>`;
+      return header() + `<div class="service-content"><section class="status-card" aria-label="${title}"><div class="service-emblem" style="color:var(--${tone || 'accent'})">${icon(glyph)}</div><h2>${title}</h2><p>${message}</p><div class="service-actions">${actions}</div></section></div>`;
     }
     function authScreen() {
       if (state.screen === 'auth-welcome') return `<div class="welcome-content">${mark()}<h1>орбита.</h1><p>Местное такси для своих</p><span class="spinner" role="status" aria-label="Загрузка"></span></div>`;
@@ -485,7 +544,7 @@
       return `<button class="menu-row" type="button" data-go="${target}">${icon(glyph)}<span>${label}${detail ? `<small>${detail}</small>` : ''}</span>${icon('next')}</button>`;
     }
     function profileScreen() {
-      return header('Профиль') + `<div class="service-content"><div class="profile-identity"><span class="avatar" aria-hidden="true">${state.role === 'driver' ? 'ТВ' : 'ТП'}</span><div><strong>Тестовый ${state.role === 'driver' ? 'водитель' : 'пассажир'}</strong><p>Аккаунт проверен</p></div></div><p class="section-label">МОЙ АККАУНТ</p><div class="menu-group">${menuRow('history','Поездки','trips')}${menuRow('gear','Настройки','settings','Тема и внешний вид')}${menuRow('alert','О приложении','diagnostics')}</div><button class="quiet" type="button" data-go="auth-login" style="text-align:left;padding-left:0">Выйти</button></div>` + nav(state.role,'profile');
+      return header('Профиль') + `<div class="service-content profile-content"><section class="profile-summary" aria-label="Аккаунт"><div class="profile-identity"><span class="avatar" aria-hidden="true">${state.role === 'driver' ? 'ТВ' : 'ТП'}</span><div><strong>Тестовый ${state.role === 'driver' ? 'водитель' : 'пассажир'}</strong><p>${state.role === 'driver' ? 'Водитель' : 'Пассажир'}</p></div></div><span class="badge success">${icon('check')}Аккаунт проверен</span></section><section aria-label="Разделы профиля"><p class="section-label">МОЙ АККАУНТ</p><div class="menu-group">${menuRow('history','Поездки','trips','История поездок')}${menuRow('gear','Настройки','settings','Тема и внешний вид')}${menuRow('alert','О приложении','diagnostics','Информация и диагностика')}</div></section><footer class="profile-footer"><button class="secondary" type="button" data-go="auth-login">Выйти</button><p class="fine-print">орбита. · Местное такси для своих</p></footer></div>` + nav(state.role,'profile');
     }
     function settingsScreen() {
       const choices = [['light','sun','Светлая','Лён и мягкий дневной свет'],['dark','moon','Тёмная','Графит и тёплая медь'],['system','gear','Как на устройстве','Меняется вместе с системой']];
@@ -574,6 +633,7 @@
       document.getElementById('scene-title').textContent = pages[state.screen];
       document.getElementById('scene-description').textContent = state.screen.startsWith('passenger') ? 'Два адреса, читаемая карта и короткий путь от выбора точки до проверки маршрута.' : state.screen.startsWith('driver') ? 'Рабочие состояния водителя. Время предложения — 25 секунд; диспетчер не подключён.' : 'Визуальное состояние без настоящей авторизации и сетевых действий.';
       app.className = `app-screen ${state.screen} ` + (state.screen.startsWith('passenger') ? (['passenger-pickup','passenger-destination','passenger-suggestions','passenger-edit'].includes(state.screen) ? 'entry' : (state.screen === 'passenger-map' ? 'picker' : '')) : (state.screen.startsWith('driver') && state.screen !== 'driver-gallery' ? '' : 'service'));
+      if (['auth-offline','auth-norole','auth-blocked','auth-admin'].includes(state.screen)) app.classList.add('status-page');
       let content;
       if (state.screen.startsWith('passenger')) content = passengerScreen();
       else if (state.screen.startsWith('driver')) content = driverScreen();
