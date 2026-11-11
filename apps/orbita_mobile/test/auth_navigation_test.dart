@@ -6,6 +6,7 @@ import 'package:orbita_mobile/src/app.dart';
 import 'package:orbita_mobile/src/auth/auth_repository.dart';
 import 'package:orbita_mobile/src/domain/contracts.dart';
 import 'package:orbita_mobile/src/screens/device_check_screen.dart';
+import 'package:orbita_mobile/src/screens/account_pages.dart';
 import 'package:orbita_mobile/src/screens/preview_screens.dart';
 
 import 'fake_auth_repository.dart';
@@ -77,51 +78,51 @@ void main() {
     await tester.pump(const Duration(seconds: 30));
     await tester.pump();
     try {
-      expect(find.text('Профиль пассажира'), findsOneWidget);
+      expect(find.byType(ProfileScreen), findsOneWidget);
       expect(find.byKey(const Key('login-email')), findsNothing);
       await tester.tap(find.byKey(const Key('nav-1')), warnIfMissed: false);
       await tester.pump();
-      expect(find.text('Профиль пассажира'), findsOneWidget);
+      expect(find.byType(ProfileScreen), findsOneWidget);
     } finally {
       repository.accessPending = null;
       pending.complete(testAccess());
       await tester.pumpAndSettle();
     }
-    expect(find.text('Профиль пассажира'), findsOneWidget);
+    expect(find.byType(ProfileScreen), findsOneWidget);
     await tester.tap(find.byKey(const Key('nav-0')));
     await tester.pumpAndSettle();
     await scrollTo(tester, find.byKey(const Key('pickup')), delta: -180);
     expect(find.text('Учебный адрес'), findsOneWidget);
   });
 
-  testWidgets(
-    'Блокировка закрывает роль и показывает сообщение на форме входа',
-    (tester) async {
-      final repository = FakeAuthRepository()..saved = testSession();
-      await mountAccount(tester, repository);
-      await openProfile(tester);
-      repository.access = const ServerAccess(
-        userId: userA,
-        status: AccessStatus.blocked,
-      );
-      await tester.pump(const Duration(seconds: 30));
-      await tester.pumpAndSettle();
-      expect(find.byType(PassengerScreen), findsNothing);
-      expect(find.byType(DriverScreen), findsNothing);
-      expect(find.byKey(const Key('login-email')), findsOneWidget);
-      expect(
-        find.text('Аккаунт заблокирован. Обратитесь к администратору.'),
-        findsOneWidget,
-      );
-      expect(repository.logouts, 0);
-      repository.access = testAccess();
-      await scrollTo(tester, find.byKey(const Key('auth-retry')));
-      await tester.tap(find.byKey(const Key('auth-retry')));
-      await tester.pumpAndSettle();
-      expect(find.byType(PassengerScreen), findsOneWidget);
-      expect(repository.logins, 0);
-    },
-  );
+  testWidgets('Блокировка закрывает роль и показывает служебную карточку', (
+    tester,
+  ) async {
+    final repository = FakeAuthRepository()..saved = testSession();
+    await mountAccount(tester, repository);
+    await openProfile(tester);
+    repository.access = const ServerAccess(
+      userId: userA,
+      status: AccessStatus.blocked,
+    );
+    await tester.pump(const Duration(seconds: 30));
+    await tester.pumpAndSettle();
+    expect(find.byType(PassengerScreen), findsNothing);
+    expect(find.byType(DriverScreen), findsNothing);
+    expect(find.byKey(const Key('login-email')), findsNothing);
+    expect(find.byKey(const Key('auth-state-card')), findsOneWidget);
+    expect(
+      find.text('Аккаунт заблокирован. Обратитесь к администратору.'),
+      findsOneWidget,
+    );
+    expect(repository.logouts, 0);
+    repository.access = testAccess();
+    await scrollTo(tester, find.byKey(const Key('auth-retry')));
+    await tester.tap(find.byKey(const Key('auth-retry')));
+    await tester.pumpAndSettle();
+    expect(find.byType(PassengerScreen), findsOneWidget);
+    expect(repository.logins, 0);
+  });
 
   testWidgets(
     'Реальная смена роли закрывает прежний экран и меняет интерфейс',
@@ -172,7 +173,7 @@ void main() {
       expect(find.byType(BackButton), findsOneWidget);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
-      expect(find.byType(ProfileScreen), findsOneWidget);
+      expect(find.byType(AboutScreen), findsOneWidget);
       expect(find.byType(DeviceCheckScreen), findsNothing);
     },
   );
@@ -186,6 +187,8 @@ void main() {
       expect(find.text('Проверка уведомлений'), findsNothing);
       expect(find.text('Диагностика геолокации'), findsNothing);
       expect(find.text('Сменить интерфейс просмотра'), findsNothing);
+      await tester.tap(find.text('О приложении'));
+      await tester.pumpAndSettle();
       await scrollTo(tester, find.text('Проверка устройства'));
       await tester.tap(find.text('Проверка устройства'));
       await tester.pumpAndSettle();
@@ -217,7 +220,8 @@ void main() {
     await tester.pump(const Duration(seconds: 30));
     await tester.pumpAndSettle();
     expect(find.byType(DeviceCheckScreen), findsNothing);
-    expect(find.byKey(const Key('login-email')), findsOneWidget);
+    expect(find.byKey(const Key('login-email')), findsNothing);
+    expect(find.byKey(const Key('auth-state-card')), findsOneWidget);
     expect(find.textContaining('Аккаунт заблокирован.'), findsOneWidget);
   });
 
@@ -241,6 +245,7 @@ void main() {
     await tester.tap(find.byKey(const Key('sign-in')));
     await tester.pumpAndSettle();
     await openProfile(tester);
+    await scrollTo(tester, find.byKey(const Key('sign-out')));
     await tester.tap(find.byKey(const Key('sign-out')));
     await tester.pumpAndSettle();
     final field = tester.widget<TextField>(
@@ -291,14 +296,14 @@ void main() {
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump();
       try {
-        expect(find.text('Профиль пассажира'), findsOneWidget);
+        expect(find.byType(ProfileScreen), findsOneWidget);
         expect(find.byKey(const Key('background-privacy-cover')), findsNothing);
       } finally {
         repository.accessPending = null;
         pending.complete(testAccess());
         await tester.pumpAndSettle();
       }
-      expect(find.text('Профиль пассажира'), findsOneWidget);
+      expect(find.byType(ProfileScreen), findsOneWidget);
     },
   );
 

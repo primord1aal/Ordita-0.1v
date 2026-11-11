@@ -362,39 +362,37 @@ class StateBadge extends StatelessWidget {
   final String label;
   final bool good;
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: (good ? OrbitaColors.accent : OrbitaColors.muted).withValues(
-        alpha: 0.10,
+  Widget build(BuildContext context) {
+    final palette = OrbitaPalette.of(context);
+    final color = good ? palette.success : palette.muted;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
       ),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ExcludeSemantics(
-            child: Icon(
-              good ? Icons.check_circle_outline : Icons.radio_button_unchecked,
-              size: 16,
-              color: good ? OrbitaColors.accent : OrbitaColors.muted,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                color: good ? OrbitaColors.accent : OrbitaColors.muted,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ExcludeSemantics(
+              child: Icon(
+                good
+                    ? Icons.check_circle_outline
+                    : Icons.radio_button_unchecked,
+                size: 16,
+                color: color,
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(label, style: TextStyle(fontSize: 13, color: color)),
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class FullWidthAction extends StatelessWidget {

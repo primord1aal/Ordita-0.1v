@@ -8,6 +8,7 @@ import 'package:orbita_mobile/src/app.dart';
 import 'package:orbita_mobile/src/auth/auth_repository.dart';
 import 'package:orbita_mobile/src/maps/map_settings.dart';
 import 'package:orbita_mobile/src/screens/map_picker_screen.dart';
+import 'package:orbita_mobile/src/screens/preview_screens.dart';
 
 import 'fake_auth_repository.dart';
 import 'fake_device.dart';
@@ -250,7 +251,7 @@ void main() {
     await openProfile(tester);
     await tester.pump(const Duration(seconds: 30));
     await tester.pumpAndSettle();
-    expect(find.text('Профиль пассажира'), findsOneWidget);
+    expect(find.byType(ProfileScreen), findsOneWidget);
     await tester.tap(find.byKey(const Key('nav-0')));
     await tester.pumpAndSettle();
     await scrollTo(tester, find.byKey(const Key('pickup')), delta: -180);
@@ -278,7 +279,9 @@ void main() {
     await tester.pump(const Duration(seconds: 30));
     await tester.pumpAndSettle();
     expect(find.byType(MapPickerScreen), findsNothing);
-    expect(find.byKey(const Key('login-email')), findsOneWidget);
+    expect(find.byKey(const Key('login-email')), findsNothing);
+    expect(find.byKey(const Key('auth-state-card')), findsOneWidget);
+    expect(find.text('Доступ ограничен'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

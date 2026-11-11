@@ -87,7 +87,9 @@ void main() {
       final device = FakeDevice();
       await openPreview(tester, 'Водитель', device: device);
       await openProfile(tester);
-      expect(find.text('Профиль водителя'), findsOneWidget);
+      expect(find.byType(ProfileScreen), findsOneWidget);
+      await tester.tap(find.text('О приложении'));
+      await tester.pumpAndSettle();
       await scrollTo(tester, find.text('Настройки приложения'));
       await tester.tap(find.text('Настройки приложения'));
       await tester.pumpAndSettle();

@@ -32,7 +32,8 @@ void main() {
           role == UserRole.driver ? findsOneWidget : findsNothing,
         );
         if (role == UserRole.admin) {
-          expect(find.textContaining('Администратор:'), findsOneWidget);
+          expect(find.text('Администратор'), findsOneWidget);
+          expect(find.textContaining('Права подтверждены.'), findsOneWidget);
         }
         await tester.pumpWidget(const SizedBox());
       },
@@ -57,7 +58,12 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(PassengerScreen), findsNothing);
         expect(find.byType(DriverScreen), findsNothing);
-        expect(find.text('Выйти'), findsOneWidget);
+        expect(
+          find.text(
+            status == AccessStatus.blocked ? 'К экрану входа' : 'Выйти',
+          ),
+          findsOneWidget,
+        );
         await tester.pumpWidget(const SizedBox());
       },
     );

@@ -64,6 +64,9 @@ Future<void> openProfile(WidgetTester tester) async {
 
 Future<void> openCheck(WidgetTester tester, String label) async {
   await openProfile(tester);
+  await scrollTo(tester, find.text('О приложении'));
+  await tester.tap(find.text('О приложении'));
+  await tester.pumpAndSettle();
   await scrollTo(tester, find.text(label));
   await tester.tap(find.text(label));
   await tester.pumpAndSettle();

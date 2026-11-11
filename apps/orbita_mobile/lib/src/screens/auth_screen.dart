@@ -121,6 +121,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             addressServiceFactory: widget.addressServiceFactory,
                             tileSessionFactory: widget.tileSessionFactory,
                             accountPanel: _accountPanel(visible),
+                            onSignOut: _controller.signOut,
                           ),
                   ),
                 ),
@@ -160,56 +161,83 @@ class _AuthScreenState extends State<AuthScreen> {
     },
   );
 
-  Widget _accountPanel(ServerAccess access) => SurfaceCard(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const StateBadge('Аккаунт проверен', good: true),
-        if (access.displayName.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(access.displayName),
+  Widget _accountPanel(ServerAccess access) {
+    final palette = OrbitaPalette.of(context);
+    final role = access.role == UserRole.driver ? 'Водитель' : 'Пассажир';
+    final name = access.displayName.trim().isNotEmpty
+        ? access.displayName.trim()
+        : access.role == UserRole.driver
+        ? 'Аккаунт водителя'
+        : 'Аккаунт пассажира';
+    final initials = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .take(2)
+        .map((part) => part.characters.first)
+        .join()
+        .toUpperCase();
+    return SurfaceCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                constraints: const BoxConstraints(minWidth: 64, minHeight: 64),
+                padding: const EdgeInsets.all(12),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: palette.accentSoft,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  initials,
+                  style: Theme.of(context).textTheme.titleMedium
+                      ?.copyWith(color: palette.accent),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      role,
+                      style: Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(color: palette.muted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const StateBadge('Аккаунт проверен', good: true),
         ],
-        const SizedBox(height: 10),
-        Text(
-          access.role == UserRole.driver ? 'Роль: водитель' : 'Роль: пассажир',
-        ),
-        const SizedBox(height: 16),
-        FullWidthAction(
-          'Выйти',
-          key: const Key('sign-out'),
-          secondary: true,
-          onPressed: _controller.signOut,
-        ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 
   Widget _adminPage() => BrandedAccountPage(
-    child: SurfaceCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const StateBadge('Аккаунт проверен', good: true),
-          const SizedBox(height: 16),
-          const Text(
-            'Администратор: управление выполняется отдельно в веб-панели.',
-          ),
-          if (kDebugMode) ...[
-            const SizedBox(height: 20),
-            FullWidthAction(
+    loginLayout: true,
+    child: _AuthStateCard(
+      icon: Icons.check,
+      confirmed: true,
+      title: 'Администратор',
+      message: 'Права подтверждены. Пассажирские и водительские действия для этого аккаунта недоступны.',
+      primary: kDebugMode
+          ? FullWidthAction(
               'Проверка устройства',
               secondary: true,
               onPressed: () => Navigator.pushNamed(context, '/device-check'),
-            ),
-          ],
-          const SizedBox(height: 16),
-          FullWidthAction(
-            'Выйти',
-            key: const Key('sign-out'),
-            secondary: true,
-            onPressed: _controller.signOut,
-          ),
-        ],
+            )
+          : null,
+      secondary: TextButton(
+        key: const Key('sign-out'),
+        onPressed: _controller.signOut,
+        child: const Text('Выйти'),
       ),
     ),
   );
@@ -217,134 +245,177 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget _loginPage() {
     final phase = _controller.busy ? _resolvedPhase : _controller.phase;
     final hasSession = _controller.session != null;
-    final showFields =
-        !hasSession ||
-        phase != AuthPhase.failure ||
-        _controller.checkKind == AuthCheckKind.signingIn;
+    final showFields = !hasSession;
     final message = _message(phase);
     final enabled = !_controller.busy && widget.repository.configured;
     final editingEnabled =
         !_controller.busy || _controller.checkKind == AuthCheckKind.validating;
+    if (!showFields) {
+      final (title, icon) = switch (phase) {
+        AuthPhase.failure => (
+          'Не удалось подключиться',
+          Icons.wifi_off_outlined,
+        ),
+        AuthPhase.noRole => ('Нужна роль', Icons.person_outline),
+        AuthPhase.blocked ||
+        AuthPhase.revoked => ('Доступ ограничен', Icons.warning_amber_outlined),
+        _ => ('Требуется проверка', Icons.info_outline),
+      };
+      final restricted =
+          phase == AuthPhase.blocked || phase == AuthPhase.revoked;
+      return BrandedAccountPage(
+        loginLayout: true,
+        child: _AuthStateCard(
+          icon: icon,
+          restricted: restricted,
+          title: title,
+          message: message ?? 'Проверьте состояние аккаунта.',
+          primary: FullWidthAction(
+            restricted
+                ? 'К экрану входа'
+                : phase == AuthPhase.failure
+                ? 'Попробовать снова'
+                : 'Проверить снова',
+            key: Key(restricted ? 'auth-exit' : 'auth-retry'),
+            onPressed: _controller.busy
+                ? null
+                : restricted
+                ? _controller.signOut
+                : _controller.retry,
+          ),
+          secondary: restricted
+              ? TextButton(
+                  key: const Key('auth-retry'),
+                  onPressed: _controller.busy ? null : _controller.retry,
+                  child: const Text('Проверить снова'),
+                )
+              : TextButton(
+                  key: const Key('sign-out'),
+                  onPressed: _controller.busy ? null : _controller.signOut,
+                  child: Text(
+                    phase == AuthPhase.failure ? 'К экрану входа' : 'Выйти',
+                  ),
+                ),
+        ),
+      );
+    }
     return BrandedAccountPage(
       loginLayout: true,
-      child: Padding(
-        padding: EdgeInsets.zero,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            showFields ? 'С возвращением' : 'Подключение к аккаунту',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          if (showFields) ...[
+            const SizedBox(height: 8),
             Text(
-              showFields ? 'С возвращением' : 'Подключение к аккаунту',
-              style: Theme.of(context).textTheme.titleLarge,
+              'Войди в свой аккаунт',
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: OrbitaPalette.of(context).muted),
             ),
-            if (showFields) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Войди в свой аккаунт',
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(color: OrbitaPalette.of(context).muted),
+          ],
+          if (message != null) ...[
+            const SizedBox(height: 16),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                message,
+                key: const Key('auth-status'),
+                style: TextStyle(color: OrbitaPalette.of(context).error),
               ),
-            ],
-            if (message != null) ...[
-              const SizedBox(height: 16),
-              Semantics(
-                liveRegion: true,
-                child: Text(
-                  message,
-                  key: const Key('auth-status'),
-                  style: const TextStyle(color: OrbitaColors.warning),
-                ),
+            ),
+          ],
+          if (showFields) ...[
+            const SizedBox(height: 32),
+            const Text('Почта'),
+            const SizedBox(height: 8),
+            Semantics(
+              label: 'Электронная почта',
+              child: TextField(
+                controller: _email,
+                key: const Key('login-email'),
+                enabled: editingEnabled,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: const InputDecoration(hintText: 'Твоя почта'),
               ),
-            ],
-            if (showFields) ...[
-              const SizedBox(height: 32),
-              const Text('Почта'),
-              const SizedBox(height: 8),
-              Semantics(
-                label: 'Электронная почта',
-                child: TextField(
-                  controller: _email,
-                  key: const Key('login-email'),
-                  enabled: editingEnabled,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: const InputDecoration(hintText: 'Твоя почта'),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text('Пароль'),
-              const SizedBox(height: 8),
-              Semantics(
-                label: 'Пароль',
-                child: TextField(
-                  controller: _password,
-                  key: const Key('login-password'),
-                  enabled: editingEnabled,
-                  obscureText: _obscurePassword,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  enableIMEPersonalizedLearning: false,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => _signIn(),
-                  decoration: InputDecoration(
-                    hintText: 'Пароль',
-                    suffixIcon: IconButton(
-                      tooltip: _obscurePassword
-                          ? 'Показать пароль'
-                          : 'Скрыть пароль',
-                      onPressed: !editingEnabled
-                          ? null
-                          : () => setState(
-                              () => _obscurePassword = !_obscurePassword,
-                            ),
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
-                      ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Пароль'),
+            const SizedBox(height: 8),
+            Semantics(
+              label: 'Пароль',
+              child: TextField(
+                controller: _password,
+                key: const Key('login-password'),
+                enabled: editingEnabled,
+                obscureText: _obscurePassword,
+                autocorrect: false,
+                enableSuggestions: false,
+                enableIMEPersonalizedLearning: false,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _signIn(),
+                decoration: InputDecoration(
+                  hintText: 'Пароль',
+                  suffixIcon: IconButton(
+                    tooltip: _obscurePassword
+                        ? 'Показать пароль'
+                        : 'Скрыть пароль',
+                    onPressed: !editingEnabled
+                        ? null
+                        : () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              FullWidthAction(
-                _controller.busy &&
-                        _controller.checkKind == AuthCheckKind.signingIn
-                    ? 'Входим…'
-                    : 'Войти',
-                key: const Key('sign-in'),
-                onPressed: enabled ? _signIn : null,
-              ),
-              if (!widget.repository.configured) ...[
-                const SizedBox(height: 12),
-                const Text('Вход не настроен в этой тестовой версии.'),
-              ],
-            ],
-            if (_controller.busy) ...[
-              const SizedBox(height: 16),
-              const LinearProgressIndicator(minHeight: 2),
-            ],
-            if (hasSession || phase == AuthPhase.failure) ...[
-              const SizedBox(height: 16),
-              FullWidthAction(
-                'Повторить',
-                key: const Key('auth-retry'),
-                secondary: true,
-                onPressed: _controller.busy ? null : _controller.retry,
-              ),
-            ],
-            if (hasSession) ...[
+            ),
+            const SizedBox(height: 20),
+            FullWidthAction(
+              _controller.busy &&
+                      _controller.checkKind == AuthCheckKind.signingIn
+                  ? 'Входим…'
+                  : 'Войти',
+              key: const Key('sign-in'),
+              onPressed: enabled ? _signIn : null,
+            ),
+            if (!widget.repository.configured) ...[
               const SizedBox(height: 12),
-              FullWidthAction(
-                'Выйти',
-                key: const Key('sign-out'),
-                secondary: true,
-                onPressed: _controller.busy ? null : _controller.signOut,
-              ),
+              const Text('Вход не настроен в этой тестовой версии.'),
             ],
           ],
-        ),
+          if (_controller.busy) ...[
+            const SizedBox(height: 16),
+            const LinearProgressIndicator(minHeight: 2),
+          ],
+          if (hasSession || phase == AuthPhase.failure) ...[
+            const SizedBox(height: 16),
+            FullWidthAction(
+              'Повторить',
+              key: const Key('auth-retry'),
+              secondary: true,
+              onPressed: _controller.busy ? null : _controller.retry,
+            ),
+          ],
+          if (hasSession) ...[
+            const SizedBox(height: 12),
+            FullWidthAction(
+              'Выйти',
+              key: const Key('sign-out'),
+              secondary: true,
+              onPressed: _controller.busy ? null : _controller.signOut,
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -366,4 +437,88 @@ class _AuthScreenState extends State<AuthScreen> {
           ? 'Сервис временно недоступен. Повторите попытку.'
           : _controller.failure?.message ?? 'Не удалось подтвердить доступ.',
   };
+}
+
+class _AuthStateCard extends StatelessWidget {
+  const _AuthStateCard({
+    required this.icon,
+    required this.title,
+    required this.message,
+    this.primary,
+    this.secondary,
+    this.confirmed = false,
+    this.restricted = false,
+  });
+  final IconData icon;
+  final String title, message;
+  final Widget? primary, secondary;
+  final bool confirmed, restricted;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = OrbitaPalette.of(context);
+    return Container(
+      key: const Key('auth-state-card'),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: palette.outline),
+        boxShadow: [
+          BoxShadow(
+            color: palette.text.withValues(alpha: 0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 60,
+              height: 60,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: palette.accentSoft,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Icon(
+                icon,
+                color: confirmed
+                    ? palette.success
+                    : restricted
+                    ? palette.error
+                    : palette.warning,
+                size: 28,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: 12),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              message,
+              key: const Key('auth-status'),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(color: palette.muted),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Divider(color: palette.divider),
+          if (primary != null) ...[const SizedBox(height: 12), primary!],
+          if (secondary != null) ...[const SizedBox(height: 8), secondary!],
+        ],
+      ),
+    );
+  }
 }

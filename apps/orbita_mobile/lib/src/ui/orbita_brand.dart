@@ -180,14 +180,21 @@ class BrandedAccountPage extends StatelessWidget {
                   ),
                 ),
                 Expanded(
-                  child: SingleChildScrollView(
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: const EdgeInsets.fromLTRB(20, 38, 20, 24),
-                    child: Center(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => SingleChildScrollView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 500),
-                        child: child,
+                        constraints: BoxConstraints(
+                          minHeight: math.max(0, constraints.maxHeight - 48),
+                        ),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 500),
+                            child: child,
+                          ),
+                        ),
                       ),
                     ),
                   ),
