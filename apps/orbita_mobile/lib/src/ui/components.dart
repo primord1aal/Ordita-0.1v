@@ -205,8 +205,12 @@ class AdaptiveNavigation extends StatelessWidget {
       Icons.history,
       Icons.person_outline,
     ];
-    return Material(
-      color: OrbitaColors.background,
+    final palette = OrbitaPalette.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border(top: BorderSide(color: palette.divider)),
+      ),
       child: SafeArea(
         top: false,
         child: Padding(
@@ -228,9 +232,7 @@ class AdaptiveNavigation extends StatelessWidget {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 3),
                           child: Material(
-                            color: selected == i
-                                ? OrbitaColors.accent.withValues(alpha: 0.12)
-                                : Colors.transparent,
+                            color: Colors.transparent,
                             borderRadius: BorderRadius.circular(16),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(16),
@@ -252,8 +254,8 @@ class AdaptiveNavigation extends StatelessWidget {
                                         icons[i],
                                         size: 24,
                                         color: selected == i
-                                            ? OrbitaColors.accent
-                                            : OrbitaColors.muted,
+                                            ? palette.accent
+                                            : palette.muted,
                                       ),
                                       const SizedBox(height: 5),
                                       Text(
@@ -266,8 +268,8 @@ class AdaptiveNavigation extends StatelessWidget {
                                               ? FontWeight.w700
                                               : FontWeight.w500,
                                           color: selected == i
-                                              ? OrbitaColors.accent
-                                              : OrbitaColors.muted,
+                                              ? palette.text
+                                              : palette.muted,
                                         ),
                                       ),
                                     ],

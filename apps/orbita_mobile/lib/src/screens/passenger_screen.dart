@@ -113,32 +113,61 @@ class _PassengerScreenState extends State<PassengerScreen> {
   Widget _field(AddressField field) {
     final pickup = field == AddressField.pickup;
     final item = _controller.draft(field);
+    final palette = OrbitaPalette.of(context);
+    final tablet = MediaQuery.sizeOf(context).width >= 700;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          key: Key(pickup ? 'pickup' : 'destination'),
-          controller: pickup ? _pickup : _destination,
-          maxLines: null,
-          maxLength: 250,
-          enabled: _controller.enabled,
-          onTap: () => _controller.focus(field),
-          onChanged: (value) => _controller.edit(field, value),
-          onSubmitted: (_) => _controller.searchNow(field),
-          textInputAction: TextInputAction.search,
-          decoration: InputDecoration(
-            labelText: pickup ? 'Откуда' : 'Куда',
-            prefixIcon: Icon(pickup ? Icons.trip_origin : Icons.place_outlined),
-            counterText: '',
-            suffixIcon: IconButton(
-              key: Key(pickup ? 'pickup-on-map' : 'destination-on-map'),
-              tooltip: pickup
-                  ? 'Выбрать отправление на карте'
-                  : 'Выбрать назначение на карте',
-              onPressed: _tiles == null || !_controller.enabled
-                  ? null
-                  : () => _choosePoint(field),
-              icon: const Icon(Icons.map_outlined),
+        Container(
+          decoration: BoxDecoration(
+            color: Color.lerp(palette.surface, palette.surfaceVariant, 0.22),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Color.lerp(palette.outline, palette.surface, 0.52)!,
+            ),
+          ),
+          child: TextField(
+            key: Key(pickup ? 'pickup' : 'destination'),
+            controller: pickup ? _pickup : _destination,
+            minLines: 1,
+            maxLines: null,
+            maxLength: 250,
+            enabled: _controller.enabled,
+            style: TextStyle(
+              fontSize: tablet ? 18 : 15,
+              fontWeight: FontWeight.w500,
+              color: palette.text,
+            ),
+            onTap: () => _controller.focus(field),
+            onChanged: (value) => _controller.edit(field, value),
+            onSubmitted: (_) => _controller.searchNow(field),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              labelText: pickup ? 'Откуда' : 'Куда',
+              hintText: 'Введите адрес',
+              floatingLabelBehavior: FloatingLabelBehavior.always,
+              prefixIcon: Icon(
+                pickup ? Icons.trip_origin : Icons.place_outlined,
+                color: pickup ? palette.text : palette.accent,
+              ),
+              counterText: '',
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              errorBorder: InputBorder.none,
+              focusedErrorBorder: InputBorder.none,
+              filled: false,
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
+              suffixIcon: IconButton(
+                key: Key(pickup ? 'pickup-on-map' : 'destination-on-map'),
+                tooltip: pickup
+                    ? 'Выбрать отправление на карте'
+                    : 'Выбрать назначение на карте',
+                onPressed: _tiles == null || !_controller.enabled
+                    ? null
+                    : () => _choosePoint(field),
+                icon: const Icon(Icons.map_outlined),
+              ),
             ),
           ),
         ),
@@ -147,7 +176,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               'Точка выбрана: ${place.point.caption}',
-              style: const TextStyle(fontSize: 12),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
         if (_controller.activeField == field) ...[
@@ -157,27 +186,37 @@ class _PassengerScreenState extends State<PassengerScreen> {
               child: LinearProgressIndicator(minHeight: 2),
             ),
           for (final place in item.suggestions)
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 4,
-                vertical: 4,
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Material(
+                color: palette.surface,
+                borderRadius: BorderRadius.circular(12),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  title: Text(place.label),
+                  leading: Icon(Icons.place_outlined, color: palette.accent),
+                  onTap: !_controller.enabled
+                      ? null
+                      : () {
+                          _controller.select(field, place);
+                          FocusScope.of(context).unfocus();
+                        },
+                ),
               ),
-              title: Text(place.label),
-              leading: const Icon(
-                Icons.place_outlined,
-                color: OrbitaColors.accent,
-              ),
-              onTap: !_controller.enabled
-                  ? null
-                  : () {
-                      _controller.select(field, place);
-                      FocusScope.of(context).unfocus();
-                    },
             ),
           if (item.message != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: Semantics(liveRegion: true, child: Text(item.message!)),
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  item.message!,
+                  style: TextStyle(color: palette.muted),
+                ),
+              ),
             ),
           if (item.message != null &&
               item.place == null &&
@@ -199,64 +238,107 @@ class _PassengerScreenState extends State<PassengerScreen> {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: _controller,
-    builder: (context, _) => CustomScrollView(
-      key: const Key('passenger-scroll'),
-      slivers: [
-        const SliverToBoxAdapter(child: BrandHeader()),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-          sliver: SliverList.list(
-            children: [
-              OrbitaMap(
-                key: const Key('passenger-map'),
-                height: (MediaQuery.sizeOf(context).height * 0.36).clamp(
-                  230,
-                  420,
+    builder: (context, _) {
+      final palette = OrbitaPalette.of(context);
+      final size = MediaQuery.sizeOf(context);
+      final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+      final tablet = size.width >= 700;
+      final availableHeight = size.height - keyboard;
+      final mapHeight = (availableHeight - (tablet ? 470 : 390)).clamp(
+        tablet && size.height >= 600 ? 320.0 : 180.0,
+        tablet ? 820.0 : 500.0,
+      );
+      final panelInset = tablet ? 28.0 : 18.0;
+      return CustomScrollView(
+        key: const Key('passenger-scroll'),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        slivers: [
+          const SliverToBoxAdapter(child: BrandHeader()),
+          SliverToBoxAdapter(
+            child: OrbitaMap(
+              key: const Key('passenger-map'),
+              height: mapHeight,
+              borderRadius: BorderRadius.zero,
+              session: _tiles,
+              enabled: _controller.enabled && !_choosing,
+              pickup: _controller.pickup.place,
+              destination: _controller.destination.place,
+              focusPoint: _controller
+                  .draft(_controller.activeField)
+                  .place
+                  ?.point,
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Container(
+              decoration: BoxDecoration(
+                color: palette.surface,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
                 ),
-                session: _tiles,
-                enabled: _controller.enabled && !_choosing,
-                pickup: _controller.pickup.place,
-                destination: _controller.destination.place,
-                focusPoint: _controller
-                    .draft(_controller.activeField)
-                    .place
-                    ?.point,
-              ),
-              if (_tiles != null) const MapAttribution(),
-              const SizedBox(height: 16),
-              SurfaceCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _field(AddressField.pickup),
-                    const SizedBox(height: 12),
-                    _field(AddressField.destination),
-                    const SizedBox(height: 16),
-                    const FullWidthAction(
-                      'Заказать такси',
-                      key: Key('create-order'),
-                      onPressed: null,
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Создание заказов ещё не подключено.',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              if (_tiles != null)
-                const Padding(
-                  padding: EdgeInsets.only(top: 12),
-                  child: Text(
-                    'Для поиска адресов введённый текст и выбранная точка передаются Geoapify. Черновик не отправляется в службу такси.',
-                    style: TextStyle(fontSize: 12),
+                border: Border(
+                  top: BorderSide(
+                    color: Color.lerp(palette.outline, palette.surface, 0.52)!,
                   ),
                 ),
-            ],
+                boxShadow: [
+                  BoxShadow(
+                    color: palette.text.withValues(alpha: 0.08),
+                    blurRadius: 14,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              padding: EdgeInsets.fromLTRB(panelInset, 10, panelInset, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: palette.outline,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Куда едем?',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 12),
+                  _field(AddressField.pickup),
+                  const SizedBox(height: 8),
+                  _field(AddressField.destination),
+                  const SizedBox(height: 16),
+                  const FullWidthAction(
+                    'Заказать такси',
+                    key: Key('create-order'),
+                    onPressed: null,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Создание заказов ещё не подключено.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-      ],
-    ),
+          if (_tiles != null)
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(18, 12, 18, 20),
+                child: Text(
+                  'Для поиска адресов введённый текст и выбранная точка передаются Geoapify. Черновик не отправляется в службу такси.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
   );
 }

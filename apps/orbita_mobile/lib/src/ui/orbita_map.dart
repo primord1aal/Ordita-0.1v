@@ -20,6 +20,7 @@ class OrbitaMap extends StatefulWidget {
     this.focusPoint,
     this.picking = false,
     this.onCenterChanged,
+    this.borderRadius = const BorderRadius.all(Radius.circular(18)),
     super.key,
   });
   final MapTileSession? session;
@@ -29,6 +30,7 @@ class OrbitaMap extends StatefulWidget {
   final GeoPoint initialCenter;
   final GeoPoint? focusPoint;
   final ValueChanged<GeoPoint>? onCenterChanged;
+  final BorderRadiusGeometry borderRadius;
   @override
   State<OrbitaMap> createState() => _OrbitaMapState();
 }
@@ -76,16 +78,17 @@ class _OrbitaMapState extends State<OrbitaMap> {
       SizedBox(
         height: widget.height,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: widget.borderRadius,
           child: widget.session == null
-              ? const ColoredBox(
-                  color: OrbitaColors.card,
+              ? ColoredBox(
+                  color: OrbitaPalette.of(context).mapLand,
                   child: Center(
                     child: Padding(
-                      padding: EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(20),
                       child: Text(
                         'Карта пока не подключена. Адреса можно ввести вручную.',
                         textAlign: TextAlign.center,
+                        style: TextStyle(color: OrbitaPalette.of(context).text),
                       ),
                     ),
                   ),
@@ -102,7 +105,7 @@ class _OrbitaMapState extends State<OrbitaMap> {
                         initialZoom: 13,
                         minZoom: 4,
                         maxZoom: 18,
-                        backgroundColor: OrbitaColors.card,
+                        backgroundColor: OrbitaPalette.of(context).mapLand,
                         onMapReady: () => _ready = true,
                         interactionOptions: InteractionOptions(
                           flags: widget.enabled && widget.picking
@@ -142,11 +145,15 @@ class _OrbitaMapState extends State<OrbitaMap> {
                         MarkerLayer(
                           markers: [
                             for (final entry in [
-                              (widget.pickup, 'Откуда', OrbitaColors.accent),
+                              (
+                                widget.pickup,
+                                'Откуда',
+                                OrbitaPalette.of(context).text,
+                              ),
                               (
                                 widget.destination,
                                 'Куда',
-                                OrbitaColors.warning,
+                                OrbitaPalette.of(context).accent,
                               ),
                             ])
                               if (entry.$1 case final place?)
@@ -160,11 +167,58 @@ class _OrbitaMapState extends State<OrbitaMap> {
                                   alignment: Alignment.topCenter,
                                   child: Tooltip(
                                     message: '${entry.$2}: ${place.label}',
-                                    child: Icon(
-                                      Icons.location_pin,
-                                      color: entry.$3,
-                                      size: 44,
-                                    ),
+                                    child: entry.$2 == 'Откуда'
+                                        ? Center(
+                                            child: Container(
+                                              width: 32,
+                                              height: 32,
+                                              alignment: Alignment.center,
+                                              decoration: BoxDecoration(
+                                                color: entry.$3,
+                                                borderRadius:
+                                                    BorderRadius.circular(9),
+                                                border: Border.all(
+                                                  color: OrbitaPalette.of(
+                                                    context,
+                                                  ).surface,
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                'А',
+                                                style: TextStyle(
+                                                  color: OrbitaPalette.of(
+                                                    context,
+                                                  ).surface,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                        : Stack(
+                                            alignment: Alignment.topCenter,
+                                            children: [
+                                              Icon(
+                                                Icons.location_pin,
+                                                color: entry.$3,
+                                                size: 44,
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                  top: 8,
+                                                ),
+                                                child: Text(
+                                                  'Б',
+                                                  style: TextStyle(
+                                                    color: OrbitaPalette.of(
+                                                      context,
+                                                    ).onAccent,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                   ),
                                 ),
                           ],
@@ -172,20 +226,21 @@ class _OrbitaMapState extends State<OrbitaMap> {
                       ],
                     ),
                     if (widget.picking)
-                      const IgnorePointer(
+                      IgnorePointer(
                         child: Center(
                           child: Icon(
-                            Icons.add,
-                            color: OrbitaColors.accent,
+                            Icons.center_focus_strong,
+                            color: OrbitaPalette.of(context).text,
                             size: 46,
                           ),
                         ),
                       ),
                     Positioned(
-                      top: 8,
+                      top: widget.picking ? 8 : null,
+                      bottom: widget.picking ? null : 8,
                       right: 8,
                       child: Material(
-                        color: OrbitaColors.background,
+                        color: OrbitaPalette.of(context).surface,
                         borderRadius: BorderRadius.circular(14),
                         child: Column(
                           children: [
@@ -212,6 +267,12 @@ class _OrbitaMapState extends State<OrbitaMap> {
                           ],
                         ),
                       ),
+                    ),
+                    Positioned(
+                      left: 8,
+                      right: 62,
+                      bottom: 8,
+                      child: const MapAttribution(),
                     ),
                   ],
                 ),
@@ -268,24 +329,32 @@ class MapAttribution extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => Wrap(
-    alignment: WrapAlignment.end,
-    children: [
-      for (final item in const [
-        ('© OpenStreetMap', 'https://www.openstreetmap.org/copyright'),
-        ('© OpenMapTiles', 'https://openmaptiles.org/'),
-        ('© CARTO', 'https://carto.com/attributions'),
-        ('Powered by Geoapify', 'https://www.geoapify.com/'),
-      ])
-        TextButton(
-          style: TextButton.styleFrom(
-            textStyle: Theme.of(context).textTheme.labelSmall!
-                .copyWith(fontSize: 11),
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: OrbitaPalette.of(context).surface.withValues(alpha: 0.92),
+      borderRadius: BorderRadius.circular(9),
+    ),
+    child: Wrap(
+      alignment: WrapAlignment.start,
+      children: [
+        for (final item in const [
+          ('© OpenStreetMap', 'https://www.openstreetmap.org/copyright'),
+          ('© OpenMapTiles', 'https://openmaptiles.org/'),
+          ('© CARTO', 'https://carto.com/attributions'),
+          ('Powered by Geoapify', 'https://www.geoapify.com/'),
+        ])
+          TextButton(
+            style: TextButton.styleFrom(
+              textStyle: Theme.of(context).textTheme.labelSmall!
+                  .copyWith(fontSize: 11),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            ),
+            onPressed: () => unawaited(_open(context, item.$2)),
+            child: Text(item.$1),
           ),
-          onPressed: () => unawaited(_open(context, item.$2)),
-          child: Text(item.$1),
-        ),
-    ],
+      ],
+    ),
   );
 }

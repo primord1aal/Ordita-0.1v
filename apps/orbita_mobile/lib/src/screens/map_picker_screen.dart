@@ -35,48 +35,61 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
           excluding: !widget.controller.foreground,
           child: Scaffold(
             appBar: AppBar(
-              title: Text(
-                widget.field == AddressField.pickup ? 'Откуда' : 'Куда',
-              ),
+              title: const Text('Выбор точки'),
+              backgroundColor: OrbitaPalette.of(context).surface,
             ),
             body: SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) => SingleChildScrollView(
                   child: Column(
                     children: [
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
                         child: Text(
                           'Передвиньте карту или нажмите на нужную точку.',
+                          style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: OrbitaMap(
-                          height: (constraints.maxHeight * 0.60).clamp(
-                            240,
-                            640,
+                      OrbitaMap(
+                        height: (constraints.maxHeight * 0.55).clamp(220, 640),
+                        borderRadius: BorderRadius.zero,
+                        session: widget.session,
+                        enabled: widget.controller.enabled,
+                        initialCenter: _initial,
+                        picking: true,
+                        onCenterChanged: (point) {
+                          if (point.valid) setState(() => _point = point);
+                        },
+                      ),
+                      Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: OrbitaPalette.of(context).surface,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(24),
                           ),
-                          session: widget.session,
-                          enabled: widget.controller.enabled,
-                          initialCenter: _initial,
-                          picking: true,
-                          onCenterChanged: (point) {
-                            if (point.valid) setState(() => _point = point);
-                          },
+                          border: Border(
+                            top: BorderSide(
+                              color: OrbitaPalette.of(context).divider,
+                            ),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                        padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const MapAttribution(),
                             Text(
-                              'Выбранная точка: ${_point.caption}',
-                              style: const TextStyle(fontSize: 12),
+                              widget.field == AddressField.pickup
+                                  ? 'Адрес подачи'
+                                  : 'Пункт назначения',
+                              style: Theme.of(context).textTheme.titleLarge,
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Точка под прицелом: ${_point.caption}',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 16),
                             FullWidthAction(
                               'Выбрать точку',
                               key: const Key('confirm-map-point'),
@@ -84,6 +97,11 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
                                   widget.controller.enabled && _point.valid
                                   ? () => Navigator.pop(context, _point)
                                   : null,
+                            ),
+                            const SizedBox(height: 8),
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Вернуться к адресу'),
                             ),
                           ],
                         ),
@@ -96,9 +114,9 @@ class _MapPickerScreenState extends State<MapPickerScreen> {
           ),
         ),
         if (!widget.controller.foreground)
-          const ColoredBox(
-            key: Key('map-background-cover'),
-            color: OrbitaColors.background,
+          ColoredBox(
+            key: const Key('map-background-cover'),
+            color: OrbitaPalette.of(context).background,
           ),
       ],
     ),

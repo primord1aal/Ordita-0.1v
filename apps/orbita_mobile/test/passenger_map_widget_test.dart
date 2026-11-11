@@ -61,7 +61,7 @@ void main() {
         final tree = tester
             .getSemantics(find.byType(MapPickerScreen))
             .toStringDeep();
-        expect(tree, isNot(contains('Выбранная точка')));
+        expect(tree, isNot(contains('Точка под прицелом')));
         expect(find.byKey(const Key('map-background-cover')), findsOneWidget);
         tester.binding.handleAppLifecycleStateChanged(
           AppLifecycleState.resumed,
@@ -70,7 +70,7 @@ void main() {
         expect(find.byType(MapPickerScreen), findsOneWidget);
         expect(find.byKey(const Key('map-background-cover')), findsNothing);
         expect(
-          find.textContaining('Выбранная точка: 55.00000, 82.43000'),
+          find.textContaining('Точка под прицелом: 55.00000, 82.43000'),
           findsOneWidget,
         );
         expect(tester.takeException(), isNull);
