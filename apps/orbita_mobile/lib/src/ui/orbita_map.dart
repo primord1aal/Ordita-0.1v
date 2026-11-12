@@ -9,6 +9,8 @@ import '../maps/address_models.dart';
 import '../maps/map_tiles.dart';
 import 'theme.dart';
 
+enum MapControls { passenger, driver }
+
 class OrbitaMap extends StatefulWidget {
   const OrbitaMap({
     required this.session,
@@ -21,6 +23,7 @@ class OrbitaMap extends StatefulWidget {
     this.picking = false,
     this.onCenterChanged,
     this.borderRadius = const BorderRadius.all(Radius.circular(18)),
+    this.controls = MapControls.passenger,
     super.key,
   });
   final MapTileSession? session;
@@ -31,6 +34,7 @@ class OrbitaMap extends StatefulWidget {
   final GeoPoint? focusPoint;
   final ValueChanged<GeoPoint>? onCenterChanged;
   final BorderRadiusGeometry borderRadius;
+  final MapControls controls;
   @override
   State<OrbitaMap> createState() => _OrbitaMapState();
 }
@@ -107,7 +111,7 @@ class _OrbitaMapState extends State<OrbitaMap> {
                         child: Padding(
                           padding: const EdgeInsets.all(20),
                           child: Text(
-                            'Карта пока не подключена. Адреса можно ввести вручную.',
+                            'Карта недоступна. Адреса можно ввести вручную.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: OrbitaPalette.of(context).text,
@@ -131,7 +135,10 @@ class _OrbitaMapState extends State<OrbitaMap> {
                             backgroundColor: OrbitaPalette.of(context).mapLand,
                             onMapReady: () => _ready = true,
                             interactionOptions: InteractionOptions(
-                              flags: widget.enabled && widget.picking
+                              flags:
+                                  widget.enabled &&
+                                      (widget.picking ||
+                                          widget.controls == MapControls.driver)
                                   ? InteractiveFlag.all &
                                         ~InteractiveFlag.rotate
                                   : InteractiveFlag.none,
@@ -275,41 +282,64 @@ class _OrbitaMapState extends State<OrbitaMap> {
                           ),
                         Positioned(
                           top: widget.picking ? 8 : null,
-                          bottom: widget.picking ? null : 8,
-                          right: 8,
+                          bottom: widget.picking
+                              ? null
+                              : widget.controls == MapControls.driver
+                              ? 12
+                              : 8,
+                          right: widget.controls == MapControls.driver ? 16 : 8,
                           child: Material(
                             color: OrbitaPalette.of(context).surface,
                             borderRadius: BorderRadius.circular(14),
-                            child: Column(
-                              children: [
-                                IconButton(
-                                  tooltip: 'Приблизить карту',
-                                  onPressed: widget.enabled
-                                      ? () => _camera.move(
-                                          _camera.camera.center,
-                                          (_camera.camera.zoom + 1).clamp(
-                                            4,
-                                            18,
-                                          ),
-                                        )
-                                      : null,
-                                  icon: const Icon(Icons.add),
-                                ),
-                                IconButton(
-                                  tooltip: 'Отдалить карту',
-                                  onPressed: widget.enabled
-                                      ? () => _camera.move(
-                                          _camera.camera.center,
-                                          (_camera.camera.zoom - 1).clamp(
-                                            4,
-                                            18,
-                                          ),
-                                        )
-                                      : null,
-                                  icon: const Icon(Icons.remove),
-                                ),
-                              ],
-                            ),
+                            child: widget.controls == MapControls.driver
+                                ? SizedBox(
+                                    width: 48,
+                                    height: 48,
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: OrbitaPalette.of(context)
+                                              .outline,
+                                        ),
+                                        borderRadius: BorderRadius.circular(17),
+                                      ),
+                                      child: IconButton(
+                                        tooltip: 'Моё местоположение',
+                                        onPressed: null,
+                                        icon: const Icon(Icons.my_location),
+                                      ),
+                                    ),
+                                  )
+                                : Column(
+                                    children: [
+                                      IconButton(
+                                        tooltip: 'Приблизить карту',
+                                        onPressed: widget.enabled
+                                            ? () => _camera.move(
+                                                _camera.camera.center,
+                                                (_camera.camera.zoom + 1).clamp(
+                                                  4,
+                                                  18,
+                                                ),
+                                              )
+                                            : null,
+                                        icon: const Icon(Icons.add),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Отдалить карту',
+                                        onPressed: widget.enabled
+                                            ? () => _camera.move(
+                                                _camera.camera.center,
+                                                (_camera.camera.zoom - 1).clamp(
+                                                  4,
+                                                  18,
+                                                ),
+                                              )
+                                            : null,
+                                        icon: const Icon(Icons.remove),
+                                      ),
+                                    ],
+                                  ),
                           ),
                         ),
                         if (!attributionBelow)
@@ -325,7 +355,7 @@ class _OrbitaMapState extends State<OrbitaMap> {
           ),
           if (widget.session != null && attributionBelow)
             const Padding(
-              padding: EdgeInsets.only(top: 4),
+              padding: EdgeInsets.only(top: 4, bottom: 16),
               child: MapAttribution(compact: true),
             ),
           if (_tileError)

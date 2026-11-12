@@ -108,7 +108,7 @@ void main() {
       await scene(role: UserRole.driver);
       expect(find.byType(DriverScreen), findsOneWidget);
       expect(find.byKey(const Key('driver-demo-entry')), findsNothing);
-      expect(find.text('Линия не подключена'), findsOneWidget);
+      expect(find.text('Не на линии'), findsOneWidget);
       await checkNavigation(tester);
       await reachable(const Key('shift-control'));
 

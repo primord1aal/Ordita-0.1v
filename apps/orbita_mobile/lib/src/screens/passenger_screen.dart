@@ -320,7 +320,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Создание заказов ещё не подключено.',
+                    'Заказ недоступен.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],

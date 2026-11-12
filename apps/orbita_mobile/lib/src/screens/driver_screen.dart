@@ -25,33 +25,14 @@ class DriverScreen extends StatelessWidget {
   final MapTileSession Function(String)? tileSessionFactory;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => CustomScrollView(
-      key: const Key('driver-scroll'),
-      slivers: [
-        const SliverToBoxAdapter(child: BrandHeader()),
-        const SliverPadding(
-          padding: EdgeInsets.fromLTRB(18, 0, 18, 12),
-          sliver: SliverToBoxAdapter(child: ShiftControl()),
-        ),
-        SliverToBoxAdapter(
-          child: DriverMap(
-            key: const Key('driver-map'),
-            mapSettings: mapSettings,
-            enabled: enabled,
-            foreground: foreground,
-            height: (constraints.maxHeight - 270).clamp(220.0, 1100.0),
-            tileSessionFactory: tileSessionFactory,
-          ),
-        ),
-        const SliverToBoxAdapter(
-          child: _DriverPanel(
-            title: 'Заказы',
-            children: [Text('Нет активных заказов')],
-          ),
-        ),
-      ],
-    ),
+  Widget build(BuildContext context) => _DriverBody(
+    mapSettings: mapSettings,
+    enabled: enabled,
+    foreground: foreground,
+    tileSessionFactory: tileSessionFactory,
+    slider: const ShiftControl(),
+    panel: const _EmptyPanel(online: false),
+    panelHeight: _EmptyPanel.height(context),
   );
 }
 
@@ -71,12 +52,19 @@ enum _DemoPhase {
 
 /// Только диагностическая имитация. Доступ не принимается параметром виджета.
 class DriverDiagnosticView extends StatefulWidget {
-  const DriverDiagnosticView({super.key});
+  const DriverDiagnosticView({
+    this.mapSettings,
+    this.tileSessionFactory,
+    super.key,
+  });
+  final MapSettings? mapSettings;
+  final MapTileSession Function(String)? tileSessionFactory;
   @override
   State<DriverDiagnosticView> createState() => _DriverDiagnosticViewState();
 }
 
 class _DriverDiagnosticViewState extends State<DriverDiagnosticView> {
+  late final _maps = widget.mapSettings ?? MapSettings();
   DriverDemoScenario _scenario = DriverDemoScenario.offline;
   _DemoPhase _phase = _DemoPhase.empty;
   bool _online = false;
@@ -92,6 +80,7 @@ class _DriverDiagnosticViewState extends State<DriverDiagnosticView> {
     ++_revision;
     _timer?.cancel();
     _completeConfirmation();
+    if (widget.mapSettings == null) _maps.dispose();
     super.dispose();
   }
 
@@ -184,108 +173,61 @@ class _DriverDiagnosticViewState extends State<DriverDiagnosticView> {
     if (_allowed) setState(() => _phase = phase);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (!DriverDemoAccess.allowed(context)) {
-      return const DriverDemoDeniedScreen();
-    }
-    final palette = OrbitaPalette.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text('ДЕМО · Водитель')),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) => CustomScrollView(
-            key: const Key('driver-demo-scroll'),
-            slivers: [
-              const SliverToBoxAdapter(child: BrandHeader()),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
-                sliver: SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'ДЕМО · Все события искусственные',
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(
-                              color: palette.accent,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<DriverDemoScenario>(
-                        key: const Key('driver-demo-scenario'),
-                        initialValue: _scenario,
-                        isExpanded: true,
-                        itemHeight: null,
-                        decoration: const InputDecoration(
-                          labelText: 'Диагностический сценарий',
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
-                        ),
-                        items: [
-                          for (final entry in const [
-                            (DriverDemoScenario.offline, 'Вне линии'),
-                            (DriverDemoScenario.online, 'На линии'),
-                            (
-                              DriverDemoScenario.pending,
-                              'Ожидание подтверждения',
-                            ),
-                            (DriverDemoScenario.error, 'Ошибка подтверждения'),
-                            (
-                              DriverDemoScenario.offer,
-                              'Предложение на 25 секунд',
-                            ),
-                            (DriverDemoScenario.journey, 'Этапы поездки'),
-                          ])
-                            DropdownMenuItem(
-                              value: entry.$1,
-                              child: Text(entry.$2),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) _select(value);
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      ShiftControl(
-                        key: ValueKey(_revision),
-                        available: true,
-                        confirmedOnline: _online,
-                        requestChange: _change,
-                      ),
-                    ],
-                  ),
-                ),
+  void _tools() {
+    if (!_allowed) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheet) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<DriverDemoScenario>(
+                key: const Key('driver-demo-scenario'),
+                initialValue: _scenario,
+                isExpanded: true,
+                itemHeight: null,
+                decoration: const InputDecoration(labelText: 'Сценарий'),
+                items: [
+                  for (final item in const [
+                    (DriverDemoScenario.offline, 'Вне линии'),
+                    (DriverDemoScenario.online, 'На линии'),
+                    (DriverDemoScenario.pending, 'Ожидание подтверждения'),
+                    (DriverDemoScenario.error, 'Ошибка подтверждения'),
+                    (DriverDemoScenario.offer, 'Предложение на 25 секунд'),
+                    (DriverDemoScenario.journey, 'Этапы поездки'),
+                  ])
+                    DropdownMenuItem(value: item.$1, child: Text(item.$2)),
+                ],
+                onChanged: (value) {
+                  if (value != null && _allowed) _select(value);
+                  Navigator.pop(sheet);
+                },
               ),
-              SliverToBoxAdapter(
-                child: Container(
-                  key: const Key('driver-demo-map'),
-                  constraints: BoxConstraints(
-                    minHeight: (constraints.maxHeight * 0.38).clamp(
-                      180.0,
-                      550.0,
-                    ),
-                  ),
-                  color: palette.mapLand,
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.map_outlined, color: palette.muted, size: 36),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'ДЕМО · Карта — тестовая заглушка',
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
+              if (_confirmation != null) ...[
+                const SizedBox(height: 12),
+                FullWidthAction(
+                  'Подтвердить',
+                  key: const Key('demo-confirm-pending'),
+                  onPressed: () {
+                    _completeConfirmation();
+                    Navigator.pop(sheet);
+                  },
                 ),
-              ),
-              SliverToBoxAdapter(child: _panel(context)),
+                const SizedBox(height: 8),
+                FullWidthAction(
+                  'Вернуть ошибку',
+                  key: const Key('demo-fail-pending'),
+                  secondary: true,
+                  onPressed: () {
+                    _completeConfirmation(fail: true);
+                    Navigator.pop(sheet);
+                  },
+                ),
+              ],
             ],
           ),
         ),
@@ -293,201 +235,519 @@ class _DriverDiagnosticViewState extends State<DriverDiagnosticView> {
     );
   }
 
-  Widget _panel(BuildContext context) {
-    if (_phase == _DemoPhase.offer) {
-      return _DriverPanel(
-        title: 'ДЕМО · Новый заказ',
-        children: [
-          Text(
-            '$_seconds с',
-            key: const Key('demo-offer-countdown'),
-            style: Theme.of(context).textTheme.headlineMedium
-                ?.copyWith(color: OrbitaPalette.of(context).accent),
-          ),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(value: _seconds / 25),
-          const SizedBox(height: 12),
-          const Text('Вымышленные адреса'),
-          const SizedBox(height: 8),
-          const Text('Откуда: Учебная улица, 12'),
-          const SizedBox(height: 8),
-          const Text('Куда: Примерная улица, 7'),
-          const SizedBox(height: 16),
-          _OfferActions(
-            onAccept: () => _answer(true),
-            onDecline: () => _answer(false),
-          ),
-        ],
-      );
+  @override
+  Widget build(BuildContext context) {
+    if (!DriverDemoAccess.allowed(context)) {
+      return const DriverDemoDeniedScreen();
     }
+    final offer = _phase == _DemoPhase.offer;
+    return LayoutBuilder(
+      builder: (context, constraints) => Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: _DriverBody(
+            mapSettings: _maps,
+            tileSessionFactory: widget.tileSessionFactory,
+            onTools: _tools,
+            slider: offer
+                ? null
+                : ShiftControl(
+                    key: ValueKey(_revision),
+                    available: true,
+                    confirmedOnline: _online,
+                    requestChange: _change,
+                  ),
+            panel: offer
+                ? _OfferPanel(
+                    seconds: _seconds,
+                    onAccept: () => _answer(true),
+                    onDecline: () => _answer(false),
+                  )
+                : _panel(),
+            panelHeight: offer
+                ? _OfferPanel.height(context, constraints.maxWidth)
+                : _EmptyPanel.height(context),
+          ),
+        ),
+        bottomNavigationBar: AdaptiveNavigation(
+          driver: true,
+          selected: 0,
+          availableHeight:
+              constraints.maxHeight - MediaQuery.paddingOf(context).vertical,
+          onSelected: (index) {
+            if (index != 0) Navigator.pop(context, index);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _panel() {
     final (title, message, action, next) = switch (_phase) {
       _DemoPhase.accepted => (
         'Заказ принят',
-        'Вымышленный заказ · Учебная улица, 12',
+        'Учебная улица, 12',
         'Ехать к пассажиру',
         _DemoPhase.toPickup,
       ),
       _DemoPhase.toPickup => (
         'В пути к пассажиру',
-        'Вымышленный заказ · Учебная улица, 12',
+        'Учебная улица, 12',
         'Прибыл',
         _DemoPhase.arrived,
       ),
       _DemoPhase.arrived => (
         'Прибыл',
-        'ДЕМО · Ожидание посадки пассажира',
+        'Ожидание посадки пассажира',
         'Начать поездку',
         _DemoPhase.riding,
       ),
       _DemoPhase.riding => (
         'Поездка выполняется',
-        'Вымышленный заказ · Примерная улица, 7',
+        'Примерная улица, 7',
         'Завершить поездку',
         _DemoPhase.complete,
       ),
-      _DemoPhase.complete => (
-        'Поездка завершена',
-        'ДЕМО · Запись в историю не создаётся.',
-        '',
-        _DemoPhase.empty,
-      ),
+      _DemoPhase.complete => ('Поездка завершена', '', '', _DemoPhase.empty),
       _DemoPhase.declined => (
         'Предложение отклонено',
-        'ДЕМО · Серверная очередь не изменена.',
+        '',
         '',
         _DemoPhase.empty,
       ),
-      _DemoPhase.expired => (
-        'Время ответа истекло',
-        'ДЕМО · Позднее принятие недоступно.',
-        '',
-        _DemoPhase.empty,
-      ),
-      _ => (
-        _online ? 'Предложения' : 'Заказы',
-        _online ? 'Новых предложений пока нет.' : 'Активных поездок нет.',
-        '',
-        _DemoPhase.empty,
-      ),
+      _DemoPhase.expired => ('Время ответа истекло', '', '', _DemoPhase.empty),
+      _ => ('', '', '', _DemoPhase.empty),
     };
+    if (title.isEmpty) return _EmptyPanel(online: _online);
     return _DriverPanel(
-      title: 'ДЕМО · $title',
-      children: [
-        Text(message),
-        if (_confirmation != null) ...[
-          const SizedBox(height: 12),
-          FullWidthAction(
-            'Подтвердить локально',
-            key: const Key('demo-confirm-pending'),
-            onPressed: () {
-              if (_allowed) {
-                _completeConfirmation();
-                setState(() {});
-              }
-            },
-          ),
-          const SizedBox(height: 8),
-          FullWidthAction(
-            'Вернуть ошибку',
-            key: const Key('demo-fail-pending'),
-            secondary: true,
-            onPressed: () {
-              if (_allowed) {
-                _completeConfirmation(fail: true);
-                setState(() {});
-              }
-            },
-          ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: Theme.of(context).textTheme.titleLarge),
+          if (message.isNotEmpty) ...[const SizedBox(height: 8), Text(message)],
+          if (action.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            FullWidthAction(
+              action,
+              key: const Key('demo-journey-action'),
+              onPressed: () => _advance(next),
+            ),
+          ],
         ],
-        if (action.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          FullWidthAction(
-            action,
-            key: const Key('demo-journey-action'),
-            onPressed: () => _advance(next),
-          ),
-        ],
-        const SizedBox(height: 12),
-        Text(
-          'Имитируется только интерфейс. Серверные команды, геолокация и история не используются.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-      ],
+      ),
     );
   }
 }
 
-class _OfferActions extends StatelessWidget {
-  const _OfferActions({required this.onAccept, required this.onDecline});
-  final VoidCallback onAccept, onDecline;
+double _textHeight(
+  BuildContext context,
+  String text,
+  TextStyle style,
+  double width,
+) {
+  final p = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: Theme.of(context).textTheme.bodyMedium!.merge(style),
+    ),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout(maxWidth: math.max(1, width));
+  final height = p.height;
+  p.dispose();
+  return height;
+}
+
+// CSS: header74, shift64+12, sheet8/4/12/content/13, map min140.
+class _DriverBody extends StatelessWidget {
+  const _DriverBody({
+    required this.mapSettings,
+    required this.panel,
+    required this.panelHeight,
+    this.slider,
+    this.onTools,
+    this.enabled = true,
+    this.foreground = true,
+    this.tileSessionFactory,
+  });
+  final MapSettings mapSettings;
+  final Widget panel;
+  final double panelHeight;
+  final Widget? slider;
+  final VoidCallback? onTools;
+  final bool enabled, foreground;
+  final MapTileSession Function(String)? tileSessionFactory;
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final style = Theme.of(context).textTheme.labelLarge!;
-      final requiredWidth =
-          textWidth(context, 'Отказаться', style) +
-          textWidth(context, 'Принять', style) +
-          80;
-      final decline = FullWidthAction(
-        'Отказаться',
-        key: const Key('demo-offer-decline'),
-        secondary: true,
-        onPressed: onDecline,
-      );
-      final accept = FullWidthAction(
-        'Принять',
-        key: const Key('demo-offer-accept'),
-        onPressed: onAccept,
-      );
-      return requiredWidth <= constraints.maxWidth
-          ? Row(
+  Widget build(BuildContext context) => CustomScrollView(
+    key: const Key('driver-scroll'),
+    slivers: [
+      SliverToBoxAdapter(
+        child: GestureDetector(
+          key: const Key('driver-tools'),
+          onLongPress: onTools,
+          child: const BrandHeader(driverTypography: true),
+        ),
+      ),
+      if (slider != null)
+        SliverToBoxAdapter(
+          child: ColoredBox(
+            color: OrbitaPalette.of(context).mapLand,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+              child: slider,
+            ),
+          ),
+        ),
+      SliverLayoutBuilder(
+        builder: (context, constraints) {
+          final height = math.max(
+            140.0,
+            constraints.viewportMainAxisExtent -
+                constraints.precedingScrollExtent -
+                panelHeight,
+          );
+          return SliverToBoxAdapter(
+            child: Column(
               children: [
-                Expanded(child: decline),
-                const SizedBox(width: 10),
-                Expanded(child: accept),
+                DriverMap(
+                  key: const Key('driver-map'),
+                  mapSettings: mapSettings,
+                  enabled: enabled,
+                  foreground: foreground,
+                  height: height,
+                  tileSessionFactory: tileSessionFactory,
+                ),
+                panel,
               ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [decline, const SizedBox(height: 8), accept],
-            );
-    },
+            ),
+          );
+        },
+      ),
+    ],
   );
 }
 
 class _DriverPanel extends StatelessWidget {
-  const _DriverPanel({required this.title, required this.children});
-  final String title;
-  final List<Widget> children;
+  const _DriverPanel({required this.child});
+  final Widget child;
   @override
   Widget build(BuildContext context) {
-    final palette = OrbitaPalette.of(context);
+    final p = OrbitaPalette.of(context);
     return Container(
       key: const Key('current-order'),
-      padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 13),
       decoration: BoxDecoration(
-        color: palette.surface,
+        color: p.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border(top: BorderSide(color: palette.outline)),
+        border: Border(top: BorderSide(color: p.divider)),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Center(
             child: Container(
-              width: 36,
+              width: 34,
               height: 4,
               decoration: BoxDecoration(
-                color: palette.outline,
+                color: p.outline.withValues(alpha: .65),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
           ),
-          const SizedBox(height: 14),
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 6),
-          ...children,
+          const SizedBox(height: 12),
+          child,
         ],
+      ),
+    );
+  }
+}
+
+class _EmptyPanel extends StatelessWidget {
+  const _EmptyPanel({required this.online});
+  final bool online;
+  static double height(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width - 74;
+    final text =
+        _textHeight(
+          context,
+          'Предложения',
+          const TextStyle(fontSize: 16, height: 1.2),
+          width,
+        ) +
+        3 +
+        _textHeight(
+          context,
+          'Новых предложений пока нет',
+          const TextStyle(fontSize: 13, height: 1.4),
+          width,
+        );
+    return 8 + 4 + 12 + math.max(26, text) + 4 + 13 + 1;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = OrbitaPalette.of(context);
+    return _DriverPanel(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    online ? 'Предложения' : 'Заказы',
+                    style: TextStyle(
+                      fontSize: 16,
+                      height: 1.2,
+                      fontWeight: FontWeight.w600,
+                      color: p.text,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    online
+                        ? 'Новых предложений пока нет'
+                        : 'Активных поездок нет',
+                    style: TextStyle(fontSize: 13, height: 1.4, color: p.muted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox.square(
+              dimension: 26,
+              child: CustomPaint(painter: _RouteIcon(p.muted)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Геометрия symbol#i-route из утверждённого HTML (viewBox 0 0 24 24).
+class _RouteIcon extends CustomPainter {
+  const _RouteIcon(this.color);
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 24, size.height / 24);
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8
+      ..strokeCap = StrokeCap.round;
+    canvas.drawCircle(const Offset(5, 18), 2, paint);
+    canvas.drawCircle(const Offset(19, 6), 2, paint);
+    canvas.drawPath(
+      Path()
+        ..moveTo(7, 18)
+        ..cubicTo(16, 18, 9, 6, 17, 6),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RouteIcon oldDelegate) => color != oldDelegate.color;
+}
+
+class _OfferPanel extends StatelessWidget {
+  const _OfferPanel({
+    required this.seconds,
+    required this.onAccept,
+    required this.onDecline,
+  });
+  final int seconds;
+  final VoidCallback onAccept, onDecline;
+  static double height(BuildContext context, double width) {
+    final available = width - 36;
+    final header = math.max(
+      _textHeight(
+        context,
+        'Новый заказ',
+        const TextStyle(fontSize: 22, height: 1.2),
+        available - 85,
+      ),
+      _textHeight(
+        context,
+        '25 с',
+        const TextStyle(fontSize: 25, height: 1.4),
+        85,
+      ),
+    );
+    final rows =
+        2 *
+        math.max(
+          57,
+          _textHeight(
+                context,
+                'Учебная улица, 12',
+                const TextStyle(fontSize: 15, height: 1.28),
+                available - 66,
+              ) +
+              _textHeight(
+                context,
+                'Откуда',
+                const TextStyle(fontSize: 11, height: 1.2),
+                available - 66,
+              ) +
+              16,
+        );
+    final button = math.max(
+      52,
+      _textHeight(
+            context,
+            'Отказаться',
+            const TextStyle(fontSize: 15, height: 1.3),
+            (available - 10) / 2.2 - 32,
+          ) +
+          28,
+    );
+    return 8 + 4 + 12 + header + 10 + 4 + 10 + rows + 1 + 10 + button + 13 + 1;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = OrbitaPalette.of(context);
+    return _DriverPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  'Новый заказ',
+                  style: TextStyle(
+                    fontSize: 22,
+                    height: 1.2,
+                    fontWeight: FontWeight.w600,
+                    color: p.text,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '$seconds с',
+                key: const Key('demo-offer-countdown'),
+                style: TextStyle(
+                  fontSize: 25,
+                  height: 1.4,
+                  fontWeight: FontWeight.w600,
+                  color: p.accent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(
+            value: seconds / 25,
+            minHeight: 4,
+            color: p.accent,
+            backgroundColor: p.accentSoft,
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Color.lerp(p.surface, p.surfaceVariant, .22),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                _address(context, true, 'Учебная улица, 12'),
+                Divider(height: 1, color: p.divider),
+                _address(context, false, 'Примерная улица, 7'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final style = Theme.of(context).textTheme.labelLarge!;
+              final fits =
+                  textWidth(context, 'Отказаться', style) +
+                      textWidth(context, 'Принять', style) +
+                      80 <=
+                  constraints.maxWidth;
+              final decline = FullWidthAction(
+                'Отказаться',
+                key: const Key('demo-offer-decline'),
+                secondary: true,
+                onPressed: onDecline,
+              );
+              final accept = FullWidthAction(
+                'Принять',
+                key: const Key('demo-offer-accept'),
+                onPressed: onAccept,
+              );
+              return OutlinedButtonTheme(
+                data: OutlinedButtonThemeData(
+                  style: Theme.of(context).outlinedButtonTheme.style?.copyWith(
+                    foregroundColor: WidgetStatePropertyAll(p.text),
+                  ),
+                ),
+                child: fits
+                    ? Row(
+                        children: [
+                          Expanded(flex: 10, child: decline),
+                          const SizedBox(width: 10),
+                          Expanded(flex: 12, child: accept),
+                        ],
+                      )
+                    : Column(
+                        children: [decline, const SizedBox(height: 8), accept],
+                      ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _address(BuildContext context, bool pickup, String address) {
+    final p = OrbitaPalette.of(context);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 57),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(
+          children: [
+            Icon(
+              pickup ? Icons.trip_origin : Icons.place_outlined,
+              color: pickup ? p.text : p.accent,
+              size: 20,
+            ),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    pickup ? 'Откуда' : 'Куда',
+                    style: TextStyle(fontSize: 11, height: 1.2, color: p.muted),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    address,
+                    style: TextStyle(
+                      fontSize: 15,
+                      height: 1.28,
+                      fontWeight: FontWeight.w600,
+                      color: p.text,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

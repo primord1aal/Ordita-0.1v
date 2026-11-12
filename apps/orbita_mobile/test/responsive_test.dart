@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -34,18 +35,26 @@ void checkHorizontalBounds(WidgetTester tester) {
     );
     // Пробел на переносе может иметь selection-box за краем строки,
     // хотя видимые буквы не обрезаны. Проверяем каждый непробельный фрагмент.
+    // CSS бренда использует отрицательный tracking: selection-box включает
+    // половину межбуквенного интервала перед первой/после последней буквы.
+    // Границы самого параграфа проверены выше относительно viewport.
+    final tracking = render.text.style?.letterSpacing ?? 0;
+    final selectionInset = math.max(
+      .5,
+      -tracking * MediaQuery.textScalerOf(element).scale(1) / 2 + .01,
+    );
     for (final word in RegExp(r'\S+').allMatches(render.text.toPlainText())) {
       for (final box in render.getBoxesForSelection(
         TextSelection(baseOffset: word.start, extentOffset: word.end),
       )) {
         expect(
           box.left,
-          greaterThanOrEqualTo(-0.5),
+          greaterThanOrEqualTo(-selectionInset),
           reason: render.text.toPlainText(),
         );
         expect(
           box.right,
-          lessThanOrEqualTo(render.size.width + 0.5),
+          lessThanOrEqualTo(render.size.width + selectionInset),
           reason: render.text.toPlainText(),
         );
       }
@@ -238,7 +247,7 @@ void main() {
           find.byKey(const Key('shift-control')),
         );
         expect(shift.flagsCollection.isEnabled, ui.Tristate.isFalse);
-        expect(shift.getSemanticsData().label, contains('Линия не подключена'));
+        expect(shift.getSemanticsData().label, contains('Не на линии'));
         expect(
           shift.getSemanticsData().hasAction(ui.SemanticsAction.tap),
           isFalse,

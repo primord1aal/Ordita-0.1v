@@ -105,7 +105,10 @@ class _ShiftControlState extends State<ShiftControl> {
   ) {
     double measure(String text, TextStyle style) {
       final painter = TextPainter(
-        text: TextSpan(text: text, style: style),
+        text: TextSpan(
+          text: text,
+          style: Theme.of(context).textTheme.bodyMedium!.merge(style),
+        ),
         textDirection: Directionality.of(context),
         textScaler: MediaQuery.textScalerOf(context),
       )..layout(maxWidth: math.max(1, width - 132));
@@ -116,31 +119,31 @@ class _ShiftControlState extends State<ShiftControl> {
 
     return math.max(
       64,
-      measure(label, _titleStyle) + measure(hint, _hintStyle) + 22,
+      measure(label, _titleStyle) +
+          (hint.isEmpty ? 0 : measure(hint, _hintStyle) + 2) +
+          22,
     );
   }
 
   static const _titleStyle = TextStyle(
     fontSize: 14,
-    height: 1.2,
-    fontWeight: FontWeight.w700,
+    height: 1.25,
+    fontWeight: FontWeight.w600,
   );
-  static const _hintStyle = TextStyle(fontSize: 11, height: 1.3);
+  static const _hintStyle = TextStyle(fontSize: 10, height: 1.25);
 
   @override
   Widget build(BuildContext context) {
     final palette = OrbitaPalette.of(context);
     final label = _pending
         ? 'Подтверждаем…'
-        : !_enabled
-        ? 'Линия не подключена'
         : widget.confirmedOnline
         ? 'На линии'
         : 'Не на линии';
     final hint = _pending
         ? 'Дождись подтверждения'
         : !_enabled
-        ? 'Изменение линии пока не подключено'
+        ? ''
         : widget.confirmedOnline
         ? 'Проведи влево'
         : 'Проведи вправо';
@@ -170,10 +173,10 @@ class _ShiftControlState extends State<ShiftControl> {
             ExcludeSemantics(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  const thumbSize = 48.0;
+                  const thumbSize = 50.0;
                   final travel = math.max(
                     0.0,
-                    constraints.maxWidth - thumbSize - 16,
+                    constraints.maxWidth - thumbSize - 14,
                   );
                   final rest = widget.confirmedOnline ? travel : 0.0;
                   final position = _dragging
@@ -216,19 +219,20 @@ class _ShiftControlState extends State<ShiftControl> {
                                   color: palette.text,
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                hint,
-                                textAlign: TextAlign.center,
-                                style: _hintStyle.copyWith(
-                                  color: palette.muted,
+                              if (hint.isNotEmpty) const SizedBox(height: 2),
+                              if (hint.isNotEmpty)
+                                Text(
+                                  hint,
+                                  textAlign: TextAlign.center,
+                                  style: _hintStyle.copyWith(
+                                    color: palette.muted,
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
                         ),
                         Positioned(
-                          left: 8 + position,
+                          left: 6 + position,
                           child: Listener(
                             onPointerCancel: (_) => _cancelDrag(),
                             child: GestureDetector(
@@ -282,7 +286,9 @@ class _ShiftControlState extends State<ShiftControl> {
                                 height: thumbSize,
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: widget.confirmedOnline
+                                  color: !_enabled
+                                      ? palette.surface.withValues(alpha: 0.45)
+                                      : widget.confirmedOnline
                                       ? palette.accent
                                       : palette.surface,
                                   borderRadius: BorderRadius.circular(16),

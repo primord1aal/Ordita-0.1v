@@ -90,17 +90,21 @@ class _AuthScreenState extends State<AuthScreen> {
     await _controller.signIn(_email.text, password);
   }
 
-  void _openDriverDemo() {
-    if (!_controller.canUseRole ||
+  Future<int?> _openDriverDemo() async {
+    if (!kDebugMode ||
+        !_controller.canUseRole ||
         _controller.access?.role != UserRole.driver) {
-      return;
+      return null;
     }
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(
+    return Navigator.of(context).push<int>(
+      MaterialPageRoute<int>(
         settings: const RouteSettings(name: '/driver-demo'),
         builder: (_) => DriverDemoGate(
           controller: _controller,
-          child: const DriverDiagnosticView(),
+          child: DriverDiagnosticView(
+            mapSettings: widget.mapSettings,
+            tileSessionFactory: widget.tileSessionFactory,
+          ),
         ),
       ),
     );
@@ -139,7 +143,8 @@ class _AuthScreenState extends State<AuthScreen> {
                             tileSessionFactory: widget.tileSessionFactory,
                             accountPanel: _accountPanel(visible),
                             onSignOut: _controller.signOut,
-                            onOpenDriverDemo: visible.role == UserRole.driver
+                            onOpenDriverDemo:
+                                kDebugMode && visible.role == UserRole.driver
                                 ? _openDriverDemo
                                 : null,
                           ),
@@ -410,7 +415,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             if (!widget.repository.configured) ...[
               const SizedBox(height: 12),
-              const Text('Вход не настроен в этой тестовой версии.'),
+              const Text('Вход сейчас недоступен.'),
             ],
           ],
           if (_controller.busy) ...[

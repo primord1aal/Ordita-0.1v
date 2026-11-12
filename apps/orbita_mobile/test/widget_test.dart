@@ -65,7 +65,7 @@ void main() {
       await openPreview(tester, 'Водитель');
       expect(find.text('Рабочий день'), findsNothing);
       expect(find.byType(SwitchListTile), findsNothing);
-      expect(find.text('Линия не подключена'), findsOneWidget);
+      expect(find.text('Не на линии'), findsOneWidget);
       expect(find.text('На линии'), findsNothing);
       final slider = tester.widget<Semantics>(
         find.byKey(const Key('shift-control')),
@@ -78,7 +78,7 @@ void main() {
       final card = tester.getRect(find.byKey(const Key('current-order')));
       expect(map.height, greaterThan(card.height * 2));
       expect(card.top, greaterThanOrEqualTo(map.bottom));
-      expect(find.text('Нет активных заказов'), findsOneWidget);
+      expect(find.text('Активных поездок нет'), findsOneWidget);
     },
   );
 

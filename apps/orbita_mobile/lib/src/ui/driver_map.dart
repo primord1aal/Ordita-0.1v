@@ -90,18 +90,20 @@ class _DriverMapState extends State<DriverMap> {
         width: double.infinity,
         child: ColoredBox(
           color: OrbitaPalette.of(context).mapLand,
-          child: _requested
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Text(
-                      'Карта не подключена. Ключ можно задать в диагностике.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: OrbitaPalette.of(context).muted),
-                    ),
-                  ),
-                )
-              : null,
+          child: const Align(
+            alignment: Alignment.bottomRight,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(0, 0, 16, 12),
+              child: SizedBox.square(
+                dimension: 48,
+                child: IconButton(
+                  tooltip: 'Моё местоположение',
+                  onPressed: null,
+                  icon: Icon(Icons.my_location),
+                ),
+              ),
+            ),
+          ),
         ),
       );
     }
@@ -110,6 +112,7 @@ class _DriverMapState extends State<DriverMap> {
       height: widget.height,
       session: _session,
       borderRadius: BorderRadius.zero,
+      controls: MapControls.driver,
     );
   }
 }

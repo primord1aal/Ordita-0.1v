@@ -150,7 +150,7 @@ class AboutScreen extends StatelessWidget {
                   ?.copyWith(color: palette.muted),
             ),
             const SizedBox(height: 20),
-            Text('Версия $appVersion · тестовая основа'),
+            Text('Версия $appVersion'),
             const SizedBox(height: 20),
             Divider(color: palette.divider),
             ListTile(
@@ -170,7 +170,6 @@ class AboutScreen extends StatelessWidget {
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.science_outlined, color: palette.muted),
                 title: const Text('Диагностика интерфейса водителя'),
-                subtitle: const Text('ДЕМО · локальные состояния без заказов'),
                 trailing: Icon(Icons.chevron_right, color: palette.muted),
                 onTap: onOpenDriverDemo,
               ),

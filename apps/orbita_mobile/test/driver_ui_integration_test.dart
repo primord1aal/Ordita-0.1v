@@ -17,6 +17,9 @@ import 'package:orbita_mobile/src/screens/passenger_screen.dart';
 import 'package:orbita_mobile/src/ui/driver_demo_access.dart';
 import 'package:orbita_mobile/src/ui/theme.dart';
 import 'package:orbita_mobile/src/ui/theme_settings.dart';
+import 'package:orbita_mobile/src/ui/orbita_map.dart';
+import 'package:orbita_mobile/src/ui/orbita_brand.dart';
+import 'package:orbita_mobile/src/ui/components.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'design_test_fonts.dart';
@@ -95,12 +98,15 @@ Future<void> _openDemo(WidgetTester tester) async {
 }
 
 Future<void> _scenario(WidgetTester tester, DriverDemoScenario scenario) async {
+  await scrollTo(tester, find.byKey(const Key('driver-tools')), delta: -180);
+  await tester.longPress(find.byKey(const Key('driver-tools')));
+  await tester.pumpAndSettle();
   tester
       .widget<DropdownButtonFormField<DriverDemoScenario>>(
         find.byKey(const Key('driver-demo-scenario')),
       )
       .onChanged!(scenario);
-  await tester.pump();
+  await tester.pumpAndSettle();
 }
 
 Future<void> _slide(WidgetTester tester) async {
@@ -178,7 +184,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('К заказу'));
       await tester.pumpAndSettle();
-      expect(find.text('Линия не подключена'), findsOneWidget);
+      expect(find.text('Не на линии'), findsOneWidget);
       expect(find.text('На линии'), findsNothing);
       expect(tester.takeException(), isNull);
     },
@@ -211,9 +217,7 @@ void main() {
     },
   );
 
-  testWidgets('Демо: отказ и истечение 25 секунд не создают поездку', (
-    tester,
-  ) async {
+  testWidgets('Демо: отказ не создаёт поездку', (tester) async {
     final repo = await _mount(tester);
     await _openDemo(tester);
     await _scenario(tester, DriverDemoScenario.offer);
@@ -221,9 +225,27 @@ void main() {
     await tester.tap(find.byKey(const Key('demo-offer-decline')));
     await tester.pump();
     expect(find.textContaining('Предложение отклонено'), findsOneWidget);
+    expect(find.byKey(const Key('demo-journey-action')), findsNothing);
+    expect(repo.fetches, 1);
+    expect(repo.logins, 0);
+    expect(repo.logouts, 0);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Демо: истечение 25 секунд закрывает принятие', (tester) async {
+    final repo = await _mount(tester);
+    await _openDemo(tester);
     await _scenario(tester, DriverDemoScenario.offer);
-    await tester.pump(const Duration(seconds: 26));
-    expect(find.textContaining('Время ответа истекло'), findsOneWidget);
+    // Граница самого предложения; перепроверка доступа на 30-й секунде
+    // независимо покрывается соседним сценарием отзыва.
+    await tester.pump(const Duration(seconds: 25));
+    expect(
+      find.textContaining('Время ответа истекло'),
+      findsOneWidget,
+      reason: tester
+          .widgetList<Text>(find.byType(Text))
+          .map((w) => w.data)
+          .join(' | '),
+    );
     expect(find.byKey(const Key('demo-offer-accept')), findsNothing);
     expect(find.byKey(const Key('demo-journey-action')), findsNothing);
     expect(repo.logins, 0);
@@ -261,6 +283,148 @@ void main() {
     ('attribution-3.2', false, null, const Size(390, 844), 3.2),
     ('driver-tablet', false, null, const Size(800, 1280), 1.0),
   ];
+
+  // Семь групп геометрических инвариантов из CSS, пять итоговых кадров.
+  for (final spec in [
+    ('off-light', false, null, 1.0),
+    ('off-dark', true, null, 1.0),
+    ('online', true, DriverDemoScenario.online, 1.0),
+    ('offer', true, DriverDemoScenario.offer, 1.0),
+    ('attribution', false, null, 3.2),
+  ]) {
+    testWidgets('Исправленный концепт: ${spec.$1}', (tester) async {
+      tester.view.padding = const FakeViewPadding(top: 28, bottom: 23);
+      addTearDown(tester.view.resetPadding);
+      await _mount(
+        tester,
+        role: spec.$4 == 1 ? UserRole.driver : UserRole.passenger,
+        dark: spec.$2,
+        tiles: true,
+        scale: spec.$4,
+      );
+      if (spec.$3 != null) {
+        await _openDemo(tester);
+        await _scenario(tester, spec.$3!);
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)),
+        );
+        await tester.pumpAndSettle();
+      }
+      if (spec.$4 == 1) {
+        // 1: один header74/logo42; 2: дорожка64/бегунок50.
+        expect(find.byType(BrandHeader), findsOneWidget);
+        expect(
+          tester.getSize(find.byType(BrandHeader)).height,
+          closeTo(74, .5),
+        );
+        expect(tester.getSize(find.byType(OrbitaLogo)).width, 42);
+        expect(
+          tester.getRect(find.byType(OrbitaLogo)).top,
+          greaterThanOrEqualTo(28),
+        );
+        if (spec.$3 != DriverDemoScenario.offer) {
+          expect(
+            tester.getSize(find.byKey(const Key('shift-track'))).height,
+            closeTo(64, .5),
+          );
+          expect(
+            tester.getSize(find.byKey(const Key('shift-thumb'))),
+            const Size(50, 50),
+          );
+          expect(tester.getRect(find.byKey(const Key('shift-track'))).left, 18);
+        }
+        // 3: карта заполняет остаток, панель целиком над навигацией без scroll.
+        final nav = tester.getRect(
+          find.byKey(const Key('navigation-horizontal')),
+        );
+        final panel = tester.getRect(find.byKey(const Key('current-order')));
+        expect(panel.bottom, closeTo(nav.top, 1));
+        expect(
+          tester
+              .state<ScrollableState>(find.byType(Scrollable).first)
+              .position
+              .maxScrollExtent,
+          lessThanOrEqualTo(1),
+        );
+        // 4: GPS48 недоступен, 5: nav73 + системный отступ23, map icon.
+        final gps = find.byTooltip('Моё местоположение');
+        expect(tester.getSize(gps), const Size(48, 48));
+        expect(
+          tester
+              .widget<IconButton>(
+                find.ancestor(of: gps, matching: find.byType(IconButton)).first,
+              )
+              .onPressed,
+          isNull,
+        );
+        expect(find.byTooltip('Приблизить карту'), findsNothing);
+        expect(nav.height, closeTo(73 + 23, 1));
+        expect(find.byIcon(Icons.map_outlined), findsOneWidget);
+        if (spec.$3 == DriverDemoScenario.offer) {
+          // 6: заголовок/таймер в строку, адреса сгруппированы, кнопки52 и 1:1.2.
+          expect(
+            tester.getTopLeft(find.text('Новый заказ')).dy,
+            closeTo(tester.getTopLeft(find.text('25 с')).dy, 1),
+          );
+          final accept = tester.getRect(
+            find.byKey(const Key('demo-offer-accept')),
+          );
+          final decline = tester.getRect(
+            find.byKey(const Key('demo-offer-decline')),
+          );
+          expect(accept.top, decline.top);
+          expect(accept.height, greaterThanOrEqualTo(52));
+          expect(accept.width / decline.width, closeTo(1.2, .02));
+        }
+        for (final text in [
+          'ДЕМО',
+          'Диагностический сценарий',
+          'Карта — тестовая заглушка',
+          'Вымышленные адреса',
+          'Линия не подключена',
+        ]) {
+          expect(find.textContaining(text), findsNothing);
+        }
+      } else {
+        // 7: весь блок ссылок виден над меню; адреса доступны прокруткой.
+        await tester.scrollUntilVisible(
+          find.byType(MapAttribution),
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await Scrollable.ensureVisible(
+          tester.element(find.byType(MapAttribution)),
+          alignment: .1,
+        );
+        await tester.pumpAndSettle();
+        final navTop = tester
+            .getRect(find.byKey(const Key('navigation-compact')))
+            .top;
+        for (final label in [
+          '© OpenStreetMap',
+          '© OpenMapTiles',
+          '© CARTO',
+          'Powered by Geoapify',
+        ]) {
+          final rect = tester.getRect(find.text(label));
+          expect(rect.top, greaterThanOrEqualTo(28));
+          expect(rect.bottom, lessThanOrEqualTo(navTop));
+        }
+      }
+      checkHorizontalBounds(tester);
+      if (captureDesignGoldens) {
+        await expectLater(
+          find.byType(Scaffold).last,
+          matchesGoldenFile('goldens/block4fix-${spec.$1}.png'),
+        );
+      }
+      if (spec.$4 != 1) {
+        await scrollTo(tester, find.byKey(const Key('destination')));
+        expect(find.byType(TextField), findsNWidgets(2));
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
   for (final (name, dark, scenario, size, scale) in shots) {
     testWidgets('Снимок блока4: $name', (tester) async {
       await _mount(tester, dark: dark, size: size, scale: scale, tiles: true);
@@ -276,7 +440,7 @@ void main() {
           await scrollTo(tester, find.byKey(const Key('current-order')));
           expect(find.text('25 с'), findsOneWidget);
         }
-        expect(find.textContaining('ДЕМО'), findsWidgets);
+        expect(find.textContaining('ДЕМО'), findsNothing);
       } else {
         expect(find.byType(DriverScreen), findsOneWidget);
         if (name == 'attribution-3.2') {

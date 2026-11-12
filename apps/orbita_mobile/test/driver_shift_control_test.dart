@@ -56,7 +56,7 @@ void main() {
     );
     await slide(tester, 1);
     expect(calls, 0);
-    expect(find.text('Линия не подключена'), findsOneWidget);
+    expect(find.text('Не на линии'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -83,7 +83,7 @@ void main() {
       expect(calls, 0);
       expect(
         tester.getTopLeft(find.byKey(const Key('shift-thumb'))).dx,
-        closeTo(track.left + 9, 1),
+        closeTo(track.left + 7, 1),
       );
       expect(tester.takeException(), isNull);
     },
@@ -170,7 +170,7 @@ void main() {
     );
     expect(
       tester.getTopLeft(find.byKey(const Key('shift-thumb'))).dx,
-      closeTo(track.left + 10, 1),
+      closeTo(track.left + 8, 1),
     );
     expect(tester.takeException(), isNull);
   });
@@ -196,7 +196,7 @@ void main() {
     await tester.pump();
     pending.completeError(StateError('late artificial response'));
     await tester.pumpAndSettle();
-    expect(find.text('Линия не подключена'), findsOneWidget);
+    expect(find.text('Не на линии'), findsOneWidget);
     expect(
       find.text('Не удалось изменить статус. Попробуй ещё раз.'),
       findsNothing,

@@ -36,7 +36,8 @@ class PreviewShell extends StatefulWidget {
   final AddressService Function(String)? addressServiceFactory;
   final MapTileSession Function(String)? tileSessionFactory;
   final Widget? accountPanel;
-  final VoidCallback? onSignOut, onOpenDriverDemo;
+  final VoidCallback? onSignOut;
+  final Future<int?> Function()? onOpenDriverDemo;
   @override
   State<PreviewShell> createState() => _PreviewShellState();
 }
@@ -85,7 +86,15 @@ class _PreviewShellState extends State<PreviewShell> {
                     device: widget.device,
                     accountPanel: widget.accountPanel,
                     onSignOut: widget.onSignOut,
-                    onOpenDriverDemo: widget.onOpenDriverDemo,
+                    onOpenDriverDemo: widget.onOpenDriverDemo == null
+                        ? null
+                        : () async {
+                            final index = await widget.onOpenDriverDemo!();
+                            if (!mounted || index == null) return;
+                            Navigator.of(this.context)
+                                .popUntil((route) => route.isFirst);
+                            setState(() => _index = index);
+                          },
                     onTrips: () => setState(() => _index = 1),
                     onBack: () => setState(() => _index = 0),
                   ),
@@ -167,11 +176,7 @@ class HistoryScreen extends StatelessWidget {
           children: [
             Text('Ваши поездки', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 16),
-            const SurfaceCard(
-              child: Text(
-                'История появится после подключения заказов. В тестовой версии поездок нет.',
-              ),
-            ),
+            const SurfaceCard(child: Text('Пока нет поездок.')),
           ],
         ),
       ),

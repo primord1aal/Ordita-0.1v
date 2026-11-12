@@ -41,14 +41,14 @@ class _AdaptiveNavigationState extends State<AdaptiveNavigation> {
     'Профиль',
   ];
   List<IconData> get _icons => [
-    driver ? Icons.local_taxi_outlined : Icons.place_outlined,
+    driver ? Icons.map_outlined : Icons.place_outlined,
     Icons.history,
     Icons.person_outline,
   ];
 
   TextStyle _style(BuildContext context, int i) => TextStyle(
-    fontSize: 13,
-    height: 1.2,
+    fontSize: driver ? 12 : 13,
+    height: driver ? 1.25 : 1.2,
     fontWeight: selected == i ? FontWeight.w700 : FontWeight.w500,
     color: selected == i
         ? OrbitaPalette.of(context).text
@@ -89,9 +89,12 @@ class _AdaptiveNavigationState extends State<AdaptiveNavigation> {
       final horizontalHeight =
           math.max(
             64.0,
-            24 + 5 + sizes.map((s) => s.height).reduce(math.max) + 20,
+            (driver ? 23 : 24) +
+                5 +
+                sizes.map((s) => s.height).reduce(math.max) +
+                (driver ? 12 : 20),
           ) +
-          14 +
+          (driver ? 9 : 14) +
           safe.bottom;
       final rowsHeight =
           sizes
@@ -113,7 +116,9 @@ class _AdaptiveNavigationState extends State<AdaptiveNavigation> {
       return DecoratedBox(
         key: Key('navigation-${layout.name}'),
         decoration: BoxDecoration(
-          color: OrbitaPalette.of(context).surface,
+          color: driver
+              ? OrbitaPalette.of(context).background
+              : OrbitaPalette.of(context).surface,
           border: Border(
             top: BorderSide(color: OrbitaPalette.of(context).divider),
           ),
@@ -144,7 +149,9 @@ class _AdaptiveNavigationState extends State<AdaptiveNavigation> {
   Widget _horizontal(BuildContext context) {
     final palette = OrbitaPalette.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      padding: driver
+          ? const EdgeInsets.fromLTRB(8, 5, 8, 4)
+          : const EdgeInsets.fromLTRB(8, 6, 8, 8),
       child: IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -167,16 +174,18 @@ class _AdaptiveNavigationState extends State<AdaptiveNavigation> {
                             minWidth: 48,
                           ),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 10,
-                            ),
+                            padding: driver
+                                ? const EdgeInsets.fromLTRB(4, 7, 4, 5)
+                                : const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 10,
+                                  ),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
                                   _icons[i],
-                                  size: 24,
+                                  size: driver ? 23 : 24,
                                   color: selected == i
                                       ? palette.accent
                                       : palette.muted,

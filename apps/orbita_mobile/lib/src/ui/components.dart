@@ -53,12 +53,17 @@ class PageHeader extends StatelessWidget {
 }
 
 class BrandHeader extends StatelessWidget {
-  const BrandHeader({this.showShift = false, super.key});
+  const BrandHeader({
+    this.showShift = false,
+    this.driverTypography = false,
+    super.key,
+  });
   final bool showShift;
+  final bool driverTypography;
   @override
   Widget build(BuildContext context) => Container(
     constraints: const BoxConstraints(minHeight: 74),
-    padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
+    padding: EdgeInsets.fromLTRB(18, driverTypography ? 10 : 12, 18, 12),
     decoration: BoxDecoration(
       color: Color.lerp(
         OrbitaPalette.of(context).surface,
@@ -71,27 +76,31 @@ class BrandHeader extends StatelessWidget {
     ),
     child: LayoutBuilder(
       builder: (context, constraints) {
-        const style = TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
+        final style = TextStyle(
+          fontSize: driverTypography ? 25 : 22,
+          fontWeight: driverTypography ? FontWeight.w700 : FontWeight.w800,
+          letterSpacing: driverTypography ? -1.375 : null,
           height: 1.2,
         );
-        const title = Row(
+        final title = Row(
           children: [
-            OrbitaLogo(size: 42),
-            SizedBox(width: 10),
+            const OrbitaLogo(size: 42),
+            const SizedBox(width: 10),
             Expanded(child: Text('орбита.', style: style)),
           ],
         );
         if (!showShift) {
-          return const Align(alignment: Alignment.centerLeft, child: title);
+          return Align(alignment: Alignment.centerLeft, child: title);
         }
-        return const Column(
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             title,
-            SizedBox(height: 8),
-            Align(alignment: Alignment.centerRight, child: ShiftControl()),
+            const SizedBox(height: 8),
+            const Align(
+              alignment: Alignment.centerRight,
+              child: ShiftControl(),
+            ),
           ],
         );
       },
