@@ -121,7 +121,7 @@ abstract final class OrbitaColors {
   static const warning = Color(0xffE4C58F);
 }
 
-const appVersion = '0.5.8 · сборка 10';
+const appVersion = '0.5.9 · сборка 11';
 
 ThemeData orbitaTheme({Brightness brightness = Brightness.dark}) {
   final p = brightness == Brightness.dark

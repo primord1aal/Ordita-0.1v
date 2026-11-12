@@ -4,6 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../maps/map_settings.dart';
+import '../maps/map_location_action.dart';
+import '../maps/address_models.dart';
+import '../platform/device_gateway.dart';
 import '../maps/map_tiles.dart';
 import '../ui/components.dart' hide ShiftControl;
 import '../ui/driver_demo_access.dart';
@@ -11,9 +14,10 @@ import '../ui/driver_map.dart';
 import '../ui/shift_control.dart';
 import '../ui/theme.dart';
 
-class DriverScreen extends StatelessWidget {
+class DriverScreen extends StatefulWidget {
   const DriverScreen({
     required this.mapSettings,
+    this.device,
     this.enabled = true,
     this.foreground = true,
     this.tileSessionFactory,
@@ -21,18 +25,67 @@ class DriverScreen extends StatelessWidget {
   });
 
   final MapSettings mapSettings;
+  final DeviceGateway? device;
   final bool enabled, foreground;
   final MapTileSession Function(String)? tileSessionFactory;
 
   @override
-  Widget build(BuildContext context) => _DriverBody(
-    mapSettings: mapSettings,
-    enabled: enabled,
-    foreground: foreground,
-    tileSessionFactory: tileSessionFactory,
-    slider: const ShiftControl(),
-    panel: const _EmptyPanel(online: false),
-    panelHeight: _EmptyPanel.height(context),
+  State<DriverScreen> createState() => _DriverScreenState();
+}
+
+class _DriverScreenState extends State<DriverScreen> {
+  MapLocationAction? _location;
+  GeoPoint? _position;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.device case final device?) {
+      _location = MapLocationAction(
+        device: device,
+        isAllowed: () =>
+            mounted &&
+            widget.enabled &&
+            widget.foreground &&
+            widget.mapSettings.configured,
+        onLocation: (point) => setState(() => _position = point),
+        onError: (message) {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(SnackBar(content: Text(message)));
+          }
+        },
+      );
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant DriverScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled || !widget.foreground) _location?.cancel(notify: false);
+  }
+
+  @override
+  void dispose() {
+    _location?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _location ?? const AlwaysStoppedAnimation<double>(0),
+    builder: (context, _) => _DriverBody(
+      mapSettings: widget.mapSettings,
+      enabled: widget.enabled,
+      foreground: widget.foreground,
+      tileSessionFactory: widget.tileSessionFactory,
+      focusPoint: _position,
+      onLocate: _location?.locate,
+      locating: _location?.busy ?? false,
+      slider: const ShiftControl(),
+      panel: const _EmptyPanel(online: false),
+      panelHeight: _EmptyPanel.height(context),
+    ),
   );
 }
 
@@ -369,7 +422,13 @@ class _DriverBody extends StatelessWidget {
     this.enabled = true,
     this.foreground = true,
     this.tileSessionFactory,
+    this.focusPoint,
+    this.onLocate,
+    this.locating = false,
   });
+  final GeoPoint? focusPoint;
+  final VoidCallback? onLocate;
+  final bool locating;
   final MapSettings mapSettings;
   final Widget panel;
   final double panelHeight;
@@ -416,6 +475,9 @@ class _DriverBody extends StatelessWidget {
                   foreground: foreground,
                   height: height,
                   tileSessionFactory: tileSessionFactory,
+                  focusPoint: focusPoint,
+                  onLocate: onLocate,
+                  locating: locating,
                 ),
                 panel,
               ],

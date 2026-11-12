@@ -32,6 +32,7 @@ Future<void> mountMapAccount(
       authRepository: auth ?? (FakeAuthRepository()..saved = testSession()),
       mapSettings: settings,
       addressServiceFactory: (_) => service ?? FakeAddressService(),
+      routeServiceFactory: (_) => FakeRouteService(),
       tileSessionFactory: (_) => FakeMapTiles(),
     ),
   );
@@ -70,10 +71,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(MapPickerScreen), findsOneWidget);
         expect(find.byKey(const Key('map-background-cover')), findsNothing);
-        expect(
-          find.textContaining('Точка под прицелом: 55.00000, 82.43000'),
-          findsOneWidget,
-        );
+        expect(find.text('Учебная точка, Чик'), findsOneWidget);
         expect(tester.takeException(), isNull);
       } finally {
         semantics.dispose();
@@ -122,15 +120,21 @@ void main() {
     await tester.tap(find.byKey(const Key('destination-on-map')));
     await tester.pumpAndSettle();
     final map = tester.getRect(find.byType(FlutterMap).last);
-    await tester.tapAt(map.center + const Offset(30, 30));
+    final panelTop = tester
+        .getTopLeft(find.byKey(const Key('map-point-panel')))
+        .dy;
+    await tester.tapAt(
+      Offset(map.center.dx + 30, (map.top + panelTop) / 2 + 30),
+    );
     // flutter_map ждёт окно второго нажатия перед onTap (double-tap zoom).
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     await scrollTo(tester, find.byKey(const Key('confirm-map-point')));
     await tester.tap(find.byKey(const Key('confirm-map-point')));
     await tester.pumpAndSettle();
-    expect(service.points.single.longitude, greaterThan(82.43));
-    expect(service.points.single.latitude, lessThan(55.0));
+    expect(service.points.last.longitude, greaterThan(82.43));
+    expect(service.points.last.latitude, lessThan(55.0));
     expect(
       tester
           .widget<TextField>(find.byKey(const Key('destination')))
@@ -140,34 +144,33 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
-  testWidgets(
-    'Back из выбора карты оставляет прежний адрес без reverse-запроса',
-    (tester) async {
-      final service = FakeAddressService();
-      await mountMapAccount(tester, service: service);
-      await scrollTo(tester, find.byKey(const Key('pickup')));
-      await tester.enterText(
-        find.byKey(const Key('pickup')),
-        'Ручной исходный адрес',
-      );
-      tester.testTextInput.hide();
-      FocusManager.instance.primaryFocus?.unfocus();
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('pickup-on-map')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(BackButton));
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<TextField>(find.byKey(const Key('pickup')))
-            .controller!
-            .text,
-        'Ручной исходный адрес',
-      );
-      expect(service.points, isEmpty);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('Back из выбора карты сохраняет прежний адрес после preview', (
+    tester,
+  ) async {
+    final service = FakeAddressService();
+    await mountMapAccount(tester, service: service);
+    await scrollTo(tester, find.byKey(const Key('pickup')));
+    await tester.enterText(
+      find.byKey(const Key('pickup')),
+      'Ручной исходный адрес',
+    );
+    tester.testTextInput.hide();
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('pickup-on-map')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('pickup')))
+          .controller!
+          .text,
+      'Ручной исходный адрес',
+    );
+    expect(service.points, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('Открытая карта переживает перепроверку; выбор временно закрыт', (
     tester,
   ) async {

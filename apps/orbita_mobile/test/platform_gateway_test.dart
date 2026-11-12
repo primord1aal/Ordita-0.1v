@@ -54,4 +54,83 @@ void main() {
     });
     expect(state.canStartDiagnostic, isFalse);
   });
+  test(
+    'Разовый запрос получает координаты и точность без запуска службы',
+    () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            calls.add(call.method);
+            return <String, dynamic>{
+              'latitude': 55.012,
+              'longitude': 82.432,
+              'accuracyMeters': 18.5,
+              'capturedAt': 1794484800000,
+            };
+          });
+      final fix = await AndroidDeviceGateway(channel: channel)
+          .currentLocation();
+      expect(fix.latitude, 55.012);
+      expect(fix.longitude, 82.432);
+      expect(fix.accuracyMeters, 18.5);
+      expect(fix.capturedAt.millisecondsSinceEpoch, 1794484800000);
+      expect(calls, ['currentLocation']);
+    },
+  );
+  test(
+    'Отмена разового запроса не останавливает диагностическую службу',
+    () async {
+      await AndroidDeviceGateway(channel: channel).cancelCurrentLocation();
+      expect(calls, ['cancelCurrentLocation']);
+    },
+  );
+  for (final code in ['permission', 'location_disabled', 'timeout', 'busy']) {
+    test('Ошибка разовой геопозиции $code сохраняет причину', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (_) async {
+            throw PlatformException(code: code, message: 'Тестовая причина');
+          });
+      await expectLater(
+        AndroidDeviceGateway(channel: channel).currentLocation(),
+        throwsA(isA<PlatformException>().having((e) => e.code, 'code', code)),
+      );
+    });
+  }
+  test(
+    'Пустой ответ Android не превращается в вымышленные координаты',
+    () async {
+      await expectLater(
+        AndroidDeviceGateway(channel: channel).currentLocation(),
+        throwsA(
+          isA<PlatformException>().having(
+            (e) => e.code,
+            'code',
+            'invalid_location',
+          ),
+        ),
+      );
+    },
+  );
+  test('Некорректные координаты, точность и время отклоняются', () {
+    final valid = <String, dynamic>{
+      'latitude': 55.012,
+      'longitude': 82.432,
+      'accuracyMeters': 18.5,
+      'capturedAt': 1794484800000,
+    };
+    for (final invalid in [
+      {'latitude': double.nan},
+      {'latitude': 91},
+      {'longitude': double.infinity},
+      {'longitude': -181},
+      {'accuracyMeters': -1},
+      {'accuracyMeters': 'unknown'},
+      {'capturedAt': 0},
+      {'capturedAt': 8640000000000001},
+    ]) {
+      expect(
+        () => DeviceLocationFix.fromMap({...valid, ...invalid}),
+        throwsA(isA<PlatformException>()),
+      );
+    }
+  });
 }

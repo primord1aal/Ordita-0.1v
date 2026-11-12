@@ -1,5 +1,50 @@
 import 'package:flutter/services.dart';
 
+/// Одноразовая позиция Android. Существует только в памяти текущего экрана.
+class DeviceLocationFix {
+  const DeviceLocationFix({
+    required this.latitude,
+    required this.longitude,
+    required this.accuracyMeters,
+    required this.capturedAt,
+  });
+
+  factory DeviceLocationFix.fromMap(Map<String, dynamic> map) {
+    final latitude = map['latitude'];
+    final longitude = map['longitude'];
+    final accuracy = map['accuracyMeters'];
+    final capturedAt = map['capturedAt'];
+    if (latitude is! num ||
+        !latitude.isFinite ||
+        latitude.abs() > 90 ||
+        longitude is! num ||
+        !longitude.isFinite ||
+        longitude.abs() > 180 ||
+        accuracy is! num ||
+        !accuracy.isFinite ||
+        accuracy < 0 ||
+        capturedAt is! int ||
+        capturedAt <= 0 ||
+        capturedAt > 8640000000000000) {
+      throw PlatformException(
+        code: 'invalid_location',
+        message: 'Android не передал корректную геопозицию. Повторите попытку.',
+      );
+    }
+    return DeviceLocationFix(
+      latitude: latitude.toDouble(),
+      longitude: longitude.toDouble(),
+      accuracyMeters: accuracy.toDouble(),
+      capturedAt: DateTime.fromMillisecondsSinceEpoch(capturedAt, isUtc: true),
+    );
+  }
+
+  final double latitude;
+  final double longitude;
+  final double accuracyMeters;
+  final DateTime capturedAt;
+}
+
 class DeviceState {
   const DeviceState({
     this.sdk = 0,
@@ -45,6 +90,8 @@ abstract interface class DeviceGateway {
   Future<DeviceState> read();
   Future<void> requestNotifications();
   Future<void> requestForegroundLocation();
+  Future<DeviceLocationFix> currentLocation();
+  Future<void> cancelCurrentLocation();
   Future<void> requestBackgroundLocation();
   Future<void> showLocalNotification();
   Future<void> startLocationDiagnostic();
@@ -69,6 +116,14 @@ class AndroidDeviceGateway implements DeviceGateway {
   @override
   Future<void> requestForegroundLocation() =>
       _call('requestForegroundLocation');
+  @override
+  Future<DeviceLocationFix> currentLocation() async =>
+      DeviceLocationFix.fromMap(
+        await _channel.invokeMapMethod<String, dynamic>('currentLocation') ??
+            {},
+      );
+  @override
+  Future<void> cancelCurrentLocation() => _call('cancelCurrentLocation');
   @override
   Future<void> requestBackgroundLocation() =>
       _call('requestBackgroundLocation');

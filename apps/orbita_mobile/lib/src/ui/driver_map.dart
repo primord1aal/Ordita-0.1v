@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../maps/map_settings.dart';
+import '../maps/address_models.dart';
 import '../maps/map_tiles.dart';
 import 'orbita_map.dart';
 import 'theme.dart';
@@ -14,6 +15,9 @@ class DriverMap extends StatefulWidget {
     this.foreground = true,
     this.height = 300,
     this.tileSessionFactory,
+    this.focusPoint,
+    this.onLocate,
+    this.locating = false,
     super.key,
   });
 
@@ -21,6 +25,9 @@ class DriverMap extends StatefulWidget {
   final bool enabled, foreground;
   final double height;
   final MapTileSession Function(String)? tileSessionFactory;
+  final GeoPoint? focusPoint;
+  final VoidCallback? onLocate;
+  final bool locating;
 
   @override
   State<DriverMap> createState() => _DriverMapState();
@@ -113,6 +120,10 @@ class _DriverMapState extends State<DriverMap> {
       session: _session,
       borderRadius: BorderRadius.zero,
       controls: MapControls.driver,
+      focusPoint: widget.focusPoint,
+      userPosition: widget.focusPoint,
+      onLocate: widget.onLocate,
+      locating: widget.locating,
     );
   }
 }

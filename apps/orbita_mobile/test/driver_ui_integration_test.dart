@@ -346,7 +346,7 @@ void main() {
               .maxScrollExtent,
           lessThanOrEqualTo(1),
         );
-        // 4: GPS48 недоступен, 5: nav73 + системный отступ23, map icon.
+        // 4: GPS48 доступен в реальном интерфейсе, отключён в demo; 5: nav73 + inset23.
         final gps = find.byTooltip('Моё местоположение');
         expect(tester.getSize(gps), const Size(48, 48));
         expect(
@@ -355,7 +355,7 @@ void main() {
                 find.ancestor(of: gps, matching: find.byType(IconButton)).first,
               )
               .onPressed,
-          isNull,
+          spec.$3 == null ? isNotNull : isNull,
         );
         expect(find.byTooltip('Приблизить карту'), findsNothing);
         expect(nav.height, closeTo(73 + 23, 1));

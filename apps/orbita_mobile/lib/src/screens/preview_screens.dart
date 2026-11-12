@@ -4,6 +4,7 @@ import '../domain/contracts.dart';
 import '../maps/map_settings.dart';
 import '../maps/map_tiles.dart';
 import '../maps/geoapify_service.dart';
+import '../maps/route_preview.dart';
 import '../platform/device_gateway.dart';
 import '../ui/components.dart';
 import '../ui/theme.dart';
@@ -22,6 +23,7 @@ class PreviewShell extends StatefulWidget {
     this.mapAccessAllowed = true,
     this.mapForeground = true,
     this.addressServiceFactory,
+    this.routeServiceFactory,
     this.tileSessionFactory,
     this.accountPanel,
     this.onSignOut,
@@ -34,6 +36,7 @@ class PreviewShell extends StatefulWidget {
   final bool mapAccessAllowed;
   final bool mapForeground;
   final AddressService Function(String)? addressServiceFactory;
+  final RouteService Function(String)? routeServiceFactory;
   final MapTileSession Function(String)? tileSessionFactory;
   final Widget? accountPanel;
   final VoidCallback? onSignOut;
@@ -61,6 +64,7 @@ class _PreviewShellState extends State<PreviewShell> {
                       MediaQuery.viewInsetsOf(context).bottom)
                   .clamp(0.0, double.infinity);
           return Scaffold(
+            resizeToAvoidBottomInset: driver || _index != 0,
             body: SafeArea(
               bottom: false,
               child: IndexedStack(
@@ -69,15 +73,18 @@ class _PreviewShellState extends State<PreviewShell> {
                   driver
                       ? DriverScreen(
                           mapSettings: widget.mapSettings,
+                          device: widget.device,
                           enabled: widget.mapAccessAllowed && _index == 0,
                           foreground: widget.mapForeground,
                           tileSessionFactory: widget.tileSessionFactory,
                         )
                       : PassengerScreen(
                           mapSettings: widget.mapSettings,
+                          device: widget.device,
                           enabled: widget.mapAccessAllowed && _index == 0,
                           foreground: widget.mapForeground,
                           serviceFactory: widget.addressServiceFactory,
+                          routeServiceFactory: widget.routeServiceFactory,
                           tileSessionFactory: widget.tileSessionFactory,
                         ),
                   const HistoryScreen(),
@@ -101,16 +108,25 @@ class _PreviewShellState extends State<PreviewShell> {
                 ],
               ),
             ),
-            bottomNavigationBar: keyboardVisible
+            bottomNavigationBar: keyboardVisible && (driver || _index != 0)
                 ? null
-                : AdaptiveNavigation(
-                    driver: driver,
-                    availableHeight: availableHeight,
-                    selected: _index,
-                    onSelected: (i) {
-                      FocusScope.of(context).unfocus();
-                      setState(() => _index = i);
-                    },
+                : Visibility(
+                    visible: !keyboardVisible,
+                    maintainSize: true,
+                    maintainAnimation: true,
+                    maintainState: true,
+                    child: AdaptiveNavigation(
+                      driver: driver,
+                      availableHeight: !driver && _index == 0
+                          ? availableHeight +
+                                MediaQuery.viewInsetsOf(context).bottom
+                          : availableHeight,
+                      selected: _index,
+                      onSelected: (i) {
+                        FocusScope.of(context).unfocus();
+                        setState(() => _index = i);
+                      },
+                    ),
                   ),
           );
         },

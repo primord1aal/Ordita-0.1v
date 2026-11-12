@@ -32,6 +32,8 @@ void main() {
       await tester.enterText(find.byKey(const Key('pickup')), 'Учебная точка');
       tester.testTextInput.hide();
       await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
       await scrollTo(tester, find.byKey(const Key('create-order')));
       expect(
         tester

@@ -219,7 +219,9 @@ void main() {
       await tester.pumpAndSettle();
       await scrollTo(tester, find.byKey(const Key('destination')));
       checkHorizontalBounds(tester);
-      expect(find.byKey(const Key('nav-0')), findsNothing);
+      expect(find.byKey(const Key('nav-0')).hitTestable(), findsNothing);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
       await scrollTo(tester, find.byKey(const Key('create-order')));
       expect(
         tester.getRect(find.byKey(const Key('create-order'))).bottom,

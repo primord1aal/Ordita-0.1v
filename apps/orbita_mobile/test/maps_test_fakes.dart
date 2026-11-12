@@ -7,6 +7,7 @@ import 'package:orbita_mobile/src/maps/address_models.dart';
 import 'package:orbita_mobile/src/maps/geoapify_service.dart';
 import 'package:orbita_mobile/src/maps/map_settings.dart';
 import 'package:orbita_mobile/src/maps/map_tiles.dart';
+import 'package:orbita_mobile/src/maps/route_preview.dart';
 
 const fakeMapKey = 'local_fake_map_key_0123456789';
 const examplePlace = AddressPlace(
@@ -84,4 +85,24 @@ class FailingMapTiles extends MapTileSession {
   @override
   Future<Uint8List> tile(TileCoordinates coordinate) async =>
       throw const MapFailure(MapFailureKind.limit);
+}
+
+class FakeRouteService implements RouteService {
+  final calls = <(GeoPoint, GeoPoint)>[];
+  @override
+  Future<RoutePreview?> route(GeoPoint pickup, GeoPoint destination) async {
+    calls.add((pickup, destination));
+    return RoutePreview(
+      lines: [
+        [pickup, const GeoPoint(55.012, 82.44), destination],
+      ],
+      distanceMeters: 4200,
+      durationSeconds: 540,
+    );
+  }
+
+  @override
+  void cancel() {}
+  @override
+  void close() {}
 }

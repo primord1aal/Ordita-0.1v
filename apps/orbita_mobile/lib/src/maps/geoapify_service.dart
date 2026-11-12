@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 import 'address_models.dart';
+import 'geoapify_address_formatter.dart';
 
 abstract interface class AddressService {
   Future<List<AddressPlace>> search(String query);
@@ -38,10 +39,11 @@ class GeoapifyTransport {
                 const [
                   '/v1/geocode/autocomplete',
                   '/v1/geocode/reverse',
+                  '/v1/routing',
                 ].contains(uri.path)) ||
             (uri.host == 'maps.geoapify.com' &&
                 RegExp(
-                  r'^/v1/tile/(positron|dark-matter)/\d{1,2}/\d+/\d+\.png$',
+                  r'^/v1/tile/(osm-carto|positron|dark-matter)/\d{1,2}/\d+/\d+\.png$',
                 ).hasMatch(uri.path)))) {
       throw const MapFailure(MapFailureKind.configuration);
     }
@@ -114,16 +116,13 @@ class GeoapifyAddressService implements AddressService {
     final places = <AddressPlace>[];
     for (final row in rows.take(5)) {
       if (row is! Map) continue;
-      final lat = row['lat'], lon = row['lon'], label = row['formatted'];
-      if (lat is! num ||
-          lon is! num ||
-          label is! String ||
-          label.trim().isEmpty ||
-          label.length > 500) {
+      final lat = row['lat'], lon = row['lon'];
+      final label = formatGeoapifyAddress(row);
+      if (lat is! num || lon is! num || label == null) {
         continue;
       }
       final point = GeoPoint(lat.toDouble(), lon.toDouble());
-      if (point.valid) places.add(AddressPlace(label.trim(), point));
+      if (point.valid) places.add(AddressPlace(label, point));
     }
     if (rows.isNotEmpty && places.isEmpty) {
       throw const MapFailure(MapFailureKind.invalid);
@@ -142,11 +141,11 @@ class GeoapifyAddressService implements AddressService {
     });
     if (rows.isEmpty) return null;
     final first = rows.first;
-    final label = first is Map ? first['formatted'] : null;
-    if (label is! String || label.trim().isEmpty || label.length > 500) {
+    final label = first is Map ? formatGeoapifyAddress(first) : null;
+    if (label == null) {
       throw const MapFailure(MapFailureKind.invalid);
     }
-    return label.trim();
+    return label;
   }
 
   Future<List<dynamic>> _rows(

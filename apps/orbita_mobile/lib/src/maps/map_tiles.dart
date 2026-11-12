@@ -10,6 +10,7 @@ import 'geoapify_service.dart';
 
 /// Geoapify raster styles: https://apidocs.geoapify.com/docs/maps/map-tiles/
 enum MapTileStyle {
+  osmCarto('osm-carto'),
   positron('positron'),
   darkMatter('dark-matter');
 

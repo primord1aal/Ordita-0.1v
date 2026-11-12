@@ -139,4 +139,34 @@ void main() {
     expect(controller.pickup.suggestions, isEmpty);
     expect(controller.pickup.text, 'Черновик');
   });
+  test('Preview показывает адрес, но Back не изменяет черновик', () async {
+    controller.edit(AddressField.pickup, 'Прежний ручной адрес');
+    final label = await controller.previewPoint(examplePlace.point);
+    expect(label, service.reverseLabel);
+    expect(controller.pickup.text, 'Прежний ручной адрес');
+    expect(controller.pickup.place, isNull);
+    await controller.choosePoint(
+      AddressField.pickup,
+      examplePlace.point,
+      address: label,
+    );
+    expect(controller.pickup.text, label);
+    expect(controller.pickup.place!.point, examplePlace.point);
+    expect(service.points, hasLength(1));
+  });
+  test(
+    'Старый reverse preview после новой точки или потери доступа отклоняется',
+    () async {
+      final pending = Completer<String?>();
+      service.reversePending = pending;
+      final old = controller.previewPoint(examplePlace.point);
+      final rejection = expectLater(old, throwsA(isA<MapFailure>()));
+      controller.cancelPointPreview();
+      controller.setEnabled(false);
+      pending.complete('Устаревший адрес');
+      await rejection;
+      expect(controller.pickup.place, isNull);
+      expect(controller.pickup.text, isEmpty);
+    },
+  );
 }

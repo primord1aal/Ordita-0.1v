@@ -145,9 +145,34 @@ class PassengerAddressController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> choosePoint(AddressField field, GeoPoint point) async {
+  Future<String?> previewPoint(GeoPoint point) async {
+    if (!enabled || !point.valid) {
+      throw const MapFailure(MapFailureKind.cancelled);
+    }
+    _cancel();
+    final generation = _generation;
+    if (!settings.configured) {
+      throw const MapFailure(MapFailureKind.configuration);
+    }
+    final label = await _service.reverse(point);
+    if (!_current(generation)) {
+      throw const MapFailure(MapFailureKind.cancelled);
+    }
+    return label;
+  }
+
+  void cancelPointPreview() {
+    if (!_disposed) _cancel();
+  }
+
+  Future<void> choosePoint(
+    AddressField field,
+    GeoPoint point, {
+    String? address,
+  }) async {
     if (!enabled || !point.valid) return;
-    select(field, AddressPlace('Точка на карте', point));
+    select(field, AddressPlace(address ?? 'Точка на карте', point));
+    if (address != null) return;
     final item = draft(field), generation = _generation;
     if (!settings.configured) return;
     item.busy = true;

@@ -11,6 +11,7 @@ import 'auth/auth_repository.dart';
 import 'maps/map_settings.dart';
 import 'maps/map_tiles.dart';
 import 'maps/geoapify_service.dart';
+import 'maps/route_preview.dart';
 import 'platform/device_gateway.dart';
 import 'screens/api_check_screen.dart';
 import 'screens/auth_screen.dart';
@@ -27,6 +28,7 @@ class OrbitaApp extends StatefulWidget {
     this.authRepository,
     this.mapSettings,
     this.addressServiceFactory,
+    this.routeServiceFactory,
     this.tileSessionFactory,
     this.themeSettings,
     super.key,
@@ -36,6 +38,7 @@ class OrbitaApp extends StatefulWidget {
   final AuthRepository? authRepository;
   final MapSettings? mapSettings;
   final AddressService Function(String)? addressServiceFactory;
+  final RouteService Function(String)? routeServiceFactory;
   final MapTileSession Function(String)? tileSessionFactory;
   final ThemeSettings? themeSettings;
   @override
@@ -103,6 +106,7 @@ class _OrbitaAppState extends State<OrbitaApp> {
             device: widget.device,
             mapSettings: _maps,
             addressServiceFactory: widget.addressServiceFactory,
+            routeServiceFactory: widget.routeServiceFactory,
             tileSessionFactory: widget.tileSessionFactory,
           ),
           if (kDebugMode)

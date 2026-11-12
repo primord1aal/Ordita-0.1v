@@ -28,7 +28,14 @@ void main() {
       return http.Response(
         jsonEncode({
           'results': [
-            {'formatted': 'Учебная улица, Чик', 'lat': 55.0, 'lon': 82.43},
+            {
+              'city': 'Чик',
+              'street': 'Улица Павлика Морозова',
+              'housenumber': '1',
+              'formatted': 'Улица Павлика Морозова 1, Чик, NS, Россия, 632662',
+              'lat': 55.0,
+              'lon': 82.43,
+            },
           ],
         }),
         200,
@@ -42,7 +49,8 @@ void main() {
     addTearDown(service.close);
     final result = await service.search('  Чик, улица Ленина  ');
     expect(result.single.point.latitude, 55.0);
-    expect(result.single.label, 'Учебная улица, Чик');
+    expect(result.single.point.longitude, 82.43);
+    expect(result.single.label, 'Чик, улица Павлика Морозова, 1');
   });
   test(
     'Обратный поиск получает выбранные координаты и русский адрес',
@@ -57,7 +65,13 @@ void main() {
             return http.Response(
               jsonEncode({
                 'results': [
-                  {'formatted': 'Адрес выбранной точки'},
+                  {
+                    'city': 'Чик',
+                    'street': 'Улица Павлика Морозова',
+                    'housenumber': '1',
+                    'formatted':
+                        'Улица Павлика Морозова 1, Чик, NS, Россия, 632662',
+                  },
                 ],
               }),
               200,
@@ -69,10 +83,77 @@ void main() {
       addTearDown(service.close);
       expect(
         await service.reverse(const GeoPoint(55.01, 82.44)),
-        'Адрес выбранной точки',
+        'Чик, улица Павлика Морозова, 1',
       );
     },
   );
+  test('Поиск принимает структурированный адрес без formatted', () async {
+    final service = GeoapifyAddressService(
+      fakeMapKey,
+      transport: GeoapifyTransport(
+        clientFactory: () => MockClient(
+          (_) async => http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'results': [
+                  {
+                    'village': 'Учебный',
+                    'street': 'улица Речная',
+                    'lat': 55.0,
+                    'lon': 82.43,
+                  },
+                ],
+              }),
+            ),
+            200,
+          ),
+        ),
+      ),
+    );
+    addTearDown(service.close);
+    final result = await service.search('Учебный');
+    expect(result.single.label, 'Учебный, улица Речная');
+    expect(result.single.point.latitude, 55.0);
+    expect(result.single.point.longitude, 82.43);
+  });
+  test('Оба вида поиска используют только короткую подпись без административных частей', () async {
+    var row = <String, dynamic>{
+      'address_line1': 'Учебный сквер',
+      'formatted': 'Учебный сквер, NS, Россия, 632662',
+    };
+    final service = GeoapifyAddressService(
+      fakeMapKey,
+      transport: GeoapifyTransport(
+        clientFactory: () => MockClient(
+          (_) async => http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'results': [
+                  {...row, 'lat': 55.0, 'lon': 82.43},
+                ],
+              }),
+            ),
+            200,
+          ),
+        ),
+      ),
+    );
+    addTearDown(service.close);
+    for (final (data, expected) in [
+      (row, 'Учебный сквер'),
+      (
+        {
+          'name': 'Учебная остановка',
+          'formatted': 'Россия, NS, Учебная остановка',
+        },
+        'Учебная остановка',
+      ),
+    ]) {
+      row = data;
+      expect((await service.search('Учебный')).single.label, expected);
+      expect(await service.reverse(const GeoPoint(55.0, 82.43)), expected);
+    }
+  });
   test(
     'Пустая выдача остаётся пустой, некорректные координаты не принимаются',
     () async {

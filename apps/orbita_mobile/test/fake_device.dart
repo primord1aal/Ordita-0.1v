@@ -7,6 +7,7 @@ class FakeDevice implements DeviceGateway {
   bool failRead = false;
   Future<DeviceState> Function()? readHandler;
   Future<void> Function(String name)? actionHandler;
+  Future<DeviceLocationFix> Function()? locationHandler;
   void Function()? openCallback;
   @override
   Future<DeviceState> read() async {
@@ -26,6 +27,19 @@ class FakeDevice implements DeviceGateway {
   Future<void> requestForegroundLocation() async {
     calls.add('foreground');
     await actionHandler?.call('foreground');
+  }
+
+  @override
+  Future<DeviceLocationFix> currentLocation() async {
+    calls.add('currentLocation');
+    if (locationHandler != null) return locationHandler!();
+    throw StateError('Тестовая геопозиция не задана');
+  }
+
+  @override
+  Future<void> cancelCurrentLocation() async {
+    calls.add('cancelCurrentLocation');
+    await actionHandler?.call('cancelCurrentLocation');
   }
 
   @override

@@ -9,6 +9,7 @@ import '../domain/contracts.dart';
 import '../maps/map_settings.dart';
 import '../maps/map_tiles.dart';
 import '../maps/geoapify_service.dart';
+import '../maps/route_preview.dart';
 import '../platform/device_gateway.dart';
 import '../ui/components.dart';
 import '../ui/orbita_brand.dart';
@@ -22,6 +23,7 @@ class AuthScreen extends StatefulWidget {
     required this.device,
     required this.mapSettings,
     this.addressServiceFactory,
+    this.routeServiceFactory,
     this.tileSessionFactory,
     super.key,
   });
@@ -29,6 +31,7 @@ class AuthScreen extends StatefulWidget {
   final DeviceGateway device;
   final MapSettings mapSettings;
   final AddressService Function(String)? addressServiceFactory;
+  final RouteService Function(String)? routeServiceFactory;
   final MapTileSession Function(String)? tileSessionFactory;
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -140,6 +143,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             mapAccessAllowed: _controller.canUseRole,
                             mapForeground: _controller.foreground,
                             addressServiceFactory: widget.addressServiceFactory,
+                            routeServiceFactory: widget.routeServiceFactory,
                             tileSessionFactory: widget.tileSessionFactory,
                             accountPanel: _accountPanel(visible),
                             onSignOut: _controller.signOut,

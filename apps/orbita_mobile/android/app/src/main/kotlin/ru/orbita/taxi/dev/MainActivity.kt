@@ -15,6 +15,7 @@ class MainActivity : FlutterActivity() {
     private lateinit var channel: MethodChannel
     private var pendingPermission: MethodChannel.Result? = null
     private var activityVisible = false
+    private val currentLocationRequest by lazy { CurrentLocationRequest(this) { activityVisible } }
 
     @SuppressLint("MissingPermission") // Показ уведомления защищён notificationsAllowed.
     override fun configureFlutterEngine(engine: FlutterEngine) {
@@ -39,6 +40,11 @@ class MainActivity : FlutterActivity() {
                     }
                     "requestNotifications" -> if (Build.VERSION.SDK_INT >= 33) request(arrayOf(Manifest.permission.POST_NOTIFICATIONS), result) else result.success(null)
                     "requestForegroundLocation" -> request(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), result)
+                    "currentLocation" -> {
+                        if (pendingPermission != null) result.error("busy", "Дождитесь завершения запроса разрешения", null)
+                        else currentLocationRequest.start(result)
+                    }
+                    "cancelCurrentLocation" -> { currentLocationRequest.cancel(); result.success(null) }
                     "requestBackgroundLocation" -> {
                         if (!DeviceSupport.hasLocation(this)) result.error("permission", "Сначала разрешите геопозицию при использовании", null)
                         else if (Build.VERSION.SDK_INT >= 30) { openSettings(); result.success(null) }
@@ -89,7 +95,11 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onResume() { super.onResume(); activityVisible = true }
-    override fun onPause() { activityVisible = false; super.onPause() }
+    override fun onPause() {
+        activityVisible = false
+        currentLocationRequest.cancel("not_visible", "Экран карты закрыт")
+        super.onPause()
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -101,6 +111,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        currentLocationRequest.cancel("closed", "Экран закрыт")
         pendingPermission?.error("closed", "Экран закрыт", null)
         pendingPermission = null
         super.onDestroy()
