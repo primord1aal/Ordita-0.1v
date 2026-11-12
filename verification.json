@@ -1,0 +1,33 @@
+{
+  "file": "ORBITA-0.5.8+10-arm64-debug.apk",
+  "size_bytes": 94707490,
+  "application_id": "ru.orbita.taxi.dev",
+  "version_name": "0.5.8",
+  "version_code": 2010,
+  "architecture": "arm64-v8a",
+  "source_commit": "6498ef88a30cdbf536ca245aab425bf9f54340ea",
+  "apk_sha256": "23f7ae835692340649f5ce034ebb7b130e1d707f6d83721c4d08244c6265a291",
+  "certificate_sha256": "36e06fba301fdca7928c8e20b120f24dcc49647b7997565597950feba2f6771f",
+  "certificate_matches_previous": true,
+  "expected_public_defines_found": {
+    "SUPABASE_TEST_URL": true,
+    "SUPABASE_TEST_PUBLISHABLE_KEY": true,
+    "SUPABASE_TEST_PROJECT_REF": true
+  },
+  "server_secret_patterns_found": 0,
+  "service_role_jwts_found": 0,
+  "forbidden_project_ref_found": false,
+  "kernel_and_snapshots_present": true,
+  "native_libraries": [
+    "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+    "lib/arm64-v8a/libdartjni.so",
+    "lib/arm64-v8a/libdatastore_shared_counter.so",
+    "lib/arm64-v8a/libflutter.so"
+  ],
+  "real_password_login": "not_tested",
+  "splash_themes_checked": true,
+  "launcher_assets_unchanged": true,
+  "permissions_unchanged": true,
+  "allow_backup": false,
+  "cleartext_traffic": false
+}
