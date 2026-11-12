@@ -1,0 +1,91 @@
+{
+  "candidate_sha256": "917623f5c455d5bf54656ee5afa50154a8d9ec7a922fb160643fdce3c75c83b0",
+  "cloud_applied": false,
+  "postgres": "postgres (PostgreSQL) 17.11 (Debian 17.11-0+deb13u1)",
+  "transport": "private Unix socket; listen_addresses empty; no TCP",
+  "full_sql_checks": [
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_01_acl_rls_private_helpers_and_real_login",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_02_creation_shape_server_deadline_and_no_price",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_03_current_product_role_block_and_consistency",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_04_session_uid_binding_expiry_revocation_all_rpc",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_05_exact_point_shape_numbers_bounds_and_unicode_canonicalization",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_06_replay_canonical_payload_and_after_passenger_cancel",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_07_changed_payload_conflicts_and_request_key_scoped_to_owner",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_08_two_concurrent_same_keys_commit_one_receipt",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_09_two_concurrent_different_keys_one_active",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_10_restore_own_only_and_foreign_missing_same_error",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_11_cancel_repeat_latest_recovery_and_active_preferred",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_12_timeout_reads_without_writes_and_next_create_normalizes",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_13_cancel_at_deadline_timeout_reason_wins_and_is_stable",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_14_create_waits_for_block_or_revoke_and_checks_fresh_rights",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_15_owner_read_replay_cancel_survive_block_and_role_change",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_16_real_server_timeout_rolls_back_and_retry_same_intent_once",
+      "passed": true
+    }
+  ],
+  "rechecked_after_explicit_collation": [
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_05_exact_point_shape_numbers_bounds_and_unicode_canonicalization",
+      "passed": true
+    },
+    {
+      "test": "test_orders_sql.OrdersSQLTests.test_06_replay_canonical_payload_and_after_passenger_cancel",
+      "passed": true
+    }
+  ],
+  "dart_model_checks_passed": 14,
+  "flutter_analyze": "No issues found",
+  "limitations": [
+    "JWT signature/Auth HTTP/PostgREST not tested by SQL claims model",
+    "Runtime/UI not connected to new API",
+    "Existing migration executor supports only first migration"
+  ],
+  "full_sql_candidate_sha256": "1e15a113b487448d913ce5978610a217913ed37bbb5bbbf7773aa1a8ad3d6e5b",
+  "migration_guard_regression_checks_passed": 1
+}
