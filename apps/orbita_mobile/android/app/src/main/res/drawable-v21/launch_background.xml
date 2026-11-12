@@ -2,9 +2,9 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="#F1F1E8" />
+            <solid android:color="@color/orbita_splash_background" />
         </shape>
     </item>
-    <item android:drawable="@mipmap/ic_launcher"
-        android:width="96dp" android:height="96dp" android:gravity="center" />
+    <item android:drawable="@drawable/ic_orbita_splash"
+        android:width="288dp" android:height="288dp" android:gravity="center" />
 </layer-list>

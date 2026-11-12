@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Geometry from design/orbita-concept.html, symbol #orbita-sign.
+    Android 12+: a 288 dp canvas without an icon background has a 192 dp
+    circular safe area. The centred 96 dp mark fits entirely inside it.
+    Use the same canvas before API 31, so both launch paths show a 96 dp mark.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+    <group android:translateX="64" android:translateY="64">
+        <path
+            android:fillColor="@color/orbita_splash_tile"
+            android:pathData="M18,0H46A18,18 0,0 1,64 18V46A18,18 0,0 1,46 64H18A18,18 0,0 1,0 46V18A18,18 0,0 1,18 0Z" />
+        <group android:pivotX="32" android:pivotY="32" android:rotation="-43">
+            <path
+                android:fillColor="@android:color/transparent"
+                android:strokeColor="@color/orbita_splash_ring"
+                android:strokeWidth="3.5"
+                android:pathData="M11,32A21,14 0,1 0,53 32A21,14 0,1 0,11 32Z" />
+        </group>
+        <path
+            android:fillColor="@color/orbita_splash_accent"
+            android:pathData="M52.5,17.7A5.1,5.1 0,1 0,42.3 17.7A5.1,5.1 0,1 0,52.5 17.7Z" />
+    </group>
+</vector>

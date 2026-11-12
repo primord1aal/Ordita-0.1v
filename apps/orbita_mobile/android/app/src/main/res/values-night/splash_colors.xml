@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="orbita_splash_background">#23241F</color>
+    <color name="orbita_splash_tile">#F2F0E5</color>
+    <color name="orbita_splash_ring">#23241F</color>
+    <color name="orbita_splash_accent">#E39272</color>
+</resources>
