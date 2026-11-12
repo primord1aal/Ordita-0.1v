@@ -84,249 +84,318 @@ class _OrbitaMapState extends State<OrbitaMap> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      SizedBox(
-        height: widget.height,
-        child: ClipRRect(
-          borderRadius: widget.borderRadius,
-          child: widget.session == null
-              ? ColoredBox(
-                  color: OrbitaPalette.of(context).mapLand,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Text(
-                        'Карта пока не подключена. Адреса можно ввести вручную.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: OrbitaPalette.of(context).text),
-                      ),
-                    ),
-                  ),
-                )
-              : Stack(
-                  children: [
-                    FlutterMap(
-                      mapController: _camera,
-                      options: MapOptions(
-                        initialCenter: LatLng(
-                          widget.initialCenter.latitude,
-                          widget.initialCenter.longitude,
-                        ),
-                        initialZoom: 13,
-                        minZoom: 4,
-                        maxZoom: 18,
-                        backgroundColor: OrbitaPalette.of(context).mapLand,
-                        onMapReady: () => _ready = true,
-                        interactionOptions: InteractionOptions(
-                          flags: widget.enabled && widget.picking
-                              ? InteractiveFlag.all & ~InteractiveFlag.rotate
-                              : InteractiveFlag.none,
-                        ),
-                        onTap: !widget.picking || !widget.enabled
-                            ? null
-                            : (_, point) {
-                                _camera.move(point, _camera.camera.zoom);
-                                widget.onCenterChanged?.call(
-                                  GeoPoint(point.latitude, point.longitude),
-                                );
-                              },
-                        onPositionChanged: (camera, hasGesture) {
-                          if (widget.picking && widget.enabled && hasGesture) {
-                            widget.onCenterChanged?.call(
-                              GeoPoint(
-                                camera.center.latitude,
-                                camera.center.longitude,
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                      children: [
-                        if (widget.enabled)
-                          TileLayer(
-                            key: ValueKey((
-                              widget.session,
-                              widget.session!.style,
-                              _reload,
-                            )),
-                            tileProvider: OrbitaTileProvider(widget.session!),
-                            userAgentPackageName: 'ru.orbita.taxi.dev',
-                            maxNativeZoom: 18,
-                            panBuffer: 0,
-                            keepBuffer: 0,
-                            errorTileCallback: (_, error, _) => _failed(error),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final attributionBelow =
+          MapAttribution.measuredHeight(
+            context,
+            (constraints.maxWidth - 70).clamp(1, double.infinity),
+          ) >
+          (widget.height * 0.25).clamp(48, 100);
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: widget.height,
+            child: ClipRRect(
+              borderRadius: widget.borderRadius,
+              child: widget.session == null
+                  ? ColoredBox(
+                      color: OrbitaPalette.of(context).mapLand,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Text(
+                            'Карта пока не подключена. Адреса можно ввести вручную.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: OrbitaPalette.of(context).text,
+                            ),
                           ),
-                        MarkerLayer(
-                          markers: [
-                            for (final entry in [
-                              (
-                                widget.pickup,
-                                'Откуда',
-                                OrbitaPalette.of(context).text,
-                              ),
-                              (
-                                widget.destination,
-                                'Куда',
-                                OrbitaPalette.of(context).accent,
-                              ),
-                            ])
-                              if (entry.$1 case final place?)
-                                Marker(
-                                  point: LatLng(
-                                    place.point.latitude,
-                                    place.point.longitude,
+                        ),
+                      ),
+                    )
+                  : Stack(
+                      children: [
+                        FlutterMap(
+                          mapController: _camera,
+                          options: MapOptions(
+                            initialCenter: LatLng(
+                              widget.initialCenter.latitude,
+                              widget.initialCenter.longitude,
+                            ),
+                            initialZoom: 13,
+                            minZoom: 4,
+                            maxZoom: 18,
+                            backgroundColor: OrbitaPalette.of(context).mapLand,
+                            onMapReady: () => _ready = true,
+                            interactionOptions: InteractionOptions(
+                              flags: widget.enabled && widget.picking
+                                  ? InteractiveFlag.all &
+                                        ~InteractiveFlag.rotate
+                                  : InteractiveFlag.none,
+                            ),
+                            onTap: !widget.picking || !widget.enabled
+                                ? null
+                                : (_, point) {
+                                    _camera.move(point, _camera.camera.zoom);
+                                    widget.onCenterChanged?.call(
+                                      GeoPoint(point.latitude, point.longitude),
+                                    );
+                                  },
+                            onPositionChanged: (camera, hasGesture) {
+                              if (widget.picking &&
+                                  widget.enabled &&
+                                  hasGesture) {
+                                widget.onCenterChanged?.call(
+                                  GeoPoint(
+                                    camera.center.latitude,
+                                    camera.center.longitude,
                                   ),
-                                  width: 48,
-                                  height: 48,
-                                  alignment: Alignment.topCenter,
-                                  child: Tooltip(
-                                    message: '${entry.$2}: ${place.label}',
-                                    child: entry.$2 == 'Откуда'
-                                        ? Center(
-                                            child: Container(
-                                              width: 32,
-                                              height: 32,
-                                              alignment: Alignment.center,
-                                              decoration: BoxDecoration(
-                                                color: entry.$3,
-                                                borderRadius:
-                                                    BorderRadius.circular(9),
-                                                border: Border.all(
-                                                  color: OrbitaPalette.of(
-                                                    context,
-                                                  ).surface,
-                                                  width: 2,
-                                                ),
-                                              ),
-                                              child: Text(
-                                                'А',
-                                                style: TextStyle(
-                                                  color: OrbitaPalette.of(
-                                                    context,
-                                                  ).surface,
-                                                  fontWeight: FontWeight.w700,
-                                                ),
-                                              ),
-                                            ),
-                                          )
-                                        : Stack(
-                                            alignment: Alignment.topCenter,
-                                            children: [
-                                              Icon(
-                                                Icons.location_pin,
-                                                color: entry.$3,
-                                                size: 44,
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  top: 8,
-                                                ),
-                                                child: Text(
-                                                  'Б',
-                                                  style: TextStyle(
-                                                    color: OrbitaPalette.of(
-                                                      context,
-                                                    ).onAccent,
-                                                    fontWeight: FontWeight.w700,
+                                );
+                              }
+                            },
+                          ),
+                          children: [
+                            if (widget.enabled)
+                              TileLayer(
+                                key: ValueKey((
+                                  widget.session,
+                                  widget.session!.style,
+                                  _reload,
+                                )),
+                                tileProvider: OrbitaTileProvider(
+                                  widget.session!,
+                                ),
+                                userAgentPackageName: 'ru.orbita.taxi.dev',
+                                maxNativeZoom: 18,
+                                panBuffer: 0,
+                                keepBuffer: 0,
+                                errorTileCallback: (_, error, _) =>
+                                    _failed(error),
+                              ),
+                            MarkerLayer(
+                              markers: [
+                                for (final entry in [
+                                  (
+                                    widget.pickup,
+                                    'Откуда',
+                                    OrbitaPalette.of(context).text,
+                                  ),
+                                  (
+                                    widget.destination,
+                                    'Куда',
+                                    OrbitaPalette.of(context).accent,
+                                  ),
+                                ])
+                                  if (entry.$1 case final place?)
+                                    Marker(
+                                      point: LatLng(
+                                        place.point.latitude,
+                                        place.point.longitude,
+                                      ),
+                                      width: 48,
+                                      height: 48,
+                                      alignment: Alignment.topCenter,
+                                      child: Tooltip(
+                                        message: '${entry.$2}: ${place.label}',
+                                        child: entry.$2 == 'Откуда'
+                                            ? Center(
+                                                child: Container(
+                                                  width: 32,
+                                                  height: 32,
+                                                  alignment: Alignment.center,
+                                                  decoration: BoxDecoration(
+                                                    color: entry.$3,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          9,
+                                                        ),
+                                                    border: Border.all(
+                                                      color: OrbitaPalette.of(
+                                                        context,
+                                                      ).surface,
+                                                      width: 2,
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    'А',
+                                                    style: TextStyle(
+                                                      color: OrbitaPalette.of(
+                                                        context,
+                                                      ).surface,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
                                                   ),
                                                 ),
+                                              )
+                                            : Stack(
+                                                alignment: Alignment.topCenter,
+                                                children: [
+                                                  Icon(
+                                                    Icons.location_pin,
+                                                    color: entry.$3,
+                                                    size: 44,
+                                                  ),
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 8,
+                                                        ),
+                                                    child: Text(
+                                                      'Б',
+                                                      style: TextStyle(
+                                                        color: OrbitaPalette.of(
+                                                          context,
+                                                        ).onAccent,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
-                                            ],
-                                          ),
-                                  ),
-                                ),
+                                      ),
+                                    ),
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
-                    if (widget.picking)
-                      IgnorePointer(
-                        child: Center(
-                          child: Icon(
-                            Icons.center_focus_strong,
-                            color: OrbitaPalette.of(context).text,
-                            size: 46,
+                        if (widget.picking)
+                          IgnorePointer(
+                            child: Center(
+                              child: Icon(
+                                Icons.center_focus_strong,
+                                color: OrbitaPalette.of(context).text,
+                                size: 46,
+                              ),
+                            ),
+                          ),
+                        Positioned(
+                          top: widget.picking ? 8 : null,
+                          bottom: widget.picking ? null : 8,
+                          right: 8,
+                          child: Material(
+                            color: OrbitaPalette.of(context).surface,
+                            borderRadius: BorderRadius.circular(14),
+                            child: Column(
+                              children: [
+                                IconButton(
+                                  tooltip: 'Приблизить карту',
+                                  onPressed: widget.enabled
+                                      ? () => _camera.move(
+                                          _camera.camera.center,
+                                          (_camera.camera.zoom + 1).clamp(
+                                            4,
+                                            18,
+                                          ),
+                                        )
+                                      : null,
+                                  icon: const Icon(Icons.add),
+                                ),
+                                IconButton(
+                                  tooltip: 'Отдалить карту',
+                                  onPressed: widget.enabled
+                                      ? () => _camera.move(
+                                          _camera.camera.center,
+                                          (_camera.camera.zoom - 1).clamp(
+                                            4,
+                                            18,
+                                          ),
+                                        )
+                                      : null,
+                                  icon: const Icon(Icons.remove),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    Positioned(
-                      top: widget.picking ? 8 : null,
-                      bottom: widget.picking ? null : 8,
-                      right: 8,
-                      child: Material(
-                        color: OrbitaPalette.of(context).surface,
-                        borderRadius: BorderRadius.circular(14),
-                        child: Column(
-                          children: [
-                            IconButton(
-                              tooltip: 'Приблизить карту',
-                              onPressed: widget.enabled
-                                  ? () => _camera.move(
-                                      _camera.camera.center,
-                                      (_camera.camera.zoom + 1).clamp(4, 18),
-                                    )
-                                  : null,
-                              icon: const Icon(Icons.add),
-                            ),
-                            IconButton(
-                              tooltip: 'Отдалить карту',
-                              onPressed: widget.enabled
-                                  ? () => _camera.move(
-                                      _camera.camera.center,
-                                      (_camera.camera.zoom - 1).clamp(4, 18),
-                                    )
-                                  : null,
-                              icon: const Icon(Icons.remove),
-                            ),
-                          ],
-                        ),
-                      ),
+                        if (!attributionBelow)
+                          Positioned(
+                            left: 8,
+                            right: 62,
+                            bottom: 8,
+                            child: const MapAttribution(),
+                          ),
+                      ],
                     ),
-                    Positioned(
-                      left: 8,
-                      right: 62,
-                      bottom: 8,
-                      child: const MapAttribution(),
-                    ),
-                  ],
-                ),
-        ),
-      ),
-      if (_tileError)
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(switch (_tileFailure) {
-                MapFailureKind.configuration => 'Ключ карт не принят.',
-                MapFailureKind.limit => 'Лимит сервиса карт.',
-                MapFailureKind.network => 'Нет связи с картами.',
-                MapFailureKind.timeout => 'Карты не ответили.',
-                _ => 'Карта не загрузилась.',
-              }),
-              TextButton(
-                onPressed: widget.enabled
-                    ? () => setState(() {
-                        widget.session?.retry();
-                        _tileError = false;
-                        _reload++;
-                      })
-                    : null,
-                child: const Text('Повторить'),
-              ),
-            ],
+            ),
           ),
-        ),
-    ],
+          if (widget.session != null && attributionBelow)
+            const Padding(
+              padding: EdgeInsets.only(top: 4),
+              child: MapAttribution(compact: true),
+            ),
+          if (_tileError)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(switch (_tileFailure) {
+                    MapFailureKind.configuration => 'Ключ карт не принят.',
+                    MapFailureKind.limit => 'Лимит сервиса карт.',
+                    MapFailureKind.network => 'Нет связи с картами.',
+                    MapFailureKind.timeout => 'Карты не ответили.',
+                    _ => 'Карта не загрузилась.',
+                  }),
+                  TextButton(
+                    onPressed: widget.enabled
+                        ? () => setState(() {
+                            widget.session?.retry();
+                            _tileError = false;
+                            _reload++;
+                          })
+                        : null,
+                    child: const Text('Повторить'),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      );
+    },
   );
 }
 
 class MapAttribution extends StatelessWidget {
-  const MapAttribution({super.key});
+  const MapAttribution({this.compact = false, super.key});
+  final bool compact;
+  static const _links = [
+    ('© OpenStreetMap', 'https://www.openstreetmap.org/copyright'),
+    ('© OpenMapTiles', 'https://openmaptiles.org/'),
+    ('© CARTO', 'https://carto.com/attributions'),
+    ('Powered by Geoapify', 'https://www.geoapify.com/'),
+  ];
+
+  /// Измерение фактической высоты Wrap. При крупном тексте ссылки располагаются
+  /// под картой и не закрывают её кнопки, маркеры или центральный прицел.
+  static double measuredHeight(BuildContext context, double width) {
+    final style = Theme.of(context).textTheme.labelSmall!
+        .copyWith(fontSize: 11);
+    double runWidth = 0, runHeight = 0, height = 0;
+    for (final item in _links) {
+      final painter = TextPainter(
+        text: TextSpan(text: item.$1, style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+      )..layout(maxWidth: (width - 8).clamp(1, double.infinity));
+      final childWidth = painter.width + 8;
+      final childHeight = painter.height + 6;
+      painter.dispose();
+      if (runWidth > 0 && runWidth + childWidth > width) {
+        height += runHeight;
+        runWidth = 0;
+        runHeight = 0;
+      }
+      runWidth += childWidth;
+      if (childHeight > runHeight) runHeight = childHeight;
+    }
+    return height + runHeight;
+  }
+
   Future<void> _open(BuildContext context, String address) async {
     try {
       if (await launchUrl(
@@ -354,17 +423,13 @@ class MapAttribution extends StatelessWidget {
     child: Wrap(
       alignment: WrapAlignment.start,
       children: [
-        for (final item in const [
-          ('© OpenStreetMap', 'https://www.openstreetmap.org/copyright'),
-          ('© OpenMapTiles', 'https://openmaptiles.org/'),
-          ('© CARTO', 'https://carto.com/attributions'),
-          ('Powered by Geoapify', 'https://www.geoapify.com/'),
-        ])
+        for (final item in _links)
           TextButton(
+            key: ValueKey('attribution-${item.$2}'),
             style: TextButton.styleFrom(
               textStyle: Theme.of(context).textTheme.labelSmall!
                   .copyWith(fontSize: 11),
-              minimumSize: Size.zero,
+              minimumSize: compact ? const Size(48, 48) : Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
             ),

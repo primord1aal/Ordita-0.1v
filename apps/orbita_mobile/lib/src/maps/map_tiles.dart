@@ -17,21 +17,84 @@ enum MapTileStyle {
   final String id;
 }
 
-/// Общий ограниченный RAM-кэш. Нет фонового скачивания, дискового журнала URI или ключей.
+/// Только завершённые тайлы в памяти. Запросы принадлежат сессиям, а не кэшу.
+/// Закрытие одной сессии не отменяет работу другой с тем же кэшем.
+class MapTileCache {
+  final _entries = <_TileCacheKey, Uint8List>{};
+  int _bytes = 0;
+
+  Uint8List? _read(String key, MapTileStyle style, String tile) {
+    final id = _TileCacheKey(key, style, tile);
+    final bytes = _entries.remove(id);
+    if (bytes != null) _entries[id] = bytes;
+    return bytes;
+  }
+
+  void _put(String key, MapTileStyle style, String tile, Uint8List bytes) {
+    final id = _TileCacheKey(key, style, tile);
+    final previous = _entries.remove(id);
+    if (previous != null) _bytes -= previous.length;
+    _entries[id] = bytes;
+    _bytes += bytes.length;
+    while (_entries.length > 96 || _bytes > 12 * 1024 * 1024) {
+      _bytes -= _entries.remove(_entries.keys.first)!.length;
+    }
+  }
+
+  void _remove(String key, MapTileStyle style, String tile) {
+    final bytes = _entries.remove(_TileCacheKey(key, style, tile));
+    if (bytes != null) _bytes -= bytes.length;
+  }
+
+  void clear() {
+    _entries.clear();
+    _bytes = 0;
+  }
+
+  @override
+  String toString() => 'OrbitaTileCache';
+}
+
+/// Контекст ключа существует только в ограниченном RAM-кэше. Он не выдаётся
+/// через API кэша, diagnostics, логи или постоянный идентификатор.
+class _TileCacheKey {
+  const _TileCacheKey(this._keyContext, this.style, this.tile);
+  static const provider = 'geoapify';
+  final String _keyContext;
+  final MapTileStyle style;
+  final String tile;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _TileCacheKey &&
+      _keyContext == other._keyContext &&
+      style == other.style &&
+      tile == other.tile;
+  @override
+  int get hashCode => Object.hash(provider, _keyContext, style, tile);
+  @override
+  String toString() => 'OrbitaTileCacheKey';
+}
+
+/// Ограниченные запросы одной карты; нет фоновой предзагрузки или дискового кэша.
 class MapTileSession {
   MapTileSession(
     this._key, {
     GeoapifyTransport? transport,
+    MapTileCache? cache,
     this.minimumInterval = const Duration(milliseconds: 100),
-  }) : _transport = transport ?? GeoapifyTransport();
+  }) : _transport = transport ?? GeoapifyTransport(),
+       _cache = cache ?? MapTileCache(),
+       _ownsCache = cache == null;
   final String _key;
   final GeoapifyTransport _transport;
   final Duration minimumInterval;
   MapTileStyle _style = MapTileStyle.darkMatter;
   MapTileStyle get style => _style;
-  final _cache = <String, Uint8List>{};
+  final MapTileCache _cache;
+  final bool _ownsCache;
   final _inflight = <String, Future<Uint8List>>{};
-  int _bytes = 0, _generation = 0;
+  int _generation = 0;
   int _active = 0;
   final _waiters = <Completer<void>>[];
   DateTime _nextStart = DateTime.fromMillisecondsSinceEpoch(0);
@@ -40,37 +103,30 @@ class MapTileSession {
   void setStyle(MapTileStyle style) {
     if (_style == style) return;
     cancel();
-    _cache.clear();
-    _bytes = 0;
     _failure = null;
     _style = style;
   }
 
   Future<Uint8List> tile(TileCoordinates coordinate) async {
     if (_closed) throw const MapFailure(MapFailureKind.cancelled);
+    if (_key.isEmpty) throw const MapFailure(MapFailureKind.configuration);
     final id = '${coordinate.z}/${coordinate.x}/${coordinate.y}';
-    final cached = _cache.remove(id);
-    if (cached != null) {
-      _cache[id] = cached;
-      return cached;
-    }
+    final style = _style;
+    final cached = _cache._read(_key, style, id);
+    if (cached != null) return cached;
     final existing = _inflight[id];
     if (existing != null) return existing;
     if (_failure case final failure?) throw failure;
     if (_inflight.length >= 64) throw const MapFailure(MapFailureKind.limit);
     final generation = _generation;
-    final request = _fetch(id, generation, _style);
+    final request = _fetch(id, generation, style);
     _inflight[id] = request;
     try {
       final bytes = await request;
       if (_closed || generation != _generation) {
         throw const MapFailure(MapFailureKind.cancelled);
       }
-      _cache[id] = bytes;
-      _bytes += bytes.length;
-      while (_cache.length > 96 || _bytes > 12 * 1024 * 1024) {
-        _bytes -= _cache.remove(_cache.keys.first)!.length;
-      }
+      _cache._put(_key, style, id, bytes);
       return bytes;
     } finally {
       if (identical(_inflight[id], request)) _inflight.remove(id);
@@ -130,11 +186,13 @@ class MapTileSession {
     _failure = null;
   }
 
-  void rejectImage(TileCoordinates coordinate) {
+  void rejectImage(TileCoordinates coordinate, {MapTileStyle? style}) {
     final id = '${coordinate.z}/${coordinate.x}/${coordinate.y}';
-    final removed = _cache.remove(id);
-    if (removed != null) _bytes -= removed.length;
-    _failure ??= const MapFailure(MapFailureKind.invalid);
+    final rejectedStyle = style ?? _style;
+    _cache._remove(_key, rejectedStyle, id);
+    if (rejectedStyle == _style) {
+      _failure ??= const MapFailure(MapFailureKind.invalid);
+    }
   }
 
   void cancel() {
@@ -151,8 +209,7 @@ class MapTileSession {
     _closed = true;
     cancel();
     _transport.close();
-    _cache.clear();
-    _bytes = 0;
+    if (_ownsCache) _cache.clear();
   }
 }
 
@@ -196,7 +253,7 @@ class _SafeTileImage extends ImageProvider<_SafeTileImage> {
       scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(this));
       rethrow;
     } catch (_) {
-      session.rejectImage(coordinates);
+      session.rejectImage(coordinates, style: style);
       scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(this));
       throw const MapFailure(MapFailureKind.unavailable);
     }

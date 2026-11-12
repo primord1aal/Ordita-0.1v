@@ -5,8 +5,9 @@ import '../ui/theme.dart';
 import '../ui/theme_settings.dart';
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({this.device, super.key});
+  const SettingsScreen({this.device, this.onOpenDriverDemo, super.key});
   final DeviceGateway? device;
+  final VoidCallback? onOpenDriverDemo;
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +99,10 @@ class SettingsScreen extends StatelessWidget {
                 onTap: () => Navigator.push(
                   context,
                   MaterialPageRoute<void>(
-                    builder: (_) => AboutScreen(device: device),
+                    builder: (_) => AboutScreen(
+                      device: device,
+                      onOpenDriverDemo: onOpenDriverDemo,
+                    ),
                   ),
                 ),
               ),
@@ -111,8 +115,9 @@ class SettingsScreen extends StatelessWidget {
 }
 
 class AboutScreen extends StatelessWidget {
-  const AboutScreen({this.device, super.key});
+  const AboutScreen({this.device, this.onOpenDriverDemo, super.key});
   final DeviceGateway? device;
+  final VoidCallback? onOpenDriverDemo;
 
   Future<void> _openSystemSettings(BuildContext context) async {
     try {
@@ -159,6 +164,18 @@ class AboutScreen extends StatelessWidget {
               onTap: () => Navigator.pushNamed(context, '/device-check'),
             ),
             Divider(color: palette.divider),
+            if (onOpenDriverDemo != null) ...[
+              ListTile(
+                key: const Key('driver-demo-entry'),
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.science_outlined, color: palette.muted),
+                title: const Text('Диагностика интерфейса водителя'),
+                subtitle: const Text('ДЕМО · локальные состояния без заказов'),
+                trailing: Icon(Icons.chevron_right, color: palette.muted),
+                onTap: onOpenDriverDemo,
+              ),
+              Divider(color: palette.divider),
+            ],
             if (device != null) ...[
               ListTile(
                 contentPadding: EdgeInsets.zero,

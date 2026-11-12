@@ -135,7 +135,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(PassengerScreen), findsNothing);
       expect(find.byType(DriverScreen), findsOneWidget);
-      expect(find.text('Текущий заказ'), findsOneWidget);
+      expect(find.text('Заказы'), findsOneWidget);
+      expect(find.byKey(const Key('current-order')), findsOneWidget);
       expect(repository.logins, 0);
     },
   );

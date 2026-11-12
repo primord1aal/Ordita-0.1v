@@ -9,8 +9,10 @@ import '../ui/components.dart';
 import '../ui/theme.dart';
 import 'account_pages.dart';
 import 'passenger_screen.dart';
+import 'driver_screen.dart';
 
 export 'passenger_screen.dart';
+export 'driver_screen.dart';
 
 class PreviewShell extends StatefulWidget {
   const PreviewShell({
@@ -23,6 +25,7 @@ class PreviewShell extends StatefulWidget {
     this.tileSessionFactory,
     this.accountPanel,
     this.onSignOut,
+    this.onOpenDriverDemo,
     super.key,
   });
   final PreviewRole role;
@@ -33,7 +36,7 @@ class PreviewShell extends StatefulWidget {
   final AddressService Function(String)? addressServiceFactory;
   final MapTileSession Function(String)? tileSessionFactory;
   final Widget? accountPanel;
-  final VoidCallback? onSignOut;
+  final VoidCallback? onSignOut, onOpenDriverDemo;
   @override
   State<PreviewShell> createState() => _PreviewShellState();
 }
@@ -49,71 +52,62 @@ class _PreviewShellState extends State<PreviewShell> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && _index != 0) setState(() => _index = 0);
       },
-      child: Scaffold(
-        body: SafeArea(
-          bottom: false,
-          child: IndexedStack(
-            index: _index,
-            children: [
-              driver
-                  ? const DriverScreen()
-                  : PassengerScreen(
-                      mapSettings: widget.mapSettings,
-                      enabled: widget.mapAccessAllowed && _index == 0,
-                      foreground: widget.mapForeground,
-                      serviceFactory: widget.addressServiceFactory,
-                      tileSessionFactory: widget.tileSessionFactory,
-                    ),
-              const HistoryScreen(),
-              ProfileScreen(
-                driver: driver,
-                device: widget.device,
-                accountPanel: widget.accountPanel,
-                onSignOut: widget.onSignOut,
-                onTrips: () => setState(() => _index = 1),
-                onBack: () => setState(() => _index = 0),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final availableHeight =
+              (constraints.maxHeight -
+                      MediaQuery.paddingOf(context).vertical -
+                      MediaQuery.viewInsetsOf(context).bottom)
+                  .clamp(0.0, double.infinity);
+          return Scaffold(
+            body: SafeArea(
+              bottom: false,
+              child: IndexedStack(
+                index: _index,
+                children: [
+                  driver
+                      ? DriverScreen(
+                          mapSettings: widget.mapSettings,
+                          enabled: widget.mapAccessAllowed && _index == 0,
+                          foreground: widget.mapForeground,
+                          tileSessionFactory: widget.tileSessionFactory,
+                        )
+                      : PassengerScreen(
+                          mapSettings: widget.mapSettings,
+                          enabled: widget.mapAccessAllowed && _index == 0,
+                          foreground: widget.mapForeground,
+                          serviceFactory: widget.addressServiceFactory,
+                          tileSessionFactory: widget.tileSessionFactory,
+                        ),
+                  const HistoryScreen(),
+                  ProfileScreen(
+                    driver: driver,
+                    device: widget.device,
+                    accountPanel: widget.accountPanel,
+                    onSignOut: widget.onSignOut,
+                    onOpenDriverDemo: widget.onOpenDriverDemo,
+                    onTrips: () => setState(() => _index = 1),
+                    onBack: () => setState(() => _index = 0),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-        bottomNavigationBar: keyboardVisible
-            ? null
-            : AdaptiveNavigation(
-                driver: driver,
-                selected: _index,
-                onSelected: (i) {
-                  FocusScope.of(context).unfocus();
-                  setState(() => _index = i);
-                },
-              ),
+            ),
+            bottomNavigationBar: keyboardVisible
+                ? null
+                : AdaptiveNavigation(
+                    driver: driver,
+                    availableHeight: availableHeight,
+                    selected: _index,
+                    onSelected: (i) {
+                      FocusScope.of(context).unfocus();
+                      setState(() => _index = i);
+                    },
+                  ),
+          );
+        },
       ),
     );
   }
-}
-
-class DriverScreen extends StatelessWidget {
-  const DriverScreen({super.key});
-  @override
-  Widget build(BuildContext context) => CustomScrollView(
-    key: const Key('driver-scroll'),
-    slivers: [
-      const SliverToBoxAdapter(child: BrandHeader(showShift: true)),
-      SliverPadding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        sliver: SliverFillRemaining(
-          hasScrollBody: false,
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: MapPlaceholder(key: Key('driver-map'))),
-              SizedBox(height: 12),
-              CurrentOrderCard(),
-            ],
-          ),
-        ),
-      ),
-    ],
-  );
 }
 
 class CurrentOrderCard extends StatelessWidget {
@@ -193,12 +187,13 @@ class ProfileScreen extends StatelessWidget {
     this.onSignOut,
     this.onTrips,
     this.onBack,
+    this.onOpenDriverDemo,
     super.key,
   });
   final bool driver;
   final DeviceGateway device;
   final Widget? accountPanel;
-  final VoidCallback? onSignOut, onTrips, onBack;
+  final VoidCallback? onSignOut, onTrips, onBack, onOpenDriverDemo;
 
   @override
   Widget build(BuildContext context) {
@@ -282,7 +277,10 @@ class ProfileScreen extends StatelessWidget {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute<void>(
-                          builder: (_) => SettingsScreen(device: device),
+                          builder: (_) => SettingsScreen(
+                            device: device,
+                            onOpenDriverDemo: onOpenDriverDemo,
+                          ),
                         ),
                       ),
                     ),
@@ -299,7 +297,10 @@ class ProfileScreen extends StatelessWidget {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute<void>(
-                          builder: (_) => AboutScreen(device: device),
+                          builder: (_) => AboutScreen(
+                            device: device,
+                            onOpenDriverDemo: onOpenDriverDemo,
+                          ),
                         ),
                       ),
                     ),

@@ -74,8 +74,99 @@ void main() {
     expect(transport.calls.last.path, '/v1/tile/dark-matter/8/10/10.png');
     session.setStyle(MapTileStyle.positron);
     await session.tile(coordinate);
-    expect(transport.calls.length, 3);
-    expect(transport.calls.last.path, '/v1/tile/positron/8/10/10.png');
+    expect(transport.calls.length, 2);
+    expect(session.style, MapTileStyle.positron);
+  });
+
+  test(
+    'Общий RAM-кэш различает ключи и стили, но не владеет запросами',
+    () async {
+      final cache = MapTileCache();
+      final firstTransport = FakeTileTransport();
+      final secondTransport = FakeTileTransport();
+      final otherKeyTransport = FakeTileTransport();
+      final first = MapTileSession(
+        fakeMapKey,
+        cache: cache,
+        transport: firstTransport,
+        minimumInterval: Duration.zero,
+      );
+      final second = MapTileSession(
+        fakeMapKey,
+        cache: cache,
+        transport: secondTransport,
+        minimumInterval: Duration.zero,
+      );
+      final other = MapTileSession(
+        'another_artificial_key_0123456789',
+        cache: cache,
+        transport: otherKeyTransport,
+        minimumInterval: Duration.zero,
+      );
+      addTearDown(first.close);
+      addTearDown(second.close);
+      addTearDown(other.close);
+      const coordinate = TileCoordinates(10, 10, 8);
+      await first.tile(coordinate);
+      await second.tile(coordinate);
+      expect(firstTransport.calls.length, 1);
+      expect(secondTransport.calls.length, 0);
+      first.close();
+      await second.tile(coordinate);
+      expect(secondTransport.calls.length, 0);
+      second.setStyle(MapTileStyle.positron);
+      await second.tile(coordinate);
+      expect(secondTransport.calls.length, 1);
+      other.setStyle(MapTileStyle.positron);
+      await other.tile(coordinate);
+      expect(otherKeyTransport.calls.length, 1);
+      expect(cache.toString(), 'OrbitaTileCache');
+      expect(cache.toString(), isNot(contains(fakeMapKey)));
+    },
+  );
+
+  test(
+    'Отмена и закрытие одного владельца не отменяют запрос другого',
+    () async {
+      final cache = MapTileCache();
+      final a = FakeTileTransport()..pending = Completer<Uint8List>();
+      final b = FakeTileTransport()..pending = Completer<Uint8List>();
+      final first = MapTileSession(
+        fakeMapKey,
+        cache: cache,
+        transport: a,
+        minimumInterval: Duration.zero,
+      );
+      final second = MapTileSession(
+        fakeMapKey,
+        cache: cache,
+        transport: b,
+        minimumInterval: Duration.zero,
+      );
+      addTearDown(second.close);
+      final old = first.tile(const TileCoordinates(1, 1, 4));
+      final rejected = expectLater(old, throwsA(isA<MapFailure>()));
+      final live = second.tile(const TileCoordinates(2, 1, 4));
+      first.close();
+      a.pending!.complete(Uint8List.fromList([1]));
+      b.pending!.complete(Uint8List.fromList([2]));
+      await rejected;
+      expect(await live, orderedEquals([2]));
+      await second.tile(const TileCoordinates(2, 1, 4));
+      expect(a.calls.length, 1);
+      expect(b.calls.length, 1);
+    },
+  );
+
+  test('Без ключа сессия не вызывает HTTP-транспорт', () async {
+    final transport = FakeTileTransport();
+    final session = MapTileSession('', transport: transport);
+    addTearDown(session.close);
+    await expectLater(
+      session.tile(const TileCoordinates(1, 1, 4)),
+      throwsA(isA<MapFailure>()),
+    );
+    expect(transport.calls, isEmpty);
   });
 
   test('Смена темы отменяет старый ответ до записи в кэш', () async {

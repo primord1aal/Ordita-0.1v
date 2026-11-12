@@ -13,6 +13,7 @@ import '../platform/device_gateway.dart';
 import '../ui/components.dart';
 import '../ui/orbita_brand.dart';
 import '../ui/theme.dart';
+import '../ui/driver_demo_access.dart';
 import 'preview_screens.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -89,6 +90,22 @@ class _AuthScreenState extends State<AuthScreen> {
     await _controller.signIn(_email.text, password);
   }
 
+  void _openDriverDemo() {
+    if (!_controller.canUseRole ||
+        _controller.access?.role != UserRole.driver) {
+      return;
+    }
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: '/driver-demo'),
+        builder: (_) => DriverDemoGate(
+          controller: _controller,
+          child: const DriverDiagnosticView(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: _controller,
@@ -122,6 +139,9 @@ class _AuthScreenState extends State<AuthScreen> {
                             tileSessionFactory: widget.tileSessionFactory,
                             accountPanel: _accountPanel(visible),
                             onSignOut: _controller.signOut,
+                            onOpenDriverDemo: visible.role == UserRole.driver
+                                ? _openDriverDemo
+                                : null,
                           ),
                   ),
                 ),

@@ -69,9 +69,11 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(FlutterMap), findsOneWidget);
-    expect(find.byKey(const Key('pickup')), findsOneWidget);
-    expect(find.byKey(const Key('destination')), findsOneWidget);
-    expect(find.byKey(const Key('create-order')), findsOneWidget);
+    if (scale == 1) {
+      expect(find.byKey(const Key('pickup')), findsOneWidget);
+      expect(find.byKey(const Key('destination')), findsOneWidget);
+      expect(find.byKey(const Key('create-order')), findsOneWidget);
+    }
     expect(
       Theme.of(tester.element(find.byType(FlutterMap))).brightness,
       mode == ThemeMode.dark ? Brightness.dark : Brightness.light,
@@ -151,6 +153,10 @@ void main() {
       closeTo(32, 0.01),
     );
     await capture(find.byType(Scaffold).first, 'block2-text-3.2');
+    await scrollTo(tester, find.byKey(const Key('destination')));
+    expect(find.byType(TextField), findsNWidgets(2));
+    await scrollTo(tester, find.byKey(const Key('create-order')));
+    expect(find.byKey(const Key('create-order')).hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

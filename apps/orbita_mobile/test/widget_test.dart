@@ -4,6 +4,7 @@ import 'package:orbita_mobile/src/app.dart';
 import 'package:orbita_mobile/src/screens/device_check_screen.dart';
 import 'package:orbita_mobile/src/screens/preview_screens.dart';
 import 'package:orbita_mobile/src/ui/components.dart';
+import 'package:orbita_mobile/src/ui/theme.dart';
 
 import 'fake_device.dart';
 import 'test_helpers.dart';
@@ -64,13 +65,13 @@ void main() {
       await openPreview(tester, 'Водитель');
       expect(find.text('Рабочий день'), findsNothing);
       expect(find.byType(SwitchListTile), findsNothing);
-      expect(find.text('На линию'), findsOneWidget);
+      expect(find.text('Линия не подключена'), findsOneWidget);
       expect(find.text('На линии'), findsNothing);
-      final button = find.descendant(
-        of: find.byKey(const Key('shift-control')),
-        matching: find.byType(FilledButton),
+      final slider = tester.widget<Semantics>(
+        find.byKey(const Key('shift-control')),
       );
-      expect(tester.widget<FilledButton>(button).onPressed, isNull);
+      expect(slider.properties.enabled, isFalse);
+      expect(slider.properties.onTap, isNull);
       expect(find.byTooltip('Проверка устройства'), findsNothing);
       expect(find.byIcon(Icons.settings_outlined), findsNothing);
       final map = tester.getRect(find.byKey(const Key('driver-map')));
@@ -249,11 +250,12 @@ void main() {
   );
 
   testWidgets(
-    'Выход с подтверждённой линии требует подтверждения и не меняет статус сам',
+    'Выход с подтверждённой линии требует полного жеста и не меняет статус сам',
     (tester) async {
       final requested = <bool>[];
       await tester.pumpWidget(
         MaterialApp(
+          theme: orbitaTheme(),
           home: Scaffold(
             body: ShiftControl(
               confirmedOnline: true,
@@ -263,15 +265,17 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('На линии'));
-      await tester.pumpAndSettle();
+      final travel =
+          tester.getSize(find.byKey(const Key('shift-track'))).width - 64;
+      await tester.drag(
+        find.byKey(const Key('shift-thumb')),
+        Offset(-travel * 0.5, 0),
+      );
       expect(requested, isEmpty);
-      await tester.tap(find.text('Остаться'));
-      await tester.pumpAndSettle();
-      expect(requested, isEmpty);
-      await tester.tap(find.text('На линии'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Выйти'));
+      await tester.drag(
+        find.byKey(const Key('shift-thumb')),
+        Offset(-travel * 0.95, 0),
+      );
       await tester.pumpAndSettle();
       expect(requested, [false]);
       expect(find.text('На линии'), findsOneWidget);

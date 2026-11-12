@@ -6,9 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orbita_mobile/src/platform/device_gateway.dart';
 import 'package:orbita_mobile/src/screens/preview_screens.dart';
 import 'package:orbita_mobile/src/ui/theme.dart';
+import 'package:orbita_mobile/src/ui/adaptive_navigation.dart';
 
 import 'fake_device.dart';
 import 'test_helpers.dart';
+import 'design_test_fonts.dart';
 
 void checkHorizontalBounds(WidgetTester tester) {
   final viewport =
@@ -52,8 +54,38 @@ void checkHorizontalBounds(WidgetTester tester) {
   expect(tester.takeException(), isNull);
 }
 
-void checkNavigation(WidgetTester tester) {
+Future<void> checkNavigation(WidgetTester tester) async {
   final view = tester.view.physicalSize / tester.view.devicePixelRatio;
+  final compact = find
+      .byKey(const Key('navigation-compact'))
+      .evaluate()
+      .isNotEmpty;
+  final vertical = find
+      .byKey(const Key('navigation-vertical'))
+      .evaluate()
+      .isNotEmpty;
+  if (vertical) {
+    final nav = tester.widget<AdaptiveNavigation>(
+      find.byType(AdaptiveNavigation),
+    );
+    final context = tester.element(find.byType(AdaptiveNavigation));
+    final media = MediaQuery.of(context);
+    final availableHeight =
+        nav.availableHeight ??
+        (media.size.height - media.padding.vertical - media.viewInsets.bottom);
+    expect(
+      tester.getSize(find.byKey(const Key('navigation-vertical'))).height,
+      lessThanOrEqualTo(availableHeight * 0.20 + 0.5),
+    );
+  }
+  if (compact) {
+    final menu = tester.getRect(find.byKey(const Key('nav-sections')));
+    expect(menu.width, greaterThanOrEqualTo(48));
+    expect(menu.height, greaterThanOrEqualTo(48));
+    expect(menu.bottom, lessThanOrEqualTo(view.height));
+    await tester.tap(find.byKey(const Key('nav-sections')));
+    await tester.pumpAndSettle();
+  }
   final rects = [
     for (var i = 0; i < 3; i++) tester.getRect(find.byKey(Key('nav-$i'))),
   ];
@@ -64,11 +96,24 @@ void checkNavigation(WidgetTester tester) {
     expect(rect.right, lessThanOrEqualTo(view.width));
     expect(rect.bottom, lessThanOrEqualTo(view.height));
   }
-  expect(rects[0].right, lessThanOrEqualTo(rects[1].left));
-  expect(rects[1].right, lessThanOrEqualTo(rects[2].left));
+  if (!compact && !vertical) {
+    expect(rects[0].right, lessThanOrEqualTo(rects[1].left));
+    expect(rects[1].right, lessThanOrEqualTo(rects[2].left));
+  } else {
+    expect(rects[0].bottom, lessThanOrEqualTo(rects[1].top));
+    expect(rects[1].bottom, lessThanOrEqualTo(rects[2].top));
+  }
+  if (compact) {
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('nav-sections')), findsOneWidget);
+  }
+  expect(tester.takeException(), isNull);
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(loadDesignTestFonts);
   final viewports = [
     const Size(320, 568),
     const Size(360, 640),
@@ -91,7 +136,7 @@ void main() {
         MediaQuery.textScalerOf(tester.element(find.text('орбита.'))).scale(16),
         closeTo(16 * scale, 0.01),
       );
-      checkNavigation(tester);
+      await checkNavigation(tester);
       checkHorizontalBounds(tester);
       await scrollTo(tester, find.byKey(const Key('current-order')));
       checkHorizontalBounds(tester);
@@ -108,10 +153,10 @@ void main() {
       checkHorizontalBounds(tester);
       await tester.pumpWidget(const SizedBox());
       await openPreview(tester, 'Пассажир');
-      checkNavigation(tester);
+      await checkNavigation(tester);
       checkHorizontalBounds(tester);
       await scrollTo(tester, find.byKey(const Key('create-order')));
-      checkNavigation(tester);
+      await checkNavigation(tester);
       checkHorizontalBounds(tester);
       await tester.pumpWidget(const SizedBox());
     });
@@ -175,7 +220,7 @@ void main() {
       tester.testTextInput.hide();
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pumpAndSettle();
-      checkNavigation(tester);
+      await checkNavigation(tester);
     });
   }
 
@@ -188,12 +233,16 @@ void main() {
         final nav = tester.getSemantics(find.byKey(const Key('nav-0')));
         expect(nav.flagsCollection.isButton, isTrue);
         expect(nav.flagsCollection.isSelected, ui.Tristate.isTrue);
-        expect(nav.getSemanticsData().label, 'Работа');
+        expect(nav.getSemanticsData().label, 'Линия');
         final shift = tester.getSemantics(
           find.byKey(const Key('shift-control')),
         );
         expect(shift.flagsCollection.isEnabled, ui.Tristate.isFalse);
-        expect(shift.getSemanticsData().label, contains('Недоступно'));
+        expect(shift.getSemanticsData().label, contains('Линия не подключена'));
+        expect(
+          shift.getSemanticsData().hasAction(ui.SemanticsAction.tap),
+          isFalse,
+        );
         expect(
           tester.getSize(find.byKey(const Key('shift-control'))).height,
           greaterThanOrEqualTo(48),

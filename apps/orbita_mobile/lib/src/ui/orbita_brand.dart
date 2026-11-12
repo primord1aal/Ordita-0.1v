@@ -141,65 +141,98 @@ class BrandedAccountPage extends StatelessWidget {
   });
   final Widget child;
   final bool loginLayout;
+  Widget _header(BuildContext context) => Container(
+    width: double.infinity,
+    constraints: const BoxConstraints(minHeight: 74),
+    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+    decoration: BoxDecoration(
+      color: Color.lerp(
+        OrbitaPalette.of(context).surface,
+        OrbitaPalette.of(context).mapLand,
+        0.1,
+      ),
+      border: Border(
+        bottom: BorderSide(color: OrbitaPalette.of(context).divider),
+      ),
+    ),
+    child: Row(
+      children: [
+        const OrbitaLogo(size: 42),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text('орбита.', style: Theme.of(context).textTheme.titleLarge),
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => loginLayout
       ? Scaffold(
           body: SafeArea(
-            child: Column(
-              children: [
-                Container(
-                  width: double.infinity,
-                  constraints: const BoxConstraints(minHeight: 74),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Color.lerp(
-                      OrbitaPalette.of(context).surface,
-                      OrbitaPalette.of(context).mapLand,
-                      0.1,
-                    ),
-                    border: Border(
-                      bottom: BorderSide(
-                        color: OrbitaPalette.of(context).divider,
-                      ),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const OrbitaLogo(size: 42),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'орбита.',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) => SingleChildScrollView(
-                      keyboardDismissBehavior:
-                          ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minHeight: math.max(0, constraints.maxHeight - 48),
-                        ),
-                        child: Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 500),
-                            child: child,
+            child: LayoutBuilder(
+              builder: (context, viewport) {
+                final minimumAction =
+                    MediaQuery.textScalerOf(context).scale(15) * 1.5 + 28;
+                // В очень низком окне с клавиатурой шапка прокручивается вместе
+                // с формой, освобождая место для целой увеличенной кнопки.
+                if (viewport.maxHeight < 74 + minimumAction + 48) {
+                  return SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    child: Column(
+                      children: [
+                        _header(context),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 500),
+                              child: child,
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+                  );
+                }
+                return Column(
+                  children: [
+                    _header(context),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) =>
+                            SingleChildScrollView(
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                24,
+                                20,
+                                24,
+                              ),
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minHeight: math.max(
+                                    0,
+                                    constraints.maxHeight - 48,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 500,
+                                    ),
+                                    child: child,
+                                  ),
+                                ),
+                              ),
+                            ),
                       ),
                     ),
-                  ),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
         )

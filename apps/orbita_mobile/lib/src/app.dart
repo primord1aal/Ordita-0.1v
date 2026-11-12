@@ -18,6 +18,7 @@ import 'screens/device_check_screen.dart';
 import 'screens/map_settings_screen.dart';
 import 'ui/theme.dart';
 import 'ui/theme_settings.dart';
+import 'ui/driver_demo_access.dart';
 
 class OrbitaApp extends StatefulWidget {
   const OrbitaApp({
@@ -96,6 +97,7 @@ class _OrbitaAppState extends State<OrbitaApp> {
         darkTheme: orbitaTheme(),
         themeMode: _themeSettings.mode,
         routes: {
+          '/driver-demo': (_) => const DriverDemoDeniedScreen(),
           '/': (_) => AuthScreen(
             repository: widget.authRepository ?? DisconnectedAuthRepository(),
             device: widget.device,

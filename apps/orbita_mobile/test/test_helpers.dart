@@ -58,6 +58,16 @@ Future<void> openPreview(
 }
 
 Future<void> openProfile(WidgetTester tester) async {
+  if (find.byKey(const Key('nav-sections')).evaluate().isNotEmpty) {
+    await tester.tap(find.byKey(const Key('nav-sections')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('nav-2')),
+      120,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+  }
   await tester.tap(find.byKey(const Key('nav-2')));
   await tester.pumpAndSettle();
 }
