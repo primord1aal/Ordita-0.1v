@@ -1,5 +1,6 @@
 name: Орбита — отдельный допуск миграции заказов
-run-name: "Орбита Orders: ${{ inputs.operation }} @ ${{ github.sha }}"
+run-name: "Орбита Orders: регистрация @ ${{ github.sha }}"
+
 on:
   workflow_dispatch:
     inputs:
@@ -24,106 +25,15 @@ on:
         type: string
         default: ''
         description: 'Для apply — подтверждённый SHA-256 зашифрованной копии'
-permissions:
-  contents: read
-concurrency:
-  group: orbita-orders-migration-fixed-candidate
-  cancel-in-progress: false
+
+permissions: {}
+
 jobs:
-  verify:
+  registration-only:
     runs-on: ubuntu-24.04
-    container: postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
-    timeout-minutes: 10
+    timeout-minutes: 1
     steps:
-      - name: Local test tools only
-        run: apt-get update && apt-get install --no-install-recommends -y python3 python3-yaml git gnupg
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Admission unit tests without credentials
-        run: python3 -m unittest discover -s tools/orders_migration/tests -v
-      - name: PostgreSQL first-to-second and backup checks, private Unix sockets
+      - name: Остановить выполнение регистрационной версии
         run: |
-          mkdir -p /tmp/orbita-order-checks
-          chown postgres:postgres /tmp/orbita-order-checks
-          test_version="$(/usr/lib/postgresql/17/bin/postgres --version)"
-          runuser -u postgres -- env TMPDIR=/tmp/orbita-order-checks PYTHONPYCACHEPREFIX=/tmp/orbita-order-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest supabase.tests.test_orders_migration -v
-  entry:
-    if: inputs.operation != 'verify' && vars.ORBITA_ORDERS_REPO_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-flutter-design-integration'
-    needs: verify
-    runs-on: ubuntu-24.04
-    outputs:
-      admitted: ${{ steps.check.outputs.admitted }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - id: check
-        env:
-          ORBITA_OPERATION: ${{ inputs.operation }}
-          ORBITA_ORDERS_REPO_ENABLED: ${{ vars.ORBITA_ORDERS_REPO_ENABLED }}
-          ORBITA_REQUEST_SHA: ${{ inputs.approved_sha }}
-          OUTSIDE_ORBITA_ORDERS_CLOUD_ENABLED: ${{ vars.ORBITA_ORDERS_CLOUD_ENABLED }}
-          OUTSIDE_ORBITA_ORDERS_ALLOWED_SHA: ${{ vars.ORBITA_ORDERS_ALLOWED_SHA }}
-          OUTSIDE_ORBITA_ORDERS_ALLOWED_OPERATION: ${{ vars.ORBITA_ORDERS_ALLOWED_OPERATION }}
-        run: python3 -m tools.orders_migration.github_gate entry
-  guarded:
-    if: needs.entry.outputs.admitted == 'true'
-    needs: [verify, entry]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    environment: orbita-mobile-test-orders-migrations
-    permissions:
-      contents: read
-      actions: read
-      deployments: read
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Gate before database secrets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ORBITA_OPERATION: ${{ inputs.operation }}
-          ORBITA_ORDERS_REPO_ENABLED: ${{ vars.ORBITA_ORDERS_REPO_ENABLED }}
-          ORBITA_ORDERS_CLOUD_ENABLED: ${{ vars.ORBITA_ORDERS_CLOUD_ENABLED }}
-          ORBITA_ORDERS_ALLOWED_SHA: ${{ vars.ORBITA_ORDERS_ALLOWED_SHA }}
-          ORBITA_ORDERS_ALLOWED_OPERATION: ${{ vars.ORBITA_ORDERS_ALLOWED_OPERATION }}
-          ORBITA_REQUEST_SHA: ${{ inputs.approved_sha }}
-          ORBITA_EXPECTED_REF: ${{ vars.SUPABASE_TEST_PROJECT_REF }}
-          ORBITA_FORBIDDEN_REF: ${{ vars.SUPABASE_FORBIDDEN_PROJECT_REF }}
-          ORBITA_REQUEST_REF: ${{ inputs.project_ref }}
-          ORBITA_PREVIEW_RUN_ID: ${{ inputs.preview_run_id }}
-          ORBITA_BACKUP_SHA256: ${{ inputs.backup_sha256 }}
-          ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
-        run: python3 -m tools.orders_migration.github_gate gate
-      - name: Fixed PostgreSQL image
-        run: docker pull postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
-      - name: Separately authorized operation
-        env:
-          PGPASSWORD: ${{ secrets.ORBITA_TEST_DB_PASSWORD }}
-          ORBITA_ORDERS_BACKUP_PASSPHRASE: ${{ secrets.ORBITA_ORDERS_BACKUP_PASSPHRASE }}
-          ORBITA_DATABASE_CA_PEM: ${{ vars.ORBITA_TEST_DB_CA_PEM }}
-          ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
-        run: python3 -m tools.orders_migration.runner
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always() && inputs.operation == 'preview'
-        with:
-          name: ORBITA-orders-preview-${{ github.run_id }}
-          path: build/orders-public/preview.json
-          if-no-files-found: ignore
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always() && inputs.operation == 'preview'
-        with:
-          name: ORBITA-orders-backup-${{ github.run_id }}
-          path: build/orders-backup/snapshot.tar.gpg
-          if-no-files-found: ignore
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always() && inputs.operation != 'preview'
-        with:
-          name: ORBITA-orders-${{ inputs.operation }}-${{ github.run_id }}
-          path: build/orders-public/*.json
-          if-no-files-found: ignore
+          echo '::error::This is a registration-only workflow. Select the approved working branch after separate owner authorization.'
+          exit 1
