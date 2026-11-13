@@ -1,0 +1,25 @@
+{
+  "repository": "primord1aal/Ordita-0.1v",
+  "branch": "codex/orbita-flutter-design-integration",
+  "project_ref": "fjqghohhohgvwlmefdmo",
+  "forbidden_ref": "swrvjwlwxeaecdhnzkjv",
+  "environment": "orbita-mobile-test-orders-migrations",
+  "workflow": "orbita-orders-migration.yml",
+  "first_version": "202611050001",
+  "first_name": "stage3b_auth",
+  "first_path": "supabase/migrations/202611050001_stage3b_auth.sql",
+  "first_sha256": "31bf9839b8574680ace8cb168317a158b41e94a31a789f192033720afb36d79b",
+  "version": "20261112172442",
+  "name": "passenger_orders",
+  "path": "supabase/proposals/20261112172442_passenger_orders.sql",
+  "sha256": "917623f5c455d5bf54656ee5afa50154a8d9ec7a922fb160643fdce3c75c83b0",
+  "auth_catalog_sha256": "b9f2ee66e16b656d53407cc402854c69dc5f48574dbfc8206efa9c35d4a4690c",
+  "executor": "orbita_orders_transaction_v1",
+  "schemas": [
+    "auth",
+    "public",
+    "orbita_mobile_private",
+    "supabase_migrations"
+  ],
+  "orders_catalog_sha256": "33850b97a1657dfef9f76514f2b18fc9fd356ef812a2fe493d68c8cb3b7b4c92"
+}

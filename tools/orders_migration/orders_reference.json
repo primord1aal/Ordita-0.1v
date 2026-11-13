@@ -1,0 +1,292 @@
+{
+  "schemas": [],
+  "functions": [
+    [
+      "orbita_mobile_private",
+      "order_envelope",
+      "p_order public.orbita_orders, p_server_time timestamp with time zone",
+      "CREATE OR REPLACE FUNCTION orbita_mobile_private.order_envelope(p_order public.orbita_orders, p_server_time timestamp with time zone)\n RETURNS jsonb\n LANGUAGE sql\n IMMUTABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\n  with effective as (\n    select p_order.status='created' and p_order.expires_at<=p_server_time as timed_out\n  )\n  select pg_catalog.jsonb_build_object(\n    'contract_version',1,\n    'server_time',pg_catalog.to_char(p_server_time at time zone 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'),\n    'order',case when p_order.id is null then null else pg_catalog.jsonb_build_object(\n      'id',p_order.id,'passenger_id',p_order.passenger_id,'request_id',p_order.request_id,\n      'pickup',p_order.pickup,'destination',p_order.destination,\n      'status',case when timed_out then 'cancelled' else p_order.status end,\n      'cancellation_reason',case when timed_out then 'search_timeout' else p_order.cancellation_reason end,\n      'created_at',pg_catalog.to_char(p_order.created_at at time zone 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'),\n      'expires_at',pg_catalog.to_char(p_order.expires_at at time zone 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'),\n      'cancelled_at',pg_catalog.to_char(\n        (case when timed_out then p_order.expires_at else p_order.cancelled_at end) at time zone 'UTC',\n        'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'),\n      'version',case when timed_out then 2 else p_order.version end\n    ) end\n  ) from effective;\n$function$\n",
+      "postgres",
+      [
+        [
+          "postgres",
+          "postgres",
+          "EXECUTE",
+          false
+        ]
+      ]
+    ],
+    [
+      "orbita_mobile_private",
+      "order_point",
+      "p_point jsonb",
+      "CREATE OR REPLACE FUNCTION orbita_mobile_private.order_point(p_point jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n IMMUTABLE SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_address text;\n  v_latitude numeric;\n  v_longitude numeric;\nbegin\n  if p_point is null or pg_catalog.jsonb_typeof(p_point)<>'object' then\n    raise exception using errcode='P0001', message='ORB_ORDER_INVALID_REQUEST';\n  end if;\n  if (select count(*) from pg_catalog.jsonb_object_keys(p_point))<>3\n     or not (p_point ?& array['address','latitude','longitude'])\n     or pg_catalog.jsonb_typeof(p_point->'address')<>'string'\n     or pg_catalog.jsonb_typeof(p_point->'latitude')<>'number'\n     or pg_catalog.jsonb_typeof(p_point->'longitude')<>'number' then\n    raise exception using errcode='P0001', message='ORB_ORDER_INVALID_REQUEST';\n  end if;\n  v_address:=pg_catalog.btrim(pg_catalog.regexp_replace((p_point->>'address') collate \"C\",\n    E'[\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]+',\n    ' ','g'),' ');\n  v_latitude:=(p_point->>'latitude')::numeric;\n  v_longitude:=(p_point->>'longitude')::numeric;\n  if pg_catalog.char_length(v_address) not between 1 and 500\n     or v_latitude not between -90 and 90\n     or v_longitude not between -180 and 180 then\n    raise exception using errcode='P0001', message='ORB_ORDER_INVALID_REQUEST';\n  end if;\n  return pg_catalog.jsonb_build_object(\n    'address',v_address,'latitude',v_latitude,'longitude',v_longitude);\nend;\n$function$\n",
+      "postgres",
+      [
+        [
+          "postgres",
+          "postgres",
+          "EXECUTE",
+          false
+        ]
+      ]
+    ],
+    [
+      "orbita_mobile_private",
+      "order_session_uid",
+      "",
+      "CREATE OR REPLACE FUNCTION orbita_mobile_private.order_session_uid()\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_uid uuid;\n  v_claim_uid uuid;\n  v_session uuid;\n  v_claims jsonb;\n  v_exp numeric;\n  v_now timestamptz:=pg_catalog.clock_timestamp();\nbegin\n  begin\n    v_uid:=auth.uid();\n    v_claims:=auth.jwt();\n    if v_uid is null or pg_catalog.jsonb_typeof(v_claims->'exp') is distinct from 'number'\n       or pg_catalog.jsonb_typeof(v_claims->'sub') is distinct from 'string'\n       or pg_catalog.jsonb_typeof(v_claims->'session_id') is distinct from 'string' then\n      raise exception using errcode='28000', message='ORB_ORDER_SESSION_REQUIRED';\n    end if;\n    v_session:=(v_claims->>'session_id')::uuid;\n    v_claim_uid:=(v_claims->>'sub')::uuid;\n    v_exp:=(v_claims->>'exp')::numeric;\n  exception when invalid_text_representation or numeric_value_out_of_range then\n    raise exception using errcode='28000', message='ORB_ORDER_SESSION_REQUIRED';\n  end;\n  if v_claim_uid is distinct from v_uid or v_exp<=extract(epoch from v_now) or not exists (\n    select 1 from auth.sessions s join auth.users u on u.id=s.user_id\n    where s.id=v_session and s.user_id=v_uid and (s.not_after is null or s.not_after>v_now)\n  ) then\n    raise exception using errcode='28000', message='ORB_ORDER_SESSION_REQUIRED';\n  end if;\n  return v_uid;\nend;\n$function$\n",
+      "postgres",
+      [
+        [
+          "postgres",
+          "postgres",
+          "EXECUTE",
+          false
+        ]
+      ]
+    ],
+    [
+      "public",
+      "orbita_cancel_order",
+      "p_order_id uuid",
+      "CREATE OR REPLACE FUNCTION public.orbita_cancel_order(p_order_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_uid uuid;\n  v_order public.orbita_orders;\n  v_now timestamptz;\nbegin\n  perform orbita_mobile_private.lock_access();\n  v_uid:=orbita_mobile_private.order_session_uid();\n  if p_order_id is null then\n    raise exception using errcode='P0001', message='ORB_ORDER_INVALID_REQUEST';\n  end if;\n  select * into v_order from public.orbita_orders where id=p_order_id and passenger_id=v_uid;\n  if not found then\n    raise exception using errcode='P0001', message='ORB_ORDER_NOT_FOUND';\n  end if;\n  v_now:=pg_catalog.clock_timestamp();\n  if v_order.status='cancelled' then\n    return orbita_mobile_private.order_envelope(v_order,v_now);\n  elsif v_order.status<>'created' then\n    raise exception using errcode='P0001', message='ORB_ORDER_STATE_CHANGED';\n  end if;\n  update public.orbita_orders set status='cancelled',version=2,\n    cancellation_reason=case when expires_at<=v_now then 'search_timeout' else 'passenger' end,\n    cancelled_at=case when expires_at<=v_now then expires_at else v_now end\n    where id=v_order.id and passenger_id=v_uid and status='created'\n    returning * into v_order;\n  if not found then\n    raise exception using errcode='P0001', message='ORB_ORDER_STATE_CHANGED';\n  end if;\n  return orbita_mobile_private.order_envelope(v_order,v_now);\nend;\n$function$\n",
+      "postgres",
+      [
+        [
+          "authenticated",
+          "postgres",
+          "EXECUTE",
+          false
+        ],
+        [
+          "postgres",
+          "postgres",
+          "EXECUTE",
+          false
+        ]
+      ]
+    ],
+    [
+      "public",
+      "orbita_create_order",
+      "p_request_id uuid, p_pickup jsonb, p_destination jsonb",
+      "CREATE OR REPLACE FUNCTION public.orbita_create_order(p_request_id uuid, p_pickup jsonb, p_destination jsonb)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_uid uuid;\n  v_pickup jsonb;\n  v_destination jsonb;\n  v_order public.orbita_orders;\n  v_now timestamptz;\nbegin\n  -- Тот же mutex, что у блокировки/смены роли. Проверки идут ПОСЛЕ ожидания.\n  perform orbita_mobile_private.lock_access();\n  v_uid:=orbita_mobile_private.order_session_uid();\n  if p_request_id is null then\n    raise exception using errcode='P0001', message='ORB_ORDER_INVALID_REQUEST';\n  end if;\n  v_pickup:=orbita_mobile_private.order_point(p_pickup);\n  v_destination:=orbita_mobile_private.order_point(p_destination);\n  if v_pickup->'latitude'=v_destination->'latitude'\n     and v_pickup->'longitude'=v_destination->'longitude' then\n    raise exception using errcode='P0001', message='ORB_ORDER_INVALID_REQUEST';\n  end if;\n  select * into v_order from public.orbita_orders\n    where passenger_id=v_uid and request_id=p_request_id;\n  if found then\n    if v_order.pickup<>v_pickup or v_order.destination<>v_destination then\n      raise exception using errcode='P0001', message='ORB_ORDER_IDEMPOTENCY_CONFLICT';\n    end if;\n    return orbita_mobile_private.order_envelope(v_order,pg_catalog.clock_timestamp());\n  end if;\n  -- Чтение/replay/отмена своих доступны после отзыва роли; НОВОЕ создание нет.\n  if not exists (\n    select 1 from public.orbita_profiles p\n    join public.orbita_account_access a using(user_id)\n    join public.orbita_user_roles r using(user_id)\n    where p.user_id=v_uid and not a.is_blocked and r.role='passenger'\n  ) then\n    raise exception using errcode='42501', message='ORB_ORDER_CREATE_FORBIDDEN';\n  end if;\n  v_now:=pg_catalog.clock_timestamp();\n  update public.orbita_orders set status='cancelled',cancellation_reason='search_timeout',\n    cancelled_at=expires_at,version=2\n    where passenger_id=v_uid and status='created' and expires_at<=v_now;\n  if exists (select 1 from public.orbita_orders where passenger_id=v_uid and status='created') then\n    raise exception using errcode='P0001', message='ORB_ORDER_ACTIVE_EXISTS';\n  end if;\n  v_now:=pg_catalog.clock_timestamp();\n  insert into public.orbita_orders(passenger_id,request_id,pickup,destination,created_at,expires_at)\n    values(v_uid,p_request_id,v_pickup,v_destination,v_now,v_now+interval '5 minutes')\n    returning * into v_order;\n  return orbita_mobile_private.order_envelope(v_order,v_now);\nend;\n$function$\n",
+      "postgres",
+      [
+        [
+          "authenticated",
+          "postgres",
+          "EXECUTE",
+          false
+        ],
+        [
+          "postgres",
+          "postgres",
+          "EXECUTE",
+          false
+        ]
+      ]
+    ],
+    [
+      "public",
+      "orbita_get_current_order",
+      "",
+      "CREATE OR REPLACE FUNCTION public.orbita_get_current_order()\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_uid uuid:=orbita_mobile_private.order_session_uid();\n  v_order public.orbita_orders;\n  v_now timestamptz:=pg_catalog.clock_timestamp();\nbegin\n  -- Активный предпочитается даже при равных временах; затем последний receipt.\n  select * into v_order from public.orbita_orders\n    where passenger_id=v_uid and status='created' and expires_at>v_now;\n  if not found then\n    select * into v_order from public.orbita_orders where passenger_id=v_uid\n      order by created_at desc,id desc limit 1;\n  end if;\n  return orbita_mobile_private.order_envelope(v_order,pg_catalog.clock_timestamp());\nend;\n$function$\n",
+      "postgres",
+      [
+        [
+          "authenticated",
+          "postgres",
+          "EXECUTE",
+          false
+        ],
+        [
+          "postgres",
+          "postgres",
+          "EXECUTE",
+          false
+        ]
+      ]
+    ],
+    [
+      "public",
+      "orbita_get_order",
+      "p_order_id uuid",
+      "CREATE OR REPLACE FUNCTION public.orbita_get_order(p_order_id uuid)\n RETURNS jsonb\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO ''\nAS $function$\ndeclare\n  v_uid uuid:=orbita_mobile_private.order_session_uid();\n  v_order public.orbita_orders;\nbegin\n  if p_order_id is null then\n    raise exception using errcode='P0001', message='ORB_ORDER_INVALID_REQUEST';\n  end if;\n  select * into v_order from public.orbita_orders where id=p_order_id and passenger_id=v_uid;\n  if not found then\n    raise exception using errcode='P0001', message='ORB_ORDER_NOT_FOUND';\n  end if;\n  return orbita_mobile_private.order_envelope(v_order,pg_catalog.clock_timestamp());\nend;\n$function$\n",
+      "postgres",
+      [
+        [
+          "authenticated",
+          "postgres",
+          "EXECUTE",
+          false
+        ],
+        [
+          "postgres",
+          "postgres",
+          "EXECUTE",
+          false
+        ]
+      ]
+    ]
+  ],
+  "relations": [
+    [
+      "public",
+      "orbita_orders",
+      "r",
+      "postgres",
+      [
+        [
+          "postgres",
+          "postgres",
+          "DELETE",
+          false
+        ],
+        [
+          "postgres",
+          "postgres",
+          "INSERT",
+          false
+        ],
+        [
+          "postgres",
+          "postgres",
+          "MAINTAIN",
+          false
+        ],
+        [
+          "postgres",
+          "postgres",
+          "REFERENCES",
+          false
+        ],
+        [
+          "postgres",
+          "postgres",
+          "SELECT",
+          false
+        ],
+        [
+          "postgres",
+          "postgres",
+          "TRIGGER",
+          false
+        ],
+        [
+          "postgres",
+          "postgres",
+          "TRUNCATE",
+          false
+        ],
+        [
+          "postgres",
+          "postgres",
+          "UPDATE",
+          false
+        ]
+      ],
+      true,
+      false,
+      [
+        [
+          "id",
+          "uuid",
+          true,
+          "gen_random_uuid()",
+          []
+        ],
+        [
+          "passenger_id",
+          "uuid",
+          true,
+          null,
+          []
+        ],
+        [
+          "request_id",
+          "uuid",
+          true,
+          null,
+          []
+        ],
+        [
+          "pickup",
+          "jsonb",
+          true,
+          null,
+          []
+        ],
+        [
+          "destination",
+          "jsonb",
+          true,
+          null,
+          []
+        ],
+        [
+          "status",
+          "text",
+          true,
+          "'created'::text",
+          []
+        ],
+        [
+          "cancellation_reason",
+          "text",
+          false,
+          null,
+          []
+        ],
+        [
+          "created_at",
+          "timestamp with time zone",
+          true,
+          null,
+          []
+        ],
+        [
+          "expires_at",
+          "timestamp with time zone",
+          true,
+          null,
+          []
+        ],
+        [
+          "cancelled_at",
+          "timestamp with time zone",
+          false,
+          null,
+          []
+        ],
+        [
+          "version",
+          "integer",
+          true,
+          "1",
+          []
+        ]
+      ],
+      [
+        "CHECK (cancellation_reason = ANY (ARRAY['passenger'::text, 'search_timeout'::text]))",
+        "CHECK ((pickup -> 'latitude'::text) <> (destination -> 'latitude'::text) OR (pickup -> 'longitude'::text) <> (destination -> 'longitude'::text))",
+        "CHECK (expires_at = (created_at + '00:05:00'::interval))",
+        "CHECK (status = 'created'::text AND cancellation_reason IS NULL AND cancelled_at IS NULL AND version = 1 OR status = 'cancelled'::text AND cancellation_reason IS NOT NULL AND cancelled_at IS NOT NULL AND version = 2 AND (cancellation_reason = 'search_timeout'::text AND cancelled_at = expires_at OR cancellation_reason = 'passenger'::text AND cancelled_at < expires_at))",
+        "CHECK (destination = orbita_mobile_private.order_point(destination))",
+        "FOREIGN KEY (passenger_id) REFERENCES public.orbita_profiles(user_id) ON DELETE CASCADE",
+        "UNIQUE (passenger_id, request_id)",
+        "CHECK (pickup = orbita_mobile_private.order_point(pickup))",
+        "PRIMARY KEY (id)",
+        "CHECK (status = ANY (ARRAY['created'::text, 'cancelled'::text]))"
+      ],
+      [
+        "CREATE UNIQUE INDEX orbita_orders_one_created_per_passenger ON public.orbita_orders USING btree (passenger_id) WHERE (status = 'created'::text)",
+        "CREATE UNIQUE INDEX orbita_orders_passenger_id_request_id_key ON public.orbita_orders USING btree (passenger_id, request_id)",
+        "CREATE UNIQUE INDEX orbita_orders_pkey ON public.orbita_orders USING btree (id)"
+      ],
+      null,
+      null
+    ]
+  ]
+}
