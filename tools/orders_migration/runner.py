@@ -80,7 +80,8 @@ def main(diagnostic=None):
         require(value.startswith('-----BEGIN CERTIFICATE-----'),'Verified CA required.');ca.write_text(value)
         diagnostic['stage'] = 'DB_CLIENT_CONFIGURATION'
         db=OrdersDatabase(url,LOCK['project_ref'],os.environ.get('PGPASSWORD',''),ca,
-                          read_only=c['operation']!='apply')
+                          read_only=c['operation']!='apply',
+                          check_read_only_session=c['operation']=='apply')
         diagnostic['db'] = db
         diagnostic['stage'] = 'READ_ONLY_PROBE'
         require(db.query('show transaction_read_only;')=='on','Explicit read-only control query required.')
