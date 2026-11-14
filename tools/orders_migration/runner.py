@@ -8,7 +8,7 @@ from .admission import LOCK, GuardError, require, validate_request, validate_con
 from .catalog import capture, validate_before, state_hash, protected_hash
 from .atomic import body
 from .backup import create
-from dbtools import Database
+from dbtools import Database, SAFE_CONNECTION_CATEGORIES
 
 class OrdersDatabase(Database):
     def apply_orders(self, root, expected):
@@ -56,28 +56,63 @@ def execute(c, db, root, temporary, public, encrypted, passphrase='', proof=None
     except BaseException:
         raise GuardError('Apply result needs separately authorized read-only investigation; no retry.') from None
 
-def main():
+def main(diagnostic=None):
+    diagnostic = {} if diagnostic is None else diagnostic
+    diagnostic['stage'] = 'LOCAL_SETUP'
     os.umask(0o077)
     root=Path(os.environ['GITHUB_WORKSPACE'])
+    diagnostic['stage'] = 'GATE_LOAD'
     gate=Path(os.environ['RUNNER_TEMP'])/'orbita-orders-gate.json'
     require(gate.is_file(),'Independent GitHub gate required before DB secrets.')
-    approved=json.loads(gate.read_text());c=approved['context'];validate_request(c,root)
+    approved=json.loads(gate.read_text());c=approved['context']
+    diagnostic['stage'] = 'REQUEST_VALIDATION'
+    validate_request(c,root)
+    diagnostic['stage'] = 'CHECKOUT_VALIDATION'
     actual=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
     require(actual==c['sha'] and not subprocess.check_output(['git','status','--porcelain'],cwd=root,text=True).strip(),
             'Checkout changed after gate.')
+    diagnostic['stage'] = 'URL_VALIDATION'
     url=os.environ.get('ORBITA_DATABASE_URL','');validate_connection(url,LOCK['project_ref'])
     with tempfile.TemporaryDirectory(prefix='orbita-orders-',dir=os.environ['RUNNER_TEMP']) as directory:
         work=Path(directory);ca=work/'ca.pem'
+        diagnostic['stage'] = 'CA_CONFIGURATION'
         value=os.environ.get('ORBITA_DATABASE_CA_PEM','')
         require(value.startswith('-----BEGIN CERTIFICATE-----'),'Verified CA required.');ca.write_text(value)
+        diagnostic['stage'] = 'DB_CLIENT_CONFIGURATION'
         db=OrdersDatabase(url,LOCK['project_ref'],os.environ.get('PGPASSWORD',''),ca,
                           read_only=c['operation']!='apply')
+        diagnostic['db'] = db
+        diagnostic['stage'] = 'READ_ONLY_PROBE'
         require(db.query('show transaction_read_only;')=='on','Explicit read-only control query required.')
+        diagnostic['stage'] = 'PREVIEW_OR_APPLY_EXECUTION'
         execute(c,db,root,work,root/'build/orders-public',root/'build/orders-backup',
                 os.environ.get('ORBITA_ORDERS_BACKUP_PASSPHRASE',''),approved.get('preview'))
 
-if __name__=='__main__':
-    try:main()
+_DIAGNOSTIC_STAGES = frozenset((
+    'STARTUP', 'LOCAL_SETUP', 'GATE_LOAD', 'REQUEST_VALIDATION',
+    'CHECKOUT_VALIDATION', 'URL_VALIDATION', 'CA_CONFIGURATION',
+    'DB_CLIENT_CONFIGURATION', 'READ_ONLY_PROBE', 'PREVIEW_OR_APPLY_EXECUTION',
+))
+
+def cli():
+    diagnostic = {'stage': 'STARTUP', 'db': None}
+    try:
+        main(diagnostic)
+        return 0
     except BaseException:
-        print('ORDERS_OPERATION_FAILED: no raw errors; no automatic retry.')
-        raise SystemExit(1)
+        stage = diagnostic.get('stage')
+        if not isinstance(stage, str) or stage not in _DIAGNOSTIC_STAGES:
+            stage = 'UNKNOWN'
+        category = 'NOT_CONNECTED'
+        db = diagnostic.get('db')
+        if db is not None:
+            try:
+                candidate = db.failure_category
+            except BaseException:
+                candidate = None
+            category = candidate if isinstance(candidate, str) and candidate in SAFE_CONNECTION_CATEGORIES else 'UNKNOWN_PRIVATE_ERROR'
+        print(f'ORDERS_OPERATION_FAILED: stage={stage}; category={category}; no raw errors; no automatic retry.')
+        return 1
+
+if __name__=='__main__':
+    raise SystemExit(cli())
