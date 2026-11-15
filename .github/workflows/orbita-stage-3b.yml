@@ -187,8 +187,9 @@ jobs:
   # Этот job не объявляет Environment: здесь видны только Repository/Organization Variables.
   # Cloud jobs используют только закреплённый публичный endpoint: обычная URL Variable
   # намеренно никогда не интерполируется в шаги (иначе ошибочный пароль попал бы в лог).
+  # Cloud migration jobs are disabled in code, independently of GitHub Variables.
   migration_entry:
-    if: github.event_name == 'workflow_dispatch' && (inputs.migration_operation == 'preview' || inputs.migration_operation == 'apply' || inputs.migration_operation == 'inspect') && vars.ORBITA_REPO_MIGRATIONS_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-stage-3b-auth'
+    if: github.event_name == 'workflow_dispatch' && (inputs.migration_operation == 'preview' || inputs.migration_operation == 'apply' || inputs.migration_operation == 'inspect') && vars.ORBITA_REPO_MIGRATIONS_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-stage-3b-auth' && false
     name: Предварительный допуск репозитория — без Environment и секретов
     runs-on: ubuntu-24.04
     timeout-minutes: 3
@@ -213,7 +214,7 @@ jobs:
         run: python3 tools/migrations/repository_gate.py
 
   migration-preview:
-    if: github.event_name == 'workflow_dispatch' && (inputs.migration_operation == 'preview' || inputs.migration_operation == 'inspect') && vars.ORBITA_REPO_MIGRATIONS_ENABLED == 'true' && needs.migration_entry.outputs.repo_enabled == 'true' && github.ref == 'refs/heads/codex/orbita-stage-3b-auth'
+    if: github.event_name == 'workflow_dispatch' && (inputs.migration_operation == 'preview' || inputs.migration_operation == 'inspect') && vars.ORBITA_REPO_MIGRATIONS_ENABLED == 'true' && needs.migration_entry.outputs.repo_enabled == 'true' && github.ref == 'refs/heads/codex/orbita-stage-3b-auth' && false
     needs: [sql, cli-safety, migration_entry]
     name: Ручной допуск — preview или проверка состояния
     runs-on: ubuntu-24.04
@@ -288,7 +289,7 @@ jobs:
           retention-days: 14
 
   migration-apply:
-    if: github.event_name == 'workflow_dispatch' && inputs.migration_operation == 'apply' && vars.ORBITA_REPO_MIGRATIONS_ENABLED == 'true' && needs.migration_entry.outputs.repo_enabled == 'true' && github.ref == 'refs/heads/codex/orbita-stage-3b-auth'
+    if: github.event_name == 'workflow_dispatch' && inputs.migration_operation == 'apply' && vars.ORBITA_REPO_MIGRATIONS_ENABLED == 'true' && needs.migration_entry.outputs.repo_enabled == 'true' && github.ref == 'refs/heads/codex/orbita-stage-3b-auth' && false
     needs: [sql, cli-safety, migration_entry]
     name: Отдельный ручной допуск — одно применение
     runs-on: ubuntu-24.04
