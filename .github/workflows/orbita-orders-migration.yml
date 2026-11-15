@@ -49,8 +49,9 @@ jobs:
           chown postgres:postgres /tmp/orbita-order-checks
           test_version="$(/usr/lib/postgresql/17/bin/postgres --version)"
           runuser -u postgres -- env TMPDIR=/tmp/orbita-order-checks PYTHONPYCACHEPREFIX=/tmp/orbita-order-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest supabase.tests.test_orders_migration -v
+  # Cloud migration jobs are disabled in code, independently of GitHub Variables.
   entry:
-    if: inputs.operation != 'verify' && vars.ORBITA_ORDERS_REPO_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-flutter-design-integration'
+    if: inputs.operation != 'verify' && vars.ORBITA_ORDERS_REPO_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-flutter-design-integration' && false
     needs: verify
     runs-on: ubuntu-24.04
     outputs:
@@ -70,7 +71,7 @@ jobs:
           OUTSIDE_ORBITA_ORDERS_ALLOWED_OPERATION: ${{ vars.ORBITA_ORDERS_ALLOWED_OPERATION }}
         run: python3 -m tools.orders_migration.github_gate entry
   guarded:
-    if: needs.entry.outputs.admitted == 'true'
+    if: needs.entry.outputs.admitted == 'true' && false
     needs: [verify, entry]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
