@@ -35,7 +35,9 @@ def condition_value(expression,values):
     def visit(node):
         if isinstance(node,ast.Expression):return visit(node.body)
         if isinstance(node,ast.Constant):return node.value
-        if isinstance(node,ast.Name):return values.get(node.id,{})
+        if isinstance(node,ast.Name):
+            if node.id in ('false','true'):return node.id=='true'
+            return values.get(node.id,{})
         if isinstance(node,ast.Attribute):
             value=visit(node.value)
             return value.get(node.attr,'') if isinstance(value,dict) else ''
@@ -75,10 +77,11 @@ class VariableScopeTests(unittest.TestCase):
             try:github_gate.gate()
             finally:self.api_calls=api.call_count
 
-    def test_actual_job_conditions_require_repository_switch_and_never_environment_values(self):
+    def test_cloud_job_conditions_stay_disabled_for_every_dispatch_and_switch(self):
         expressions={name:job_section(name).split('\n    if: ',1)[1].splitlines()[0]
             for name in ['migration_entry','migration-preview','migration-apply']}
         for expression in expressions.values():
+            self.assertTrue(expression.endswith(' && false'))
             self.assertNotIn('vars.ORBITA_CLOUD_MIGRATIONS_ENABLED',expression)
             self.assertNotIn('vars.ORBITA_ALLOWED_MIGRATION_SHA',expression)
         for event in ['push','workflow_dispatch','pull_request','schedule']:
@@ -88,13 +91,9 @@ class VariableScopeTests(unittest.TestCase):
                         values={'github':{'event_name':event,'ref':'refs/heads/'+LOCK['branch']},
                             'inputs':{'migration_operation':mode},'vars':{'ORBITA_REPO_MIGRATIONS_ENABLED':enabled},
                             'needs':{'migration_entry':{'outputs':{'repo_enabled':entry}}}}
-                        eligible=event=='workflow_dispatch' and mode!='verify' and enabled.lower()=='true'
-                        with self.subTest(event=event,mode=mode,enabled=enabled,entry=entry):
-                            self.assertEqual(condition_value(expressions['migration_entry'],values),eligible)
-                            self.assertEqual(condition_value(expressions['migration-preview'],values),
-                                eligible and mode in ('preview','inspect') and entry=='true')
-                            self.assertEqual(condition_value(expressions['migration-apply'],values),
-                                eligible and mode=='apply' and entry=='true')
+                        for name,expression in expressions.items():
+                            with self.subTest(job=name,event=event,mode=mode,enabled=enabled,entry=entry):
+                                self.assertFalse(condition_value(expression,values))
         values['github']={'event_name':'workflow_dispatch','ref':'refs/heads/main'}
         values['vars']['ORBITA_REPO_MIGRATIONS_ENABLED']='true'
         for expression in expressions.values():self.assertFalse(condition_value(expression,values))
