@@ -1,0 +1,92 @@
+name: Орбита — актуальная резервная копия (только чтение)
+run-name: "Орбита backup-only @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+    inputs:
+      approved_sha:
+        type: string
+        required: true
+        description: 'Полный отдельно согласованный SHA запускаемой ветки'
+      project_ref:
+        type: string
+        required: true
+        description: 'Только fjqghohhohgvwlmefdmo'
+      confirmation:
+        type: string
+        required: true
+        description: 'Введите BACKUP_ONLY; это не разрешение на миграцию'
+permissions:
+  contents: read
+concurrency:
+  group: orbita-current-backup-only
+  cancel-in-progress: false
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  ORBITA_BACKUP_APPROVED_SHA: ${{ inputs.approved_sha }}
+  ORBITA_BACKUP_PROJECT_REF: ${{ inputs.project_ref }}
+  ORBITA_BACKUP_CONFIRMATION: ${{ inputs.confirmation }}
+jobs:
+  verify:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'primord1aal/Ordita-0.1v' &&
+      github.ref == 'refs/heads/codex/orbita-flutter-design-integration' &&
+      github.actor == 'primord1aal' && github.triggering_actor == 'primord1aal' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    container: postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
+    timeout-minutes: 10
+    steps:
+      - name: Local tools including trusted TLS roots
+        run: apt-get update && apt-get install --no-install-recommends -y python3 python3-yaml git gnupg ca-certificates
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Source admission without database credentials
+        run: python3 -m tools.current_backup --check-source
+      - name: Backup unit tests without credentials
+        run: python3 -m unittest discover -s tools/current_backup/tests -v
+      - name: Synthetic export and restore, local Unix sockets only
+        run: |
+          mkdir -p /tmp/orbita-backup-checks
+          chown postgres:postgres /tmp/orbita-backup-checks
+          test_version="$(/usr/lib/postgresql/17/bin/postgres --version)"
+          runuser -u postgres -- env TMPDIR=/tmp/orbita-backup-checks PYTHONDONTWRITEBYTECODE=1 ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest supabase.tests.test_current_backup -v
+  backup:
+    needs: verify
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'primord1aal/Ordita-0.1v' &&
+      github.ref == 'refs/heads/codex/orbita-flutter-design-integration' &&
+      github.actor == 'primord1aal' && github.triggering_actor == 'primord1aal' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    container: postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
+    timeout-minutes: 8
+    environment: orbita-mobile-test-backups
+    steps:
+      - name: Backup tools including trusted TLS roots
+        run: apt-get update && apt-get install --no-install-recommends -y python3 git gnupg ca-certificates
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Recheck source before database credentials
+        run: python3 -m tools.current_backup --check-source
+      - name: Read-only snapshot and encrypted package
+        env:
+          ORBITA_BACKUP_READER_PASSWORD: ${{ secrets.ORBITA_BACKUP_READER_PASSWORD }}
+          ORBITA_CURRENT_BACKUP_PASSPHRASE: ${{ secrets.ORBITA_CURRENT_BACKUP_PASSPHRASE }}
+          ORBITA_BACKUP_CA_PEM: ${{ vars.ORBITA_BACKUP_CA_PEM }}
+        run: python3 -m tools.current_backup
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: success()
+        with:
+          name: ORBITA-current-backup-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/orbita-current-backup-artifact/snapshot.tar.gpg
+            ${{ runner.temp }}/orbita-current-backup-artifact/SHA256SUMS
+            ${{ runner.temp }}/orbita-current-backup-artifact/receipt.json
+          if-no-files-found: error
+          retention-days: 3
