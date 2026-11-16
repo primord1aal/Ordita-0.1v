@@ -1,0 +1,29 @@
+name: Орбита — разовый зашифрованный backup с проверкой восстановления
+run-name: "Orbita one-off backup registration @ ${{ github.sha }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      approved_sha:
+        type: string
+        required: true
+        description: Полный отдельно согласованный SHA backup-only ветки
+      project_ref:
+        type: string
+        required: true
+        description: Только fjqghohhohgvwlmefdmo
+      acknowledgement:
+        type: string
+        required: true
+        description: ACK_BROAD_READ_AND_PUBLIC_PRIVILEGES — отдельный допуск расширенного чтения
+
+permissions: {}
+
+jobs:
+  registration-only:
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Registration only; no backup execution
+        run: exit 1
