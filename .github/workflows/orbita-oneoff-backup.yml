@@ -1,0 +1,107 @@
+name: Орбита — разовый зашифрованный backup с проверкой восстановления
+run-name: "Orbita one-off backup @ ${{ github.sha }}"
+on:
+  workflow_dispatch:
+    inputs:
+      approved_sha:
+        type: string
+        required: true
+        description: Полный отдельно согласованный SHA backup-only ветки
+      project_ref:
+        type: string
+        required: true
+        description: Только fjqghohhohgvwlmefdmo
+      acknowledgement:
+        type: string
+        required: true
+        description: ACK_BROAD_READ_AND_PUBLIC_PRIVILEGES — отдельный допуск расширенного чтения
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+concurrency:
+  group: orbita-oneoff-backup-single-flight
+  cancel-in-progress: false
+env:
+  ORBITA_ONEOFF_APPROVED_SHA: ${{ inputs.approved_sha }}
+  ORBITA_ONEOFF_PROJECT_REF: ${{ inputs.project_ref }}
+  ORBITA_ONEOFF_ACK: ${{ inputs.acknowledgement }}
+  PYTHONDONTWRITEBYTECODE: '1'
+jobs:
+  verify:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'primord1aal/Ordita-0.1v' && github.ref == 'refs/heads/codex/orbita-oneoff-backup-preparation-20261116' && github.actor == 'primord1aal' && github.triggering_actor == 'primord1aal' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Source and actual Environment protections before database credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -m tools.oneoff_backup --check-github
+      - name: Local tests without credentials
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y python3-yaml
+          python3 -m unittest discover -s tools/oneoff_backup/tests -p 'test_*.py' -v
+  backup:
+    needs: verify
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'primord1aal/Ordita-0.1v' && github.ref == 'refs/heads/codex/orbita-oneoff-backup-preparation-20261116' && github.actor == 'primord1aal' && github.triggering_actor == 'primord1aal' && github.run_attempt == 1
+    environment: orbita-mobile-test-oneoff-backup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Recheck actual approval before database credentials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -m tools.oneoff_backup --check-approved
+      - name: Prepare pinned tools and private empty output
+        run: |
+          docker build --tag orbita-oneoff-tools --file tools/oneoff_backup/Dockerfile tools/oneoff_backup
+          mkdir -m 700 "$RUNNER_TEMP/orbita-oneoff"
+          sudo chown 999:999 "$RUNNER_TEMP/orbita-oneoff"
+      - name: Fixed read-only snapshot and encryption using the temporary nonadmin role
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ORBITA_ONEOFF_READER_PASSWORD: ${{ secrets.ORBITA_ONEOFF_BACKUP_READER_PASSWORD }}
+          ORBITA_ONEOFF_PASSPHRASE: ${{ secrets.ORBITA_ONEOFF_BACKUP_PASSPHRASE }}
+          ORBITA_ONEOFF_CA_PEM: ${{ vars.ORBITA_ONEOFF_BACKUP_CA_PEM }}
+        run: |
+          docker run --rm --user postgres --tmpfs /tmp:rw,nosuid,nodev,size=512m \
+            --mount type=bind,src="$GITHUB_WORKSPACE",dst=/repo,readonly \
+            --mount type=bind,src="$RUNNER_TEMP/orbita-oneoff",dst=/output \
+            -e GITHUB_WORKSPACE=/repo -e GITHUB_SHA -e GITHUB_REF -e GITHUB_REPOSITORY \
+            -e GITHUB_ACTOR -e GITHUB_TRIGGERING_ACTOR -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_EVENT_NAME -e GITHUB_TOKEN \
+            -e ORBITA_ONEOFF_APPROVED_SHA -e ORBITA_ONEOFF_PROJECT_REF -e ORBITA_ONEOFF_ACK \
+            -e ORBITA_ONEOFF_READER_PASSWORD -e ORBITA_ONEOFF_PASSPHRASE -e ORBITA_ONEOFF_CA_PEM \
+            --entrypoint python3 orbita-oneoff-tools -m tools.oneoff_backup export
+      - name: Decrypt and restore without any network or source credentials
+        env:
+          ORBITA_ONEOFF_PASSPHRASE: ${{ secrets.ORBITA_ONEOFF_BACKUP_PASSPHRASE }}
+        run: |
+          sudo install -d -m 700 -o 999 -g 999 "$RUNNER_TEMP/orbita-oneoff/result"
+          docker run --rm --network none --user postgres --tmpfs /tmp:rw,nosuid,nodev,size=512m \
+            --mount type=bind,src="$GITHUB_WORKSPACE",dst=/repo,readonly \
+            --mount type=bind,src="$RUNNER_TEMP/orbita-oneoff/staging",dst=/input,readonly \
+            --mount type=bind,src="$RUNNER_TEMP/orbita-oneoff/result",dst=/output \
+            -e ORBITA_ONEOFF_PASSPHRASE --entrypoint python3 orbita-oneoff-tools -m tools.oneoff_backup restore
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/orbita-oneoff"
+      - name: Publish encrypted package only after successful restore
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ORBITA-oneoff-backup-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/orbita-oneoff/result/accepted/snapshot.tar.gpg
+            ${{ runner.temp }}/orbita-oneoff/result/accepted/SHA256SUMS
+            ${{ runner.temp }}/orbita-oneoff/result/accepted/receipt.json
+          if-no-files-found: error
+          retention-days: 3
+      - name: Remove this job's ephemeral encrypted staging
+        if: always()
+        run: sudo rm -rf -- "$RUNNER_TEMP/orbita-oneoff"
