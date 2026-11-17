@@ -65,7 +65,14 @@ jobs:
         run: |
           docker build --tag orbita-oneoff-tools --file tools/oneoff_backup/Dockerfile tools/oneoff_backup
           mkdir -m 700 "$RUNNER_TEMP/orbita-oneoff"
-          sudo chown 999:999 "$RUNNER_TEMP/orbita-oneoff"
+      - name: Verify source in the export container without credentials
+        run: |
+          docker run --rm --network none --user "$(id -u):$(id -g)" --tmpfs /tmp:rw,nosuid,nodev,size=512m \
+            --mount type=bind,src="$GITHUB_WORKSPACE",dst=/repo,readonly \
+            -e GITHUB_WORKSPACE=/repo -e GITHUB_SHA -e GITHUB_REF -e GITHUB_REPOSITORY \
+            -e GITHUB_ACTOR -e GITHUB_TRIGGERING_ACTOR -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_EVENT_NAME \
+            -e ORBITA_ONEOFF_APPROVED_SHA -e ORBITA_ONEOFF_PROJECT_REF -e ORBITA_ONEOFF_ACK \
+            --entrypoint python3 orbita-oneoff-tools -m tools.oneoff_backup --check-source
       - name: Fixed read-only snapshot and encryption using the temporary nonadmin role
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -73,7 +80,7 @@ jobs:
           ORBITA_ONEOFF_PASSPHRASE: ${{ secrets.ORBITA_ONEOFF_BACKUP_PASSPHRASE }}
           ORBITA_ONEOFF_CA_PEM: ${{ vars.ORBITA_ONEOFF_BACKUP_CA_PEM }}
         run: |
-          docker run --rm --user postgres --tmpfs /tmp:rw,nosuid,nodev,size=512m \
+          docker run --rm --user "$(id -u):$(id -g)" --tmpfs /tmp:rw,nosuid,nodev,size=512m \
             --mount type=bind,src="$GITHUB_WORKSPACE",dst=/repo,readonly \
             --mount type=bind,src="$RUNNER_TEMP/orbita-oneoff",dst=/output \
             -e GITHUB_WORKSPACE=/repo -e GITHUB_SHA -e GITHUB_REF -e GITHUB_REPOSITORY \
@@ -85,6 +92,7 @@ jobs:
         env:
           ORBITA_ONEOFF_PASSPHRASE: ${{ secrets.ORBITA_ONEOFF_BACKUP_PASSPHRASE }}
         run: |
+          sudo chown -R 999:999 "$RUNNER_TEMP/orbita-oneoff/staging"
           sudo install -d -m 700 -o 999 -g 999 "$RUNNER_TEMP/orbita-oneoff/result"
           docker run --rm --network none --user postgres --tmpfs /tmp:rw,nosuid,nodev,size=512m \
             --mount type=bind,src="$GITHUB_WORKSPACE",dst=/repo,readonly \

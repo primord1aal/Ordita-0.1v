@@ -62,8 +62,20 @@ def source(env, root):
     require(env.get('ORBITA_ONEOFF_PROJECT_REF') == base.PROJECT and base.PROJECT != base.FORBIDDEN, 'PROJECT_REJECTED')
     require(env.get('ORBITA_ONEOFF_ACK') == ACK, 'BROAD_PROFILE_NOT_APPROVED')
     git = ['git', '-c', 'safe.directory='+str(root), '-C', str(root)]
-    require(base.run(git+['rev-parse','HEAD']).decode().strip() == sha and
-            not base.run(git+['status','--porcelain']).strip(), 'CHECKOUT_REJECTED')
+    try:
+        actual = base.run(git+['rev-parse','HEAD']).decode().strip()
+    except base.BackupError as error:
+        if str(error) == 'CLIENT_FAILED':
+            raise base.BackupError('SOURCE_GIT_HEAD_CLIENT_FAILED') from None
+        raise
+    require(actual == sha, 'CHECKOUT_REJECTED')
+    try:
+        status = base.run(git+['status','--porcelain']).strip()
+    except base.BackupError as error:
+        if str(error) == 'CLIENT_FAILED':
+            raise base.BackupError('SOURCE_GIT_STATUS_CLIENT_FAILED') from None
+        raise
+    require(not status, 'CHECKOUT_REJECTED')
     return sha
 
 
