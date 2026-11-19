@@ -12,7 +12,7 @@ from tools.orders_migration.admission import LOCK, GuardError
 from tools.orders_migration.local import Native
 from tools.orders_migration.catalog import capture, validate_before, state_hash, protected_hash, catalog_sql
 from tools.orders_migration.atomic import body
-from tools.orders_migration.backup import create
+from tools.orders_migration.backup import PreviewPhase, create
 from tools.orders_migration.runner import execute
 from atomic_apply import migration_body
 
@@ -159,8 +159,11 @@ class OrdersMigrationTests(unittest.TestCase):
     def test_10_wrong_passphrase_creates_no_preview_receipt(self):
         with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as work:
             work=Path(work)
+            phases=[]
             with self.assertRaises(GuardError):
-                execute({'operation':'preview','sha':'a'*40,'run_id':'1'},self.db,ROOT,work,work/'public',work/'encrypted','short',backup_factory=Native)
+                execute({'operation':'preview','sha':'a'*40,'run_id':'1'},self.db,ROOT,work,work/'public',work/'encrypted','short',backup_factory=Native,on_phase=phases.append)
+            self.assertEqual(phases[-1], PreviewPhase.ENCRYPT)
+            self.assertNotIn(PreviewPhase.RESTORE_START, phases)
             self.assertFalse((work/'public/preview.json').exists());self.assert_initial()
     def test_11_unknown_apply_result_records_attempt_once_no_retry(self):
         class Broken:

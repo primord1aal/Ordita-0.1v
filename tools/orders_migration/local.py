@@ -66,7 +66,9 @@ class Docker:
             import time
             deadline=time.monotonic()+30
             while True:
-                p=subprocess.run(DOCKER+['exec',self.cid,'pg_isready','-U','postgres'],capture_output=True,env=self.env)
+                # The image starts a temporary socket-only server during initdb.
+                # Only the final postmaster accepts TCP on container loopback.
+                p=subprocess.run(DOCKER+['exec',self.cid,'pg_isready','-h','127.0.0.1','-U','postgres'],capture_output=True,env=self.env)
                 if p.returncode==0:break
                 require(time.monotonic()<deadline,'Restore start failed.');time.sleep(.2)
         except BaseException:self.close();raise

@@ -7,7 +7,7 @@ import tempfile
 from .admission import LOCK, GuardError, require, validate_request, validate_connection, sources, validate_receipt
 from .catalog import capture, validate_before, state_hash, protected_hash
 from .atomic import body
-from .backup import create
+from .backup import PreviewPhase, create, ignore_phase
 from dbtools import Database, SAFE_CONNECTION_CATEGORIES
 
 class OrdersDatabase(Database):
@@ -16,8 +16,9 @@ class OrdersDatabase(Database):
         return self.tool('psql',['--no-psqlrc','--set','ON_ERROR_STOP=1','-Atq','--dbname',self.url],
                          input=body(root,expected),timeout=120,atomic_write=True)
 
-def execute(c, db, root, temporary, public, encrypted, passphrase='', proof=None, backup_factory=None):
+def execute(c, db, root, temporary, public, encrypted, passphrase='', proof=None, backup_factory=None, *, on_phase=ignore_phase):
     public=Path(public);public.mkdir(parents=True,exist_ok=True)
+    on_phase(PreviewPhase.SOURCE_CATALOG)
     doc=capture(db)
     if c['operation']=='inspect':
         # Diagnostic does not renew admission or permit repair/retry.
@@ -25,12 +26,16 @@ def execute(c, db, root, temporary, public, encrypted, passphrase='', proof=None
                  'versions':[r['version'] for r in doc['history']],
                  'state_sha256':state_hash(db),'no_retry_authorized':True}
         (public/'inspection.json').write_text(json.dumps(receipt)+'\n');return receipt
+    on_phase(PreviewPhase.SOURCE_BASELINE)
     validate_before(doc)
+    on_phase(PreviewPhase.SOURCE_FINGERPRINT)
     before=state_hash(db);protected=protected_hash(db)
     if c['operation']=='preview':
         kwargs={} if backup_factory is None else {'factory':backup_factory}
-        backup=create(db,root,temporary,encrypted,passphrase,**kwargs)
+        backup=create(db,root,temporary,encrypted,passphrase,on_phase=on_phase,**kwargs)
+        on_phase(PreviewPhase.RECHECK_SOURCE)
         require(state_hash(db)==before,'Preview source state changed.')
+        on_phase(PreviewPhase.WRITE_RECEIPT)
         receipt={'status':'preview_passed','source_sha':c['sha'],'run_id':c['run_id'],
                  'project_ref':LOCK['project_ref'],'sql_sha256':LOCK['sha256'],'executor':LOCK['executor'],
                  'before_versions':[LOCK['first_version']],'pending':[LOCK['version']],
@@ -88,7 +93,8 @@ def main(diagnostic=None):
         require(db.query('show transaction_read_only;')=='on','Explicit read-only control query required.')
         diagnostic['stage'] = 'PREVIEW_OR_APPLY_EXECUTION'
         execute(c,db,root,work,root/'build/orders-public',root/'build/orders-backup',
-                os.environ.get('ORBITA_ORDERS_BACKUP_PASSPHRASE',''),approved.get('preview'))
+                os.environ.get('ORBITA_ORDERS_BACKUP_PASSPHRASE',''),approved.get('preview'),
+                on_phase=lambda phase: diagnostic.update(stage=phase))
 
 _DIAGNOSTIC_STAGES = frozenset((
     'STARTUP', 'LOCAL_SETUP', 'GATE_LOAD', 'REQUEST_VALIDATION',
@@ -103,7 +109,9 @@ def cli():
         return 0
     except BaseException:
         stage = diagnostic.get('stage')
-        if not isinstance(stage, str) or stage not in _DIAGNOSTIC_STAGES:
+        if isinstance(stage, PreviewPhase):
+            stage = stage.name
+        elif not isinstance(stage, str) or stage not in _DIAGNOSTIC_STAGES:
             stage = 'UNKNOWN'
         category = 'NOT_CONNECTED'
         db = diagnostic.get('db')
