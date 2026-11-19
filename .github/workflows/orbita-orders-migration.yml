@@ -5,9 +5,9 @@ on:
     inputs:
       operation:
         type: choice
-        options: [verify, preview]
+        options: [verify, preview, apply]
         default: verify
-        description: 'verify либо отдельно согласованный read-only preview V1'
+        description: 'V1: verify, preview или отдельно одобренный apply по квитанции Preview того же SHA'
       approved_sha:
         type: string
         default: ''
@@ -49,9 +49,8 @@ jobs:
           chown postgres:postgres /tmp/orbita-order-checks
           test_version="$(/usr/lib/postgresql/17/bin/postgres --version)"
           runuser -u postgres -- env TMPDIR=/tmp/orbita-order-checks PYTHONPYCACHEPREFIX=/tmp/orbita-order-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest supabase.tests.test_orders_migration -v
-  # Only the V1 preview can reach the protected Environment.
   entry:
-    if: inputs.operation == 'preview' && vars.ORBITA_ORDERS_REPO_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-flutter-design-integration'
+    if: contains(fromJSON('["preview","apply"]'), inputs.operation) && vars.ORBITA_ORDERS_REPO_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-flutter-design-integration'
     needs: verify
     runs-on: ubuntu-24.04
     outputs:
@@ -71,7 +70,7 @@ jobs:
           OUTSIDE_ORBITA_ORDERS_ALLOWED_OPERATION: ${{ vars.ORBITA_ORDERS_ALLOWED_OPERATION }}
         run: python3 -m tools.orders_migration.github_gate entry
   guarded:
-    if: needs.entry.outputs.admitted == 'true' && inputs.operation == 'preview'
+    if: needs.entry.outputs.admitted == 'true' && contains(fromJSON('["preview","apply"]'), inputs.operation)
     needs: [verify, entry]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -106,7 +105,7 @@ jobs:
       - name: Separately authorized operation
         env:
           PGPASSWORD: ${{ secrets.ORBITA_TEST_DB_PASSWORD }}
-          ORBITA_ORDERS_BACKUP_PASSPHRASE: ${{ secrets.ORBITA_ORDERS_BACKUP_PASSPHRASE }}
+          ORBITA_ORDERS_BACKUP_PASSPHRASE: ${{ inputs.operation == 'preview' && secrets.ORBITA_ORDERS_BACKUP_PASSPHRASE || '' }}
           ORBITA_DATABASE_CA_PEM: ${{ vars.ORBITA_TEST_DB_CA_PEM }}
           ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
         run: python3 -m tools.orders_migration.runner
@@ -122,3 +121,9 @@ jobs:
           name: ORBITA-orders-backup-${{ github.run_id }}
           path: build/orders-backup/snapshot.tar.gpg
           if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && inputs.operation == 'apply'
+        with:
+          name: ORBITA-orders-apply-${{ github.run_id }}
+          path: build/orders-public/apply.json
+          if-no-files-found: ignore

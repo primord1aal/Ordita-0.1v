@@ -116,9 +116,9 @@ class AdmissionTests(unittest.TestCase):
         text=(ROOT/'.github/workflows'/LOCK['workflow']).read_text()
         data=yaml.load(text,Loader=yaml.BaseLoader)
         self.assertEqual(set(data['on']),{'workflow_dispatch'})
-        self.assertEqual(data['on']['workflow_dispatch']['inputs']['operation']['options'], ['verify', 'preview'])
+        self.assertEqual(data['on']['workflow_dispatch']['inputs']['operation']['options'], ['verify', 'preview', 'apply'])
         for name in ('entry','guarded'):
-            self.assertIn("inputs.operation == 'preview'", data['jobs'][name]['if'])
+            self.assertIn("contains(fromJSON('[\"preview\",\"apply\"]'), inputs.operation)", data['jobs'][name]['if'])
             self.assertNotIn('||', data['jobs'][name]['if'])
         self.assertEqual(data['jobs']['guarded']['environment'],LOCK['environment'])
         self.assertNotIn('CLOUD_ENABLED',data['jobs']['guarded']['if'])

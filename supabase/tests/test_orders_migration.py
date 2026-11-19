@@ -223,3 +223,53 @@ class OrdersMigrationTests(unittest.TestCase):
             with self.assertRaises(GuardError):
                 execute({'operation':'preview','sha':'a'*40,'run_id':'1'},self.db,ROOT,work,work/'public',work/'encrypted','synthetic-only-backup-passphrase-2026',backup_factory=factory)
             factory.assert_not_called();self.assertFalse((work/'public/preview.json').exists());self.assert_initial()
+
+
+class HostedV1ApplyTest(unittest.TestCase):
+    action = OrdersMigrationTests.action
+
+    def test_apply_requires_current_receipt_and_preserves_managed_auth(self):
+        native_cluster = Native
+        def cluster(parent=None):
+            db = native_cluster(parent)
+            db.psql('CREATE ROLE setup_actor SUPERUSER LOGIN;')
+            db.psql('ALTER ROLE postgres RENAME TO bootstrap_super; '
+                    'CREATE ROLE postgres SUPERUSER LOGIN; ALTER DATABASE postgres OWNER TO postgres;',
+                    role='setup_actor')
+            return db
+
+        with patch(f'{__name__}.Native', cluster):
+            OrdersMigrationTests.setUp(self)
+        self.db.psql("""CREATE ROLE supabase_auth_admin NOLOGIN;
+            CREATE TABLE auth.schema_migrations(version text PRIMARY KEY);
+            INSERT INTO auth.schema_migrations VALUES ('managed_initial');
+            ALTER TABLE auth.schema_migrations OWNER TO supabase_auth_admin;
+            GRANT SELECT ON auth.schema_migrations TO postgres;
+            ALTER ROLE postgres NOSUPERUSER CREATEROLE BYPASSRLS;""")
+        self.assertEqual(self.db.query("SELECT rolsuper FROM pg_roles WHERE rolname=current_user;"), 'f')
+        sha = 'a'*40
+        ctx = dict(operation='apply', sha=sha, run_id='2', preview_run_id='1', backup_sha256='b'*64)
+        # Synthetic gate receipt; all writes below use the fixture's private Unix socket.
+        proof = dict(status='preview_passed', source_sha=sha, project_ref=LOCK['project_ref'],
+                     sql_sha256=LOCK['sha256'], executor=LOCK['executor'], state_sha256=state_hash(self.db),
+                     run_id='1', before_versions=[LOCK['first_version']], pending=[LOCK['version']],
+                     backup=dict(encrypted_sha256='b'*64, decryption_checked=True, restore_checked=True,
+                                 rehearsal_checked=True, network='none'))
+        protected = protected_hash(self.db)
+        def apply_local(root, expected):
+            self.db.execute(body(root, expected))
+        with tempfile.TemporaryDirectory() as tmp, patch.object(self.db, 'apply_orders', create=True,
+                                                                 side_effect=apply_local) as writer:
+            work = Path(tmp)
+            def run(receipt):
+                return execute(ctx, self.db, ROOT, work, work/'public', work/'encrypted', proof=receipt)
+            with self.assertRaises(GuardError):
+                run(dict(proof, source_sha='d'*40))
+            writer.assert_not_called()
+            self.assertFalse((work/'public/apply.json').exists())
+            self.assertEqual(run(proof)['status'], 'applied_and_verified')
+            writer.assert_called_once()
+            self.assertEqual(protected_hash(self.db), protected)
+            self.assertEqual(self.db.query('SELECT version FROM auth.schema_migrations;'), 'managed_initial')
+            self.assertEqual(self.db.query("SELECT has_table_privilege('auth.schema_migrations',"
+                                        "'MAINTAIN,UPDATE,DELETE,TRUNCATE');"), 'f')
