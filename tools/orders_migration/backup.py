@@ -28,6 +28,16 @@ class PreviewPhase(Enum):
     RESTORE_TRIGGER = auto()
     RESTORE_SCHEMA_ACL = auto()
     COMPARE_RESTORE = auto()
+    RESTORED_SCHEMAS = auto()
+    RESTORED_RELATIONS = auto()
+    RESTORED_FUNCTIONS = auto()
+    RESTORED_PROTECTED_CATALOG = auto()
+    RESTORED_ROWS_OR_SEQUENCES = auto()
+    RESTORED_HISTORY = auto()
+    RESTORED_ROLE_SAFETY = auto()
+    RESTORED_DEPENDENCIES = auto()
+    RESTORED_HOST_RLS = auto()
+    RESTORED_STATE_HASH = auto()
     REHEARSE_V1 = auto()
     CHECK_REHEARSAL = auto()
     RECHECK_SOURCE = auto()
@@ -40,6 +50,26 @@ def ignore_phase(phase):
 
 def role_names(db):
     return json.loads(db.query("select json_agg(rolname order by rolname) from pg_roles;"))
+
+def compare_restore(expected, actual, on_phase):
+    """Only the fixed section name may leave the private comparison."""
+    for key, phase in (('schemas', PreviewPhase.RESTORED_SCHEMAS),
+                       ('relations', PreviewPhase.RESTORED_RELATIONS),
+                       ('functions', PreviewPhase.RESTORED_FUNCTIONS)):
+        on_phase(phase)
+        require(actual['catalog'][key] == expected['catalog'][key], 'Restored catalog differs.')
+    for key, phase in (('protected_catalog', PreviewPhase.RESTORED_PROTECTED_CATALOG),
+                       ('rows', PreviewPhase.RESTORED_ROWS_OR_SEQUENCES),
+                       ('history', PreviewPhase.RESTORED_HISTORY),
+                       ('client_safe', PreviewPhase.RESTORED_ROLE_SAFETY),
+                       ('dependency_ok', PreviewPhase.RESTORED_DEPENDENCIES),
+                       ('host_rls', PreviewPhase.RESTORED_HOST_RLS)):
+        on_phase(phase)
+        require(actual[key] == expected[key], 'Restored state differs.')
+    # Includes additional keys even if no specific phase exists for them yet.
+    on_phase(PreviewPhase.COMPARE_RESTORE)
+    require(actual == expected, 'Restored document differs.')
+
 
 def create(db, root, temporary, output, passphrase, factory=Docker, *, on_phase=ignore_phase):
     on_phase(PreviewPhase.BACKUP_BASELINE)
@@ -102,8 +132,9 @@ def create(db, root, temporary, output, passphrase, factory=Docker, *, on_phase=
                 target='PUBLIC' if grantee=='PUBLIC' else '"'+grantee.replace('"','""')+'"'
                 local.psql('grant '+privilege+' on schema '+ident+' to '+target+(' with grant option' if grantable else '')+';')
         on_phase(PreviewPhase.COMPARE_RESTORE)
-        require(capture(local)==before and state_hash(local)==before_hash,
-                'Logical schema/ACL/rows/history did not restore exactly.')
+        compare_restore(before, capture(local), on_phase)
+        on_phase(PreviewPhase.RESTORED_STATE_HASH)
+        require(state_hash(local)==before_hash, 'Restored state hash differs.')
         on_phase(PreviewPhase.REHEARSE_V1)
         local.execute(body(root,before_hash))
         on_phase(PreviewPhase.CHECK_REHEARSAL)

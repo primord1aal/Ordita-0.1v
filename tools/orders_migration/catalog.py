@@ -15,7 +15,7 @@ def quoted(values):
     return ','.join("'" + v.replace("'", "''") + "'" for v in values)
 
 def acl_sql(expr, default):
-    return "(select coalesce(jsonb_agg(jsonb_build_array(case when qacl.grantee=0 then 'PUBLIC' else pg_get_userbyid(qacl.grantee) end,pg_get_userbyid(qacl.grantor),qacl.privilege_type,qacl.is_grantable) order by qacl.grantee::regrole::text,qacl.grantor::regrole::text,qacl.privilege_type),'[]') from aclexplode(nullif(coalesce(" + expr + ',' + default + "),'{}'::aclitem[])) qacl)"
+    return "(select coalesce(jsonb_agg(jsonb_build_array(case when qacl.grantee=0 then 'PUBLIC' else pg_get_userbyid(qacl.grantee) end,pg_get_userbyid(qacl.grantor),qacl.privilege_type,qacl.is_grantable) order by qacl.grantee::regrole::text collate \"C\",qacl.grantor::regrole::text collate \"C\",qacl.privilege_type collate \"C\"),'[]') from aclexplode(nullif(coalesce(" + expr + ',' + default + "),'{}'::aclitem[])) qacl)"
 
 def catalog_sql(app_only=False, orders_only=False, auth_only=False):
     rel_filter = "n.nspname in ('public','orbita_mobile_private','auth','supabase_migrations')"
@@ -39,16 +39,16 @@ def catalog_sql(app_only=False, orders_only=False, auth_only=False):
           pg_get_expr(d.adbin,d.adrelid),""" + acl_sql('a.attacl',"NULL::aclitem[]") + """) order by a.attnum) from pg_attribute a left join pg_attrdef d
           on d.adrelid=a.attrelid and d.adnum=a.attnum where a.attrelid=c.oid and a.attnum>0 and not a.attisdropped),
         (select jsonb_agg(pg_get_constraintdef(x.oid,true) order by x.conname) from pg_constraint x where x.conrelid=c.oid),
-        (select jsonb_agg(pg_get_indexdef(i.indexrelid) order by i.indexrelid::regclass::text) from pg_index i where i.indrelid=c.oid),
+        (select jsonb_agg(pg_get_indexdef(i.indexrelid) order by i.indexrelid::regclass::text collate "C") from pg_index i where i.indrelid=c.oid),
         (select jsonb_agg(pg_get_triggerdef(t.oid,true) order by t.tgname) from pg_trigger t where t.tgrelid=c.oid and not t.tgisinternal),
         (select jsonb_agg(jsonb_build_array(pol.polname,pol.polcmd,pol.polpermissive,
-          (select array_agg(case when r=0 then 'PUBLIC' else pg_get_userbyid(r) end order by r::regrole::text) from unnest(pol.polroles) r),
+          (select array_agg(case when r=0 then 'PUBLIC' else pg_get_userbyid(r) end order by r::regrole::text collate "C") from unnest(pol.polroles) r),
           pg_get_expr(pol.polqual,pol.polrelid),pg_get_expr(pol.polwithcheck,pol.polrelid)) order by pol.polname)
           from pg_policy pol where pol.polrelid=c.oid)) order by n.nspname,c.relname),'[]')
         from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind in ('r','p','S','v','m') and """ + rel_filter + """),
       'functions',(select coalesce(jsonb_agg(jsonb_build_array(n.nspname,p.proname,
         pg_get_function_identity_arguments(p.oid),pg_get_functiondef(p.oid),pg_get_userbyid(p.proowner),""" + acl_sql('p.proacl',"acldefault('f',p.proowner)") + """)
-        order by n.nspname,p.proname,pg_get_function_identity_arguments(p.oid)),'[]')
+        order by n.nspname,p.proname,pg_get_function_identity_arguments(p.oid) collate "C"),'[]')
         from pg_proc p join pg_namespace n on n.oid=p.pronamespace where p.prokind in ('f','p') and """ + fun_filter + ') )'
 
 def row_hash_sql():

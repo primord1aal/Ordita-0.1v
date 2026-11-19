@@ -156,6 +156,17 @@ class OrdersMigrationTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256((work/'encrypted/snapshot.tar.gpg').read_bytes()).hexdigest(),result['encrypted_sha256'])
             self.assertFalse((work/'before.dump').exists());self.assertFalse((work/'verified.dump').exists())
             self.assert_initial()
+    def test_catalog_comparison_across_restore_locales(self):
+        self.db.psql('''CREATE TABLE auth.index_sort_fixture (item text);
+            CREATE INDEX "fZ_test" ON auth.index_sort_fixture(item);
+            CREATE INDEX fatest ON auth.index_sort_fixture(item);''')
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as directory:
+            work = Path(directory)
+            result = create(self.db, ROOT, work, work/'encrypted',
+                            'synthetic-only-backup-passphrase-2026',
+                            factory=lambda parent: Native(parent, locale='en_US.utf8'))
+        self.assertTrue(result['rehearsal_checked'])
+
     def test_10_wrong_passphrase_creates_no_preview_receipt(self):
         with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as work:
             work=Path(work)

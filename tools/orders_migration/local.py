@@ -11,7 +11,7 @@ from dbtools import DOCKER, LOCK as OLD_LOCK, checked, restricted_process_env
 
 class Native:
     network = 'native_test_unix_only'
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, locale=None):
         self.bin = Path(os.environ['ORBITA_ORDERS_PG_BIN']).resolve()
         expected = os.environ['ORBITA_ORDERS_PG_VERSION']
         self.env = restricted_process_env()
@@ -22,7 +22,7 @@ class Native:
         self.data=self.path/'data';self.socket=self.path/'socket';self.socket.mkdir(mode=0o700)
         self.started=False
         try:
-            checked([str(self.bin/'initdb'),'-D',str(self.data),'-U','postgres','--auth=trust','--encoding=UTF8','--no-locale'],env=self.env)
+            checked([str(self.bin/'initdb'),'-D',str(self.data),'-U','postgres','--auth=trust','--encoding=UTF8','--no-locale' if locale is None else '--locale='+locale],env=self.env)
             checked([str(self.bin/'pg_ctl'),'-D',str(self.data),'-l',str(self.path/'server.log'),'-o',
                 f"-k {self.socket} -p 55432 -c listen_addresses='' -c fsync=off",'-w','start'],env=self.env)
             self.started=True
