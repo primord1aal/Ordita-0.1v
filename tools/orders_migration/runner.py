@@ -66,6 +66,7 @@ def main(diagnostic=None):
     require(gate.is_file(),'Independent GitHub gate required before DB secrets.')
     approved=json.loads(gate.read_text());c=approved['context']
     diagnostic['stage'] = 'REQUEST_VALIDATION'
+    require(c.get('operation') == 'preview', 'This runner only admits a V1 preview.')
     validate_request(c,root)
     diagnostic['stage'] = 'CHECKOUT_VALIDATION'
     actual=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
@@ -80,8 +81,8 @@ def main(diagnostic=None):
         require(value.startswith('-----BEGIN CERTIFICATE-----'),'Verified CA required.');ca.write_text(value)
         diagnostic['stage'] = 'DB_CLIENT_CONFIGURATION'
         db=OrdersDatabase(url,LOCK['project_ref'],os.environ.get('PGPASSWORD',''),ca,
-                          read_only=c['operation']!='apply',
-                          check_read_only_session=c['operation']=='apply')
+                          read_only=True,
+                          check_read_only_session=False)
         diagnostic['db'] = db
         diagnostic['stage'] = 'READ_ONLY_PROBE'
         require(db.query('show transaction_read_only;')=='on','Explicit read-only control query required.')

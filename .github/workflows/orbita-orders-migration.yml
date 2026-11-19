@@ -5,9 +5,9 @@ on:
     inputs:
       operation:
         type: choice
-        options: [verify, preview, apply, inspect]
+        options: [verify, preview]
         default: verify
-        description: 'Сейчас разрешён только локальный verify; облачные режимы требуют отдельного допуска'
+        description: 'verify либо отдельно согласованный read-only preview V1'
       approved_sha:
         type: string
         default: ''
@@ -49,9 +49,9 @@ jobs:
           chown postgres:postgres /tmp/orbita-order-checks
           test_version="$(/usr/lib/postgresql/17/bin/postgres --version)"
           runuser -u postgres -- env TMPDIR=/tmp/orbita-order-checks PYTHONPYCACHEPREFIX=/tmp/orbita-order-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest supabase.tests.test_orders_migration -v
-  # Cloud migration jobs are disabled in code, independently of GitHub Variables.
+  # Only the V1 preview can reach the protected Environment.
   entry:
-    if: inputs.operation != 'verify' && vars.ORBITA_ORDERS_REPO_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-flutter-design-integration' && false
+    if: inputs.operation == 'preview' && vars.ORBITA_ORDERS_REPO_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-flutter-design-integration'
     needs: verify
     runs-on: ubuntu-24.04
     outputs:
@@ -71,7 +71,7 @@ jobs:
           OUTSIDE_ORBITA_ORDERS_ALLOWED_OPERATION: ${{ vars.ORBITA_ORDERS_ALLOWED_OPERATION }}
         run: python3 -m tools.orders_migration.github_gate entry
   guarded:
-    if: needs.entry.outputs.admitted == 'true' && false
+    if: needs.entry.outputs.admitted == 'true' && inputs.operation == 'preview'
     needs: [verify, entry]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -111,20 +111,14 @@ jobs:
           ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
         run: python3 -m tools.orders_migration.runner
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always() && inputs.operation == 'preview'
+        if: success() && inputs.operation == 'preview'
         with:
           name: ORBITA-orders-preview-${{ github.run_id }}
           path: build/orders-public/preview.json
-          if-no-files-found: ignore
+          if-no-files-found: error
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always() && inputs.operation == 'preview'
+        if: success() && inputs.operation == 'preview'
         with:
           name: ORBITA-orders-backup-${{ github.run_id }}
           path: build/orders-backup/snapshot.tar.gpg
-          if-no-files-found: ignore
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always() && inputs.operation != 'preview'
-        with:
-          name: ORBITA-orders-${{ inputs.operation }}-${{ github.run_id }}
-          path: build/orders-public/*.json
-          if-no-files-found: ignore
+          if-no-files-found: error

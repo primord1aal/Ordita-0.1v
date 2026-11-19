@@ -8,6 +8,7 @@ from .admission import LOCK, require
 from .catalog import capture, state_hash, protected_hash, validate_before
 from .atomic import body
 from .local import Docker
+from .host_rls import restore_trigger_in_isolation
 from backup import crypt_file  # existing AES256/passphrase-fd implementation, unchanged
 
 LIMIT = 64 * 1024 * 1024
@@ -53,6 +54,7 @@ def create(db, root, temporary, output, passphrase, factory=Docker):
                 local.psql('create role "'+role.replace('"','""')+'" nologin nosuperuser nobypassrls;')
         local.psql('drop schema public cascade;')
         local.load(decrypted)
+        restore_trigger_in_isolation(local, manifest['before']['host_rls'])
         # pg_dump treats public's initdb ACL as implicit. Restore its full effective
         # namespace ACL from the encrypted manifest before comparing all metadata.
         for name,owner,acl in manifest['before']['catalog']['schemas']:

@@ -2,6 +2,7 @@
 import hashlib
 import json
 from .admission import LOCK, require
+from .host_rls import metadata_sql as host_rls_sql, validate as validate_host_rls
 
 APP_REL = ['orbita_profiles', 'orbita_user_roles', 'orbita_account_access', 'orbita_access_audit',
            'orbita_access_audit_id_seq', 'access_mutex']
@@ -80,13 +81,13 @@ def dependency_sql():
 
 
 def document_sql():
-    return 'select jsonb_build_object(\'catalog\',(' + catalog_sql() + "),'protected_catalog',(" + catalog_sql(True) + "),'rows',(" + row_hash_sql() + "),'history',(" + history_sql() + "),'client_safe',(" + client_safe_sql() + "),'dependency_ok',(" + dependency_sql() + '))'
+    return 'select jsonb_build_object(\'catalog\',(' + catalog_sql() + "),'protected_catalog',(" + catalog_sql(True) + "),'rows',(" + row_hash_sql() + "),'history',(" + history_sql() + "),'client_safe',(" + client_safe_sql() + "),'dependency_ok',(" + dependency_sql() + "),'host_rls',(" + host_rls_sql() + '))'
 
 def digest_sql():
     return "select encode(sha256(convert_to((" + document_sql() + ")::text,'UTF8')),'hex')"
 
 def protected_digest_sql():
-    return "select encode(sha256(convert_to(jsonb_build_object('auth_catalog',(" + catalog_sql(auth_only=True) + "),'catalog',(" + catalog_sql(True) + "),'rows',(" + row_hash_sql() + "))::text,'UTF8')),'hex')"
+    return "select encode(sha256(convert_to(jsonb_build_object('auth_catalog',(" + catalog_sql(auth_only=True) + "),'catalog',(" + catalog_sql(True) + "),'rows',(" + row_hash_sql() + "),'host_rls',(" + host_rls_sql() + "))::text,'UTF8')),'hex')"
 
 def capture(db):
     raw = db.query("set local search_path=''; set local timezone='UTC';" + document_sql() + ';')
@@ -94,12 +95,14 @@ def capture(db):
     return doc
 
 def validate_before(doc):
+    validate_host_rls(doc.get('host_rls'), reference('host_rls'))
     require(doc['history'] == [{'version': LOCK['first_version'], 'name': LOCK['first_name'], 'entries': 1,
                                'sha256': LOCK['first_sha256']}], 'First history content differs; no repair.')
     require(doc['protected_catalog'] == reference('auth'),
             'Auth definitions/ACL/RLS/triggers differ from the pinned reference.')
     require(all(row[1] in APP_REL for row in doc['catalog']['relations'] if row[0] in ('public','orbita_mobile_private'))
-            and all(row[1] in APP_FUNCTIONS for row in doc['catalog']['functions'] if row[0] in ('public','orbita_mobile_private')), 'Unexpected application objects.')
+            and all(row[1] in APP_FUNCTIONS or row[:3] == ['public','rls_auto_enable','']
+                    for row in doc['catalog']['functions'] if row[0] in ('public','orbita_mobile_private')), 'Unexpected application objects.')
     hist=[row for row in doc['catalog']['relations'] if row[0]=='supabase_migrations']
     require(len(hist)==1 and hist[0][1]=='schema_migrations' and hist[0][3]=='postgres'
             and [[c[0],c[1]] for c in hist[0][7]]==[['version','text'],['statements','text[]'],['name','text']]

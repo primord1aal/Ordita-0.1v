@@ -1,0 +1,65 @@
+{
+  "event_triggers": [
+    {
+      "enabled": "O",
+      "event": "ddl_command_end",
+      "function_identity_arguments": "",
+      "function_name": "rls_auto_enable",
+      "function_schema": "public",
+      "name": "ensure_rls",
+      "owner": "postgres",
+      "tags": [
+        "CREATE TABLE",
+        "CREATE TABLE AS",
+        "SELECT INTO"
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "definition_sha256": "b21d88816c445d14cef5032c3cd4abaebc1db2001fcb3435022ab6b496182ca4",
+      "execute_acl": [
+        [
+          "PUBLIC",
+          "postgres",
+          "EXECUTE",
+          false
+        ],
+        [
+          "anon",
+          "postgres",
+          "EXECUTE",
+          false
+        ],
+        [
+          "authenticated",
+          "postgres",
+          "EXECUTE",
+          false
+        ],
+        [
+          "postgres",
+          "postgres",
+          "EXECUTE",
+          false
+        ],
+        [
+          "service_role",
+          "postgres",
+          "EXECUTE",
+          false
+        ]
+      ],
+      "extension": null,
+      "identity_arguments": "",
+      "name": "rls_auto_enable",
+      "owner": "postgres",
+      "return_type": "event_trigger",
+      "schema": "public",
+      "security_definer": true
+    }
+  ]
+}

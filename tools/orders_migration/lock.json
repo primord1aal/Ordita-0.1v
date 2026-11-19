@@ -21,5 +21,6 @@
     "orbita_mobile_private",
     "supabase_migrations"
   ],
-  "orders_catalog_sha256": "33850b97a1657dfef9f76514f2b18fc9fd356ef812a2fe493d68c8cb3b7b4c92"
+  "orders_catalog_sha256": "33850b97a1657dfef9f76514f2b18fc9fd356ef812a2fe493d68c8cb3b7b4c92",
+  "host_rls_catalog_sha256": "bdf17419cb96beaa2fa43f3bd77089e169a4d939c4572da7947391ad815c30b7"
 }

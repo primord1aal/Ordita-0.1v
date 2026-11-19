@@ -35,12 +35,47 @@ class OrdersMigrationTests(unittest.TestCase):
         for uid in [A,B]:self.action(uid,'provision')
         self.action(A,'bootstrap','admin',True);self.action(B,'assign','passenger')
         self.db.psql(f"insert into auth.sessions(id,user_id) values('{SID}','{B}'); insert into auth.refresh_tokens values(1,'synthetic-refresh-token','{B}');")
+        self.db.psql((ROOT/'supabase/tests/fixtures/host_rls_auto_enable.sql').read_text())
         self.before=capture(self.db);validate_before(self.before)
         self.sha=state_hash(self.db);self.protected=protected_hash(self.db)
     def action(self,uid,action,role=None,confirm=False):
         value='null' if role is None else "'"+role+"'"
         self.db.psql(f"select orbita_mobile_private.admin_access('{uid}','{action}',{value},null,'Synthetic admission fixture',{str(confirm).lower()});")
     def apply(self,script=None):return self.db.execute(body(ROOT,self.sha) if script is None else script)
+    def test_host_rls_metadata_tamper_blocks_before_candidate(self):
+        mutations = [
+            'ALTER EVENT TRIGGER ensure_rls DISABLE;',
+            "CREATE OR REPLACE FUNCTION public.rls_auto_enable() RETURNS event_trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$ BEGIN RAISE NOTICE 'tampered'; END $$;",
+            'REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM anon;',
+            'DROP EVENT TRIGGER ensure_rls;',
+            'CREATE EVENT TRIGGER rogue_rls ON ddl_command_end EXECUTE FUNCTION public.rls_auto_enable();',
+            "CREATE FUNCTION public.rls_auto_enable(integer) RETURNS integer LANGUAGE sql AS 'SELECT 1';",
+        ]
+        for mutation in mutations:
+            with self.subTest(mutation=mutation):
+                # This is only the disposable Unix-socket PG, never Supabase.
+                self.db.psql('BEGIN; '+mutation+' COMMIT;')
+                try:
+                    with self.assertRaises(GuardError): validate_before(capture(self.db))
+                    # Even a caller-supplied fresh state digest cannot bless a bad trigger.
+                    with self.assertRaises(GuardError): self.db.execute(body(ROOT,state_hash(self.db)))
+                    self.assertEqual(self.db.query("SELECT to_regclass('public.orbita_orders') IS NULL;"),'t')
+                finally:
+                    self.db.psql('DROP EVENT TRIGGER IF EXISTS ensure_rls; DROP EVENT TRIGGER IF EXISTS rogue_rls; DROP FUNCTION IF EXISTS public.rls_auto_enable(integer);')
+                    self.db.psql((ROOT/'supabase/tests/fixtures/host_rls_auto_enable.sql').read_text())
+                    self.assert_initial()
+
+    def test_trigger_rebinding_and_owner_drift_are_rejected(self):
+        for script in (
+            "DROP EVENT TRIGGER ensure_rls; CREATE FUNCTION public.other_event() RETURNS event_trigger LANGUAGE plpgsql AS $$ BEGIN END $$; CREATE EVENT TRIGGER ensure_rls ON ddl_command_end EXECUTE FUNCTION public.other_event();",
+            'ALTER EVENT TRIGGER ensure_rls OWNER TO postgres; ALTER FUNCTION public.rls_auto_enable() SECURITY INVOKER;',
+        ):
+            with self.subTest(script=script):
+                self.db.psql(script)
+                with self.assertRaises(GuardError): validate_before(capture(self.db))
+                self.db.psql('DROP EVENT TRIGGER ensure_rls; DROP FUNCTION IF EXISTS public.other_event();')
+                self.db.psql((ROOT/'supabase/tests/fixtures/host_rls_auto_enable.sql').read_text())
+                self.assert_initial()
     def assert_initial(self):
         self.assertEqual(capture(self.db),self.before)
         self.assertEqual(state_hash(self.db),self.sha)
