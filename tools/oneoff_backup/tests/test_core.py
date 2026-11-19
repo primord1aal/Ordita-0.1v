@@ -26,9 +26,14 @@ def profile():
         'scope_sequence_writes':0,'large_objects':0,'direct_function_grants':0}
 
 
+def client_tls():
+    return {'client_tls_verified':True,'client_sslmode':'verify-full',
+        'client_hostname_verified':True,'scope':'client_to_pooler'}
+
+
 class OneoffUnitTests(unittest.TestCase):
     def test_supported_profile_is_explicit_not_the_strict_reader(self):
-        b.validate(facts(),profile())
+        b.validate(facts(),profile(),client_tls=client_tls())
         self.assertNotEqual(b.READER,b.base.READER)
         with self.assertRaises(b.base.BackupError):
             b.base.validate_facts(facts())
@@ -41,9 +46,29 @@ class OneoffUnitTests(unittest.TestCase):
             lambda f,p:p.update(scope_writes=1),lambda f,p:p.update(large_objects=1),
             lambda f,p:f.update(table_writes=1),lambda f,p:f.update(sequence_writes=1),
             lambda f,p:p.update(direct_function_grants=1),
-            lambda f,p:f.update(tls=False),lambda f,p:f.update(read_only='off')]:
+            lambda f,p:f.update(read_only='off')]:
             f,p=facts(),profile(); mutate(f,p)
-            with self.subTest(mutate=mutate),self.assertRaises(b.base.BackupError):b.validate(f,p)
+            with self.subTest(mutate=mutate),self.assertRaises(b.base.BackupError):b.validate(f,p,client_tls=client_tls())
+
+    def test_backend_flag_cannot_replace_same_connection_client_tls_proof(self):
+        for backend_tls in (False,True):
+            f=facts();f['tls']=backend_tls
+            with self.subTest(backend_tls=backend_tls):
+                with self.assertRaisesRegex(b.base.BackupError,'^CLIENT_TLS_REQUIRED$'):
+                    b.validate(f,profile())
+                b.validate(f,profile(),client_tls=client_tls())
+                for key,value in [('client_tls_verified',False),('client_sslmode','require'),
+                                  ('client_hostname_verified',False),('scope','backend_only')]:
+                    proof=client_tls();proof[key]=value
+                    with self.assertRaisesRegex(b.base.BackupError,'^CLIENT_TLS_REQUIRED$'):
+                        b.validate(f,profile(),client_tls=proof)
+
+    def test_old_strict_backup_still_requires_backend_tls(self):
+        from tools.current_backup.tests.test_backup import valid_facts
+        f=valid_facts();b.base.validate_facts(f)
+        f['tls']=False
+        with self.assertRaisesRegex(b.base.BackupError,'^TLS_REQUIRED$'):
+            b.base.validate_facts(f)
 
     def test_connection_is_fixed_tls_and_separate_nonadmin_user(self):
         with patch.dict(os.environ,{'PGHOST':'unapproved','PGUSER':'postgres','PGPASSWORD':'unrelated'},clear=True):
@@ -111,6 +136,23 @@ class OneoffUnitTests(unittest.TestCase):
             with patch.object(b,'decrypt',return_value=(root/'dump',{})),patch.object(b,'restore',side_effect=b.base.BackupError('ISOLATED_RESTORE_FAILED')):
                 with self.assertRaises(b.base.BackupError):b.accept(root/'staging',output,'synthetic',root,b.base.PG_BIN,isolation='test_unix_only')
             self.assertFalse(output.exists())
+
+    def test_public_receipt_uses_only_fixed_transport_values(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);staging=root/'staging';staging.mkdir()
+            for name in ('snapshot.tar.gpg','SHA256SUMS'):(staging/name).write_text('synthetic fixture')
+            (staging/'receipt.json').write_text('{}')
+            private='synthetic-private-transport-value'
+            for index,proof in enumerate([dict(client_tls(),backend_tls_confirmed=False),
+                    dict(client_tls(),client_sslmode=private)]):
+                with patch.object(b,'decrypt',return_value=(root/'dump',{'transport':proof})), \
+                        patch.object(b,'restore'):
+                    receipt=b.accept(staging,root/str(index),'synthetic',root,b.base.PG_BIN,
+                        isolation='synthetic_test_only')
+                self.assertEqual(receipt['client_tls_verified'],index==0)
+                self.assertEqual(receipt['client_sslmode'],'verify-full' if index==0 else None)
+                self.assertFalse(receipt['end_to_end_tls_proven'])
+                self.assertNotIn(private,json.dumps(receipt))
 
     def test_workflow_is_manual_and_restores_before_upload_without_db_credentials(self):
         text=(ROOT/'.github/workflows/orbita-oneoff-backup.yml').read_text()

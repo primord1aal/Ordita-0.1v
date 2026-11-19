@@ -1,8 +1,8 @@
 # Разовый актуальный backup без административного пароля в Actions
 
-Обновлено 17 ноября 2026. **Workflow опубликован, Environment настроен владельцем. Первый запуск `44069919749` завершился ошибкой `CLIENT_FAILED`, артефактов нет, восстановление не запускалось. Актуального подтверждённого backup ещё нет.**
+Обновлено 17 ноября 2026. **Workflow опубликован, Environment настроен владельцем. Первый запуск `44069919749` завершился ошибкой `CLIENT_FAILED`; второй `44089542171` прошёл исправленную контейнерную проверку Git, но остановился на `TLS_REQUIRED` до pg_dump. Артефактов нет, восстановление не запускалось. Актуального подтверждённого backup ещё нет.**
 
-Роль была создана с отдельно разрешёнными правами. После неуспешного запуска выполнен подготовленный cleanup: NOLOGIN, PASSWORD NULL, истёкший срок; активных соединений роли 0, Auth-пользователей 4, история содержит только первую миграцию. Сертификат и Secrets в GitHub не менялись. Следующий запуск требует отдельного допуска; не использовать Re-run.
+Роль была создана с отдельно разрешёнными правами. После первого сбоя применялся полный cleanup с PASSWORD NULL. После второго сбоя доступ приостановлен через NOLOGIN и истёкший срок; активных соединений роли 0. Пароль на этой промежуточной паузе не менялся, чтобы не требовать его повторного ввода; после успешного backup или окончательного завершения этапа обязателен полный `ONEOFF_BACKUP_DISABLE.proposed.sql` с PASSWORD NULL. Auth-пользователей 4, история содержит только первую миграцию. Сертификат и Secrets в GitHub не менялись. Следующий запуск требует отдельного допуска; не использовать Re-run.
 
 Цель: только `orbita-mobile-test`, Project Ref `fjqghohhohgvwlmefdmo`, eu-north-1, PostgreSQL 17. Старые `22f37fe` / `a5f6fb5`, `tools/current_backup/` и `.github/workflows/orbita-current-backup.yml` не изменены. Это отдельный временный путь, а не ослабление строгого reader.
 
@@ -29,6 +29,10 @@ Read-only metadata текущего проекта подтвердили: postg
 4. Обязательное восстановление на PostgreSQL 17 в Docker **`--network none`**, Unix socket, без source DB credentials и GITHUB_TOKEN. Восстанавливаются owners/ACL через безопасные NOLOGIN role stubs, каталог/данные/история/sequences сверяются. Только после успеха публикуются ciphertext, SHA256SUMS и безопасная квитанция.
 
 Экспорт и предварительная контейнерная проверка Git работают под числовым UID/GID владельца checkout, без root. Проверка исходников имеет `--network none` и не получает credentials. После шифрования только staging передаётся UID/GID 999 для изолированного восстановления; исходники остаются read-only.
+
+**Локальное уточнение TLS-допуска, ещё не опубликованное:** `transport.py` проверяет фактический TLS клиента к pooler через фиксированный `\conninfo` того же psql-процесса, который удерживает read-only snapshot. Обязательны точные host/user/database/port, `verify-full`, явный CA, TLS 1.2/1.3, проверенное имя хоста; отсутствующий/неверный/неоднозначный TLS-ответ даёт отказ до экспорта. Сырые conninfo и PostgreSQL-ошибки не выводятся и не попадают в артефакт. Параметры клиента pg_dump берутся из того же фиксированного окружения с verify-full.
+
+`pg_stat_ssl` отражает участок pooler → PostgreSQL и сам по себе не доказывает либо опровергает TLS клиент → pooler. В одноразовом профиле этот показатель записывается отдельно как `backend_tls_confirmed`; значение false не принимается за доказательство plaintext всего пути. Шифрование внутреннего участка Supabase **не подтверждено** клиентской проверкой; квитанция явно содержит `end_to_end_tls_proven=false`. До публикации требуется согласование владельцем именно этого уточнения границы проверки. Старый строгий `tools/current_backup` продолжает требовать backend TLS и не изменён.
 
 Это scoped logical backup, **не полный disaster recovery Supabase**: не сохраняет Storage-файлы, другие схемы, кластерные пароли/членства, API/JWT/SMTP/Auth settings. Global event triggers записаны как metadata внутри шифрованного manifest, автоматически не устанавливаются. При зависимостях от отсутствующих extensions/внешних объектов или несовпадении restore — отказ без успешного artifact; не отключать проверки ради результата.
 
@@ -69,11 +73,11 @@ openssl s_client -starttls postgres \
   -verify_return_error -CAfile ca.pem </dev/null
 ```
 
-Ожидать `Verify return code: 0 (ok)`. Проверяется имя pooler и цепочка доверия; pg_stat_ssl дополнительно проверяет backend TLS и сам по себе не доказывает TLS клиента. Неподходящий CA/hostname — блокер; не заменять verify-full на require.
+Ожидать `Verify return code: 0 (ok)`. Проверяется имя pooler и цепочка доверия. В согласуемом уточнении одноразового профиля фактический TLS дополнительно подтверждается через conninfo той же psql-сессии; pg_stat_ssl фиксируется отдельно для backend, без заявления о сквозном TLS. Неподходящий CA/hostname — блокер; не заменять verify-full на require.
 
 ### 4. Создать роль без пароля, затем безопасно активировать
 
-Роль `orbita_oneoff_backup_reader` **уже существует**; создание повторно не выполнять. Перед следующим согласованным запуском проверить её точный профиль, использовать подготовленную активацию и заново установить пароль роли через защищённый интерфейс владельца. Срок активировать непосредственно перед готовностью владельца одобрить запуск. GitHub Secret может сохранить прежнее значение, если владелец повторно задаёт именно тот же сохранённый пароль; пароль шифрования архивов и CA менять не требуется.
+Роль `orbita_oneoff_backup_reader` **уже существует**; создание повторно не выполнять. Перед следующим согласованным запуском проверить её точный профиль и использовать подготовленную активацию. После промежуточной паузы второго запуска пароль сохранён, поэтому заново вводить его или изменять GitHub Secret не требуется. Если выполнялся полный cleanup с PASSWORD NULL, пароль нужно снова установить через защищённый интерфейс владельца. Срок активировать непосредственно перед готовностью владельца одобрить запуск. Пароль шифрования архивов и CA менять не требуется.
 
 Ниже сохранена первоначальная инструкция создания для проверки происхождения роли: `https://supabase.com/dashboard/project/fjqghohhohgvwlmefdmo/sql/new` → SQL Editor → New query → проверка проекта → точный `ONEOFF_BACKUP_ROLE.proposed.sql`. Сейчас этот шаг не выполнять: SQL содержит guard отказа при существующей роли.
 
@@ -108,7 +112,7 @@ psql "host=aws-0-eu-north-1.pooler.supabase.com port=5432 dbname=postgres user=p
 
 Ожидать success обоих jobs и artifact **`ORBITA-oneoff-backup-<run_id>`**, retention **3 дня**. Скачать сразу со страницы run → Artifacts. В ZIP ровно `snapshot.tar.gpg`, `SHA256SUMS`, `receipt.json`.
 
-Проверить source_sha/run_id/project_ref квитанции, `status=logical_restore_verified`, `decryption_checked=true`, `isolated_restore_checked=true`, network isolation Docker --network none и `full_project_restore_proven=false`. Сверить ciphertext SHA-256 с квитанцией и SHA256SUMS. SHA без доверенной квитанции/шифрования не обеспечивает подлинность. Хранить две копии ciphertext в закрытых местах, passphrase отдельно в менеджере. Старые passphrase не удалять, пока нужны старые архивы.
+Проверить source_sha/run_id/project_ref квитанции, `status=logical_restore_verified`, `decryption_checked=true`, `isolated_restore_checked=true`, network isolation Docker --network none и `full_project_restore_proven=false`. При согласовании нового TLS-допуска дополнительно обязательны `client_tls_verified=true`, `client_sslmode=verify-full`; backend TLS отражается отдельно, `end_to_end_tls_proven=false` сохраняет ограничение доказательства. Сверить ciphertext SHA-256 с квитанцией и SHA256SUMS. SHA без доверенной квитанции/шифрования не обеспечивает подлинность. Хранить две копии ciphertext в закрытых местах, passphrase отдельно в менеджере. Старые passphrase не удалять, пока нужны старые архивы.
 
 Повторная проверка восстановления выполняется существующей командой `python3 -m tools.oneoff_backup restore` в закреплённом Docker-образе с `--network none`, входным ZIP после локального распаковывания только трёх файлов, приватным `/input`, пустым `/output` и passphrase через защищённое окружение. Облачные credentials в restore не передавать. Код сам расшифрует и проверит manifest, восстановит в свежий PG17, сравнит каталог/все строки/sequences и выдаст accepted-квитанцию. Никогда не направлять pg_restore в действующий Supabase.
 
@@ -116,13 +120,15 @@ psql "host=aws-0-eu-north-1.pooler.supabase.com port=5432 dbname=postgres user=p
 
 ## Выполненные проверки
 
-14 локальных тестов: прежние 8 unit и один интеграционный PostgreSQL 17.11, плюс 5 регрессий Git/границы пользователей контейнера. Синтетические users/password hashes/refresh tokens, профили/роли, RLS deny, история, sequences восстановлены; concurrent новая Auth-строка не попала в удерживаемый snapshot, исходная база не изменилась. Проверены tamper-отказ, отсутствие accepted artifact при ошибке restore, exact SHA/branch/Environment/approval, отказ 403 и admin bypass. Строгий reader продолжает отвергать расширенный профиль.
+24 локальных теста: прежние 14, плюс проверки обязательного независимого client TLS, неизменности строгого TLS-допуска, фиксированных публичных метаданных и 7 транспортных тестов. Реальная локальная psql-сессия через TLS-терминирующий тестовый proxy имеет проверенный TLS клиента и одновременно backend pg_stat_ssl=false. Неверные CA/hostname и сервер без TLS останавливаются до экспорта. Это синтетический loopback-стенд, а не проверка облачного соединения новым кодом.
+
+Синтетические users/password hashes/refresh tokens, профили/роли, RLS deny, история, sequences восстановлены; concurrent новая Auth-строка не попала в удерживаемый snapshot, исходная база не изменилась. Проверены tamper-отказ, отсутствие accepted artifact при ошибке restore, exact SHA/branch/Environment/approval, отказ 403 и admin bypass. Строгий reader продолжает отвергать расширенный профиль.
 
 Дефект прав Git воспроизведён также на настоящем локальном Docker с Git 2.39.5, read-only mount и отключённой сетью: Git status под umask 077 может заменить чистый index на файл 0600; другой UID 999 получает Permission denied, а UID владельца checkout проходит HEAD/status. Исходный запуск не различал HEAD и STATUS, поэтому точная падающая команда в его логе отсутствует. Теперь ошибки получают фиксированные отдельные категории без вывода сырого stderr. Права исходников не расширяются, проверки SHA/чистоты и допуска остаются обязательными.
 
 В неуспешном запуске backup-job начал работу после истечения согласованного часа доступа. Это отдельное ограничение перед следующим запуском: свежий ограниченный срок должен покрывать одобрение и экспорт. Никакого автоматического продления в GitHub Actions или автоматического повторения backup нет.
 
-Проверены в облаке только профиль роли, защита Environment и actual approval первого запуска. Непроверены: успешное подключение с CA/паролем временной роли, фактический backup/restore нынешних аккаунтов и исправленный путь в GitHub runner. Локальное исправление до отдельного допуска не публикуется и повторный workflow не запускается.
+В облаке проверены профиль роли, защита Environment и actual approval запусков. Второй запуск подтвердил прохождение проверки исходников и read-only SQL preflight с фиксированным verify-full окружением; отдельное conninfo-доказательство тогда ещё не собиралось. Актуальные ACL четырёх схем проверены чтением на совместимость с восстановлением: неожиданных grantor, отличных от owner, нет. Непроверены фактический backup/restore нынешних аккаунтов и новый клиентский TLS-допуск в GitHub runner. Локальное исправление до отдельного согласования не публикуется, новый workflow не запускается.
 
 ## Официальные источники
 
@@ -131,3 +137,4 @@ psql "host=aws-0-eu-north-1.pooler.supabase.com port=5432 dbname=postgres user=p
 - [Supabase psql / TLS](https://supabase.com/docs/guides/database/psql)
 - [PostgreSQL 17 pg_dump](https://www.postgresql.org/docs/17/app-pgdump.html)
 - [PostgreSQL 17 TLS verify-full](https://www.postgresql.org/docs/17/libpq-ssl.html)
+- [PostgreSQL 17 pg_stat_ssl: статистика серверных backend-соединений](https://www.postgresql.org/docs/17/monitoring-stats.html#MONITORING-PG-STAT-SSL-VIEW)

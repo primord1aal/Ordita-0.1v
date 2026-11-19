@@ -17,6 +17,7 @@ import urllib.request
 
 from tools.current_backup import backup as base
 from tools.orders_migration.catalog import catalog_sql
+from .transport import attest_client_tls
 
 READER = 'orbita_oneoff_backup_reader'
 BRANCH = 'refs/heads/codex/orbita-oneoff-backup-preparation-20261116'
@@ -130,11 +131,18 @@ def connection(password, ca):
     return env
 
 
-def validate(facts, profile, *, require_tls=True):
+def validate(facts, profile, *, require_tls=True, client_tls=None):
     require(facts['current_user']==facts['session_user']==READER, 'ONEOFF_IDENTITY_REJECTED')
     require(facts['read_only']==facts['default_read_only']=='on', 'READ_ONLY_REJECTED')
     require(170000<=facts['version']<180000, 'POSTGRES_VERSION_REJECTED')
-    require(not require_tls or facts['tls'] is True, 'TLS_REQUIRED')
+    # pg_stat_ssl describes the pooler -> database backend, not psql -> pooler.
+    # The one-off profile requires independently attested client TLS. The old
+    # strict backup validator remains unchanged and still checks backend TLS.
+    require(not require_tls or isinstance(client_tls,dict) and
+            client_tls.get('client_tls_verified') is True and
+            client_tls.get('client_sslmode') == 'verify-full' and
+            client_tls.get('client_hostname_verified') is True and
+            client_tls.get('scope') == 'client_to_pooler', 'CLIENT_TLS_REQUIRED')
     role = facts['role']
     require(role['login'] and role['inherit'] and role['bypassrls'] and role['default_ro'] and
             not any(role[key] for key in ('super','createdb','createrole','replication')), 'NONADMIN_READER_REQUIRED')
@@ -169,14 +177,18 @@ def _sequence_states(dump, pg_bin, temporary, catalog):
 
 
 def export(session, pg_bin, dump, temporary, *, require_tls=True):
+    client_tls = attest_client_tls(session) if require_tls else {
+        'client_tls_verified':False,'scope':'synthetic_test_only'}
     facts = json.loads(session.select(base.PREFLIGHT_SQL))
     profile = json.loads(session.select(PROFILE_SQL))
-    validate(facts,profile,require_tls=require_tls)
+    validate(facts,profile,require_tls=require_tls,client_tls=client_tls)
     require(base.run([str(pg_bin/'pg_dump'),'--version']).startswith(b'pg_dump (PostgreSQL) 17.'), 'CLIENT_VERSION_REJECTED')
     catalog = json.loads(session.select(base.CATALOG_SQL))
     manifest = {'format':'orbita-oneoff-backup-v1','project_ref':base.PROJECT,'schemas':list(base.SCHEMAS),'catalog':catalog,
         'scoped_catalog':json.loads(session.select(SCOPED_CATALOG_SQL)), 'tables':{},
         'credential_profile':'broad_read_with_public_residual_privileges','owner_ack':ACK,
+        'transport':dict(client_tls,backend_tls_confirmed=facts['tls'] is True,
+                         backend_tls_source='pg_stat_ssl',end_to_end_tls_proven=False),
         'residual_privileges':{key:facts[key] for key in ('outside_reads','database_write','large_object_writes','definers','extension_side_effects','table_writes')},
         'excluded':['Storage files','other schemas','cluster passwords/memberships/settings',
                     'Auth/API/JWT/SMTP settings','global event trigger installation'],
@@ -291,6 +303,16 @@ def accept(staging, output, phrase, temporary, pg_bin, *, isolation):
         project_ref=base.PROJECT,
         isolated_restore_checked=True,network_isolation=isolation,
         credential_profile='broad_read_with_public_residual_privileges',global_event_triggers_restored=False)
+    transport = manifest.get('transport',{})
+    if not isinstance(transport,dict):
+        transport = {}
+    verified = isinstance(transport,dict) and transport.get('client_tls_verified') is True and \
+        transport.get('client_sslmode') == 'verify-full' and \
+        transport.get('client_hostname_verified') is True and transport.get('scope') == 'client_to_pooler'
+    receipt.update(client_tls_verified=verified,
+        client_sslmode='verify-full' if verified else None,
+        backend_tls_confirmed=transport.get('backend_tls_confirmed') is True,
+        end_to_end_tls_proven=False)
     (output/'receipt.json').write_text(json.dumps(receipt,sort_keys=True)+'\n')
     return receipt
 
