@@ -141,7 +141,10 @@ class RoutePreviewController extends ChangeNotifier {
     this.settings, {
     RouteService Function(String)? serviceFactory,
     this.debounce = const Duration(milliseconds: 350),
-  }) : _factory = serviceFactory ?? ((key) => GeoapifyRouteService(key)) {
+  }) : _factory =
+           serviceFactory ??
+           ((key) =>
+               GeoapifyRouteService(key, transport: settings.transport())) {
     _key = settings.clientKey;
     _service = _factory(_key);
     settings.addListener(_configurationChanged);

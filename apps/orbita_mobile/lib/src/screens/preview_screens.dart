@@ -22,6 +22,7 @@ class PreviewShell extends StatefulWidget {
     required this.device,
     required this.mapSettings,
     this.mapAccessAllowed = true,
+    this.diagnosticsEnabled = false,
     this.mapForeground = true,
     this.addressServiceFactory,
     this.routeServiceFactory,
@@ -39,6 +40,7 @@ class PreviewShell extends StatefulWidget {
   final DeviceGateway device;
   final MapSettings mapSettings;
   final bool mapAccessAllowed;
+  final bool diagnosticsEnabled;
   final bool mapForeground;
   final AddressService Function(String)? addressServiceFactory;
   final RouteService Function(String)? routeServiceFactory;
@@ -91,7 +93,7 @@ class _PreviewShellState extends State<PreviewShell> {
         builder: (context, constraints) {
           final availableHeight =
               (constraints.maxHeight -
-                      MediaQuery.paddingOf(context).vertical -
+                      MediaQuery.viewPaddingOf(context).vertical -
                       MediaQuery.viewInsetsOf(context).bottom)
                   .clamp(0.0, double.infinity);
           return Scaffold(
@@ -123,6 +125,7 @@ class _PreviewShellState extends State<PreviewShell> {
                   const HistoryScreen(),
                   ProfileScreen(
                     driver: driver,
+                    diagnosticsEnabled: widget.diagnosticsEnabled,
                     device: widget.device,
                     accountPanel: widget.accountPanel,
                     onSignOut: widget.onSignOut,
@@ -148,17 +151,27 @@ class _PreviewShellState extends State<PreviewShell> {
                     maintainSize: true,
                     maintainAnimation: true,
                     maintainState: true,
-                    child: AdaptiveNavigation(
-                      driver: driver,
-                      availableHeight: !driver && _index == 0
-                          ? availableHeight +
-                                MediaQuery.viewInsetsOf(context).bottom
-                          : availableHeight,
-                      selected: _index,
-                      onSelected: (i) {
-                        FocusScope.of(context).unfocus();
-                        setState(() => _index = i);
-                      },
+                    child: MediaQuery(
+                      data: MediaQuery.of(context).copyWith(
+                        padding: keyboardVisible
+                            ? MediaQuery.paddingOf(context).copyWith(
+                                bottom: MediaQuery.viewPaddingOf(context)
+                                    .bottom,
+                              )
+                            : MediaQuery.paddingOf(context),
+                      ),
+                      child: AdaptiveNavigation(
+                        driver: driver,
+                        availableHeight: !driver && _index == 0
+                            ? availableHeight +
+                                  MediaQuery.viewInsetsOf(context).bottom
+                            : availableHeight,
+                        selected: _index,
+                        onSelected: (i) {
+                          FocusScope.of(context).unfocus();
+                          setState(() => _index = i);
+                        },
+                      ),
                     ),
                   ),
           );
@@ -237,6 +250,7 @@ class ProfileScreen extends StatelessWidget {
   const ProfileScreen({
     required this.driver,
     required this.device,
+    this.diagnosticsEnabled = false,
     this.accountPanel,
     this.onSignOut,
     this.onTrips,
@@ -244,7 +258,7 @@ class ProfileScreen extends StatelessWidget {
     this.onOpenDriverDemo,
     super.key,
   });
-  final bool driver;
+  final bool driver, diagnosticsEnabled;
   final DeviceGateway device;
   final Widget? accountPanel;
   final VoidCallback? onSignOut, onTrips, onBack, onOpenDriverDemo;
@@ -333,6 +347,7 @@ class ProfileScreen extends StatelessWidget {
                         MaterialPageRoute<void>(
                           builder: (_) => SettingsScreen(
                             device: device,
+                            diagnosticsEnabled: diagnosticsEnabled,
                             onOpenDriverDemo: onOpenDriverDemo,
                           ),
                         ),
@@ -347,12 +362,13 @@ class ProfileScreen extends StatelessWidget {
                     _ProfileRow(
                       icon: Icons.info_outline,
                       title: 'О приложении',
-                      subtitle: 'Информация и диагностика',
+                      subtitle: 'Версия и лицензии',
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute<void>(
                           builder: (_) => AboutScreen(
                             device: device,
+                            diagnosticsEnabled: diagnosticsEnabled,
                             onOpenDriverDemo: onOpenDriverDemo,
                           ),
                         ),

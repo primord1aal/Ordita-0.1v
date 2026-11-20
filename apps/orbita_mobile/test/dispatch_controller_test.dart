@@ -270,9 +270,8 @@ void main() {
         ),
       );
       await tester.pump();
-      final field = tester.widget<TextField>(find.byKey(const Key('pickup')));
-      expect(field.controller!.text, pickup.label);
-      expect(field.enabled, isFalse);
+      expect(find.byKey(const Key('pickup')), findsNothing);
+      expect(find.text('Откуда: ${pickup.label}'), findsOneWidget);
       final map = tester.widget<OrbitaMap>(
         find.byKey(const Key('passenger-map')),
       );

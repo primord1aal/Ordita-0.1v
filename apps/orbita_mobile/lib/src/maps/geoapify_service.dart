@@ -17,9 +17,13 @@ abstract interface class AddressService {
 }
 
 /// Только Geoapify, HTTPS, без переходов, повторов, логирования или Auth-заголовков.
+typedef MapRequestProxy =
+    Future<({Uri uri, Map<String, String> headers})> Function(Uri source);
+
 class GeoapifyTransport {
   GeoapifyTransport({
     http.Client Function()? clientFactory,
+    this.proxy,
     this.timeout = const Duration(seconds: 8),
   }) : _factory =
            clientFactory ??
@@ -27,6 +31,7 @@ class GeoapifyTransport {
              HttpClient()..connectionTimeout = const Duration(seconds: 8),
            ));
   final http.Client Function() _factory;
+  final MapRequestProxy? proxy;
   final Duration timeout;
   final _pending = <http.Client>{};
   bool _closed = false;
@@ -51,9 +56,12 @@ class GeoapifyTransport {
     _pending.add(client);
     try {
       return await (() async {
-        final request = http.Request('GET', uri)..followRedirects = false;
+        final forwarded = await proxy?.call(uri);
+        final request = http.Request('GET', forwarded?.uri ?? uri)
+          ..followRedirects = false;
+        if (forwarded != null) request.headers.addAll(forwarded.headers);
         request.headers['User-Agent'] =
-            'Orbita/0.5.5 (Android; ru.orbita.taxi.dev)';
+            'Orbita/0.6.1 (Android; ru.orbita.taxi.dev)';
         final response = await client.send(request);
         if (response.statusCode != 200) {
           throw MapFailure(switch (response.statusCode) {

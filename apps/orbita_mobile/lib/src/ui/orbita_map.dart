@@ -151,8 +151,7 @@ class _OrbitaMapState extends State<OrbitaMap> {
     if (widget.focusPoint != oldWidget.focusPoint ||
         widget.route != oldWidget.route ||
         widget.coveredHeight != oldWidget.coveredHeight ||
-        widget.height != oldWidget.height ||
-        widget.enabled != oldWidget.enabled) {
+        widget.height != oldWidget.height) {
       _scheduleFrame();
     }
     if (oldWidget.session != widget.session) _tileError = false;

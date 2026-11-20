@@ -69,6 +69,7 @@ Future<FakeAuthRepository> _mount(
   });
   await tester.pumpWidget(
     OrbitaApp(
+      diagnosticsEnabled: true,
       device: FakeDevice(),
       authRepository: repo,
       themeSettings: theme,
@@ -197,7 +198,7 @@ void main() {
       await _openDemo(tester);
       await _scenario(tester, DriverDemoScenario.pending);
       await _slide(tester);
-      expect(find.text('Подтверждаем…'), findsOneWidget);
+      expect(find.text('Подключаем…'), findsOneWidget);
       final pending = Completer<ServerAccess>();
       repo.accessPending = pending;
       await tester.pump(const Duration(seconds: 30));
@@ -207,7 +208,7 @@ void main() {
       pending.complete(testAccess(UserRole.driver));
       await tester.pumpAndSettle();
       expect(find.text('Не на линии'), findsOneWidget);
-      expect(find.text('Подтверждаем…'), findsNothing);
+      expect(find.text('Подключаем…'), findsNothing);
       repo.access = testAccess(UserRole.passenger);
       await tester.pump(const Duration(seconds: 30));
       await tester.pumpAndSettle();
@@ -294,7 +295,9 @@ void main() {
   ]) {
     testWidgets('Исправленный концепт: ${spec.$1}', (tester) async {
       tester.view.padding = const FakeViewPadding(top: 28, bottom: 23);
+      tester.view.viewPadding = const FakeViewPadding(top: 28, bottom: 23);
       addTearDown(tester.view.resetPadding);
+      addTearDown(tester.view.resetViewPadding);
       await _mount(
         tester,
         role: spec.$4 == 1 ? UserRole.driver : UserRole.passenger,

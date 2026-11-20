@@ -39,6 +39,7 @@ Future<void> openPreview(
   WidgetTester tester,
   String role, {
   FakeDevice? device,
+  bool diagnosticsEnabled = true,
 }) async {
   addTearDown(() => tester.pumpWidget(const SizedBox()));
   // Только искусственная серверная роль; публичного выбора интерфейса нет.
@@ -50,6 +51,7 @@ Future<void> openPreview(
   await tester.pumpWidget(
     OrbitaApp(
       key: UniqueKey(),
+      diagnosticsEnabled: diagnosticsEnabled,
       device: device ?? FakeDevice(),
       authRepository: repository,
     ),

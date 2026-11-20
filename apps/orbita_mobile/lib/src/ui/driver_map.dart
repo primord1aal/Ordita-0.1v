@@ -65,7 +65,11 @@ class _DriverMapState extends State<DriverMap> {
     if (active && _session == null) {
       _session =
           widget.tileSessionFactory?.call(key) ??
-          MapTileSession(key, cache: _cache);
+          MapTileSession(
+            key,
+            cache: _cache,
+            transport: widget.mapSettings.transport(),
+          );
     }
     _active = active;
   }
@@ -90,7 +94,7 @@ class _DriverMapState extends State<DriverMap> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_active) {
+    if (_session == null) {
       return SizedBox(
         key: const Key('driver-map-idle'),
         height: widget.height,
@@ -118,6 +122,7 @@ class _DriverMapState extends State<DriverMap> {
       key: ValueKey(_session),
       height: widget.height,
       session: _session,
+      enabled: _active,
       borderRadius: BorderRadius.zero,
       controls: MapControls.driver,
       focusPoint: widget.focusPoint,

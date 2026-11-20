@@ -117,6 +117,12 @@ class DispatchController extends ChangeNotifier {
   int _generation = 0, _ticks = 0;
   bool _enabled = false, _disposed = false, _loaded = false;
   bool busy = false;
+  Completer<void>? _flight;
+  final ValueNotifier<int> clock = ValueNotifier(0);
+  Future<void> _waitForPoll() async {
+    if (!busy) await _flight?.future;
+  }
+
   String? message;
   DispatchState? state;
   Map<String, Object?>? pending;
@@ -139,8 +145,9 @@ class DispatchController extends ChangeNotifier {
     if (value) {
       unawaited(refresh());
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (++_ticks % 3 == 0) unawaited(refresh());
-        notifyListeners();
+        ++_ticks;
+        if (_ticks % (message == null ? 3 : 15) == 0) unawaited(refresh());
+        clock.value++;
       });
     }
   }
@@ -157,6 +164,7 @@ class DispatchController extends ChangeNotifier {
   Future<void> refresh() => _run(driver ? 'driver_poll' : 'passenger_poll', {});
 
   Future<void> create(AddressPlace pickup, AddressPlace destination) async {
+    await _waitForPoll();
     if (!canAct || hasActiveTrip || pending != null) return;
     final random = Random.secure();
     final bytes = List<int>.generate(16, (_) => random.nextInt(256));
@@ -192,17 +200,20 @@ class DispatchController extends ChangeNotifier {
   }
 
   Future<void> cancel() async {
+    await _waitForPoll();
     if (!canAct || state?.trip?.status != 'created') return;
     await _run('cancel', {'order_id': state!.trip!.id});
   }
 
   Future<void> setOnline(bool value) async {
+    await _waitForPoll();
     if (!canAct) return;
     await _run('online', {'online': value});
     if (message != null) throw const OrderFailure(OrderFailureKind.unavailable);
   }
 
   Future<void> respond(bool accept) async {
+    await _waitForPoll();
     final current = state;
     if (!canAct ||
         current?.offerId == null ||
@@ -216,6 +227,7 @@ class DispatchController extends ChangeNotifier {
   }
 
   Future<void> advance(String status) async {
+    await _waitForPoll();
     if (!canAct || state?.trip == null) return;
     await _run('advance', {'order_id': state!.trip!.id, 'status': status});
   }
@@ -225,10 +237,16 @@ class DispatchController extends ChangeNotifier {
     Map<String, Object?> payload, {
     bool saveIntent = false,
   }) async {
-    if (!_enabled || busy || _disposed) return;
+    if (!_enabled || _flight != null || _disposed) return;
     final generation = _generation;
-    busy = true;
-    notifyListeners();
+    final silent =
+        (action == 'driver_poll' || action == 'passenger_poll') &&
+        state != null;
+    final oldSignature = _signature;
+    final oldMessage = message;
+    _flight = Completer<void>();
+    busy = !silent;
+    if (!silent) notifyListeners();
     try {
       await _load();
       if (generation != _generation || !_enabled) return;
@@ -274,9 +292,27 @@ class DispatchController extends ChangeNotifier {
       }
     } finally {
       busy = false;
-      if (!_disposed) notifyListeners();
+      final flight = _flight;
+      _flight = null;
+      flight?.complete();
+      if (!_disposed) {
+        clock.value++;
+        if (!silent || oldSignature != _signature || oldMessage != message) {
+          notifyListeners();
+        }
+      }
     }
   }
+
+  String get _signature => jsonEncode([
+    state?.online,
+    state?.offerId,
+    state?.offerExpiresAt?.toIso8601String(),
+    state?.trip?.id,
+    state?.trip?.version,
+    state?.trip?.status,
+    pending?['request_id'],
+  ]);
 
   @override
   void dispose() {
@@ -285,6 +321,7 @@ class DispatchController extends ChangeNotifier {
     ++_generation;
     _timer?.cancel();
     _age.stop();
+    clock.dispose();
     super.dispose();
   }
 }

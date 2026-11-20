@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbita_mobile/src/app.dart';
+import 'package:orbita_mobile/src/platform/device_gateway.dart';
 import 'package:orbita_mobile/src/screens/device_check_screen.dart';
 import 'package:orbita_mobile/src/screens/preview_screens.dart';
 import 'package:orbita_mobile/src/ui/components.dart';
@@ -89,6 +90,7 @@ void main() {
     (tester) async {
       final device = FakeDevice();
       await openPreview(tester, 'Водитель', device: device);
+      device.calls.clear();
       await openProfile(tester);
       expect(find.byType(ProfileScreen), findsOneWidget);
       await tester.tap(find.text('О приложении'));
@@ -153,6 +155,9 @@ void main() {
         }
       };
       await openPreview(tester, 'Водитель', device: device);
+      // Exercise explicit diagnostic permission steps after automatic startup.
+      device.state = const DeviceState();
+      device.calls.clear();
       await openCheck(tester, 'Проверка устройства');
       await scrollTo(tester, find.byKey(const Key('location-permissions')));
       await tester.tap(find.byKey(const Key('location-permissions')));
@@ -243,7 +248,9 @@ void main() {
     'Локальное уведомление по-прежнему открывает проверку при старте',
     (tester) async {
       final device = FakeDevice()..launchRequested = true;
-      await tester.pumpWidget(OrbitaApp(device: device));
+      await tester.pumpWidget(
+        OrbitaApp(device: device, diagnosticsEnabled: true),
+      );
       await tester.pumpAndSettle();
       expect(find.byType(DeviceCheckScreen), findsOneWidget);
       expect(device.calls, isNot(contains('start')));

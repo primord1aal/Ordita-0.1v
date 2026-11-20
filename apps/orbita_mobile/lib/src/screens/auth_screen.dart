@@ -24,11 +24,13 @@ class AuthScreen extends StatefulWidget {
     required this.device,
     required this.mapSettings,
     this.addressServiceFactory,
+    this.diagnosticsEnabled = false,
     this.routeServiceFactory,
     this.tileSessionFactory,
     super.key,
   });
   final AuthRepository repository;
+  final bool diagnosticsEnabled;
   final DeviceGateway device;
   final MapSettings mapSettings;
   final AddressService Function(String)? addressServiceFactory;
@@ -95,7 +97,8 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<int?> _openDriverDemo() async {
-    if (!kDebugMode ||
+    if (!widget.diagnosticsEnabled ||
+        !kDebugMode ||
         !_controller.canUseRole ||
         _controller.access?.role != UserRole.driver) {
       return null;
@@ -139,6 +142,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             role: visible.role == UserRole.driver
                                 ? PreviewRole.driver
                                 : PreviewRole.passenger,
+                            diagnosticsEnabled: widget.diagnosticsEnabled,
                             device: widget.device,
                             dispatchApi: widget.repository is DispatchApi
                                 ? widget.repository as DispatchApi
@@ -153,7 +157,9 @@ class _AuthScreenState extends State<AuthScreen> {
                             accountPanel: _accountPanel(visible),
                             onSignOut: _controller.signOut,
                             onOpenDriverDemo:
-                                kDebugMode && visible.role == UserRole.driver
+                                widget.diagnosticsEnabled &&
+                                    kDebugMode &&
+                                    visible.role == UserRole.driver
                                 ? _openDriverDemo
                                 : null,
                           ),
@@ -261,7 +267,7 @@ class _AuthScreenState extends State<AuthScreen> {
       confirmed: true,
       title: 'Администратор',
       message: 'Права подтверждены. Пассажирские и водительские действия для этого аккаунта недоступны.',
-      primary: kDebugMode
+      primary: widget.diagnosticsEnabled && kDebugMode
           ? FullWidthAction(
               'Проверка устройства',
               secondary: true,

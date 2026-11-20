@@ -8,7 +8,13 @@ import 'package:orbita_mobile/src/maps/map_location_action.dart';
 import 'package:orbita_mobile/src/platform/device_gateway.dart';
 
 import 'fake_device.dart';
-import 'test_helpers.dart';
+
+DeviceState readyState() => const DeviceState(
+  sdk: 34,
+  notifications: true,
+  location: 'precise',
+  locationEnabled: true,
+);
 
 void main() {
   testWidgets(
@@ -118,5 +124,98 @@ void main() {
     expect(applied, isFalse);
     expect(errors, hasLength(2));
     expect(errors.last, contains('Попробуйте ещё раз'));
+  });
+  testWidgets('Автоматический первый запуск запрашивает разрешение один раз', (
+    tester,
+  ) async {
+    final device = FakeDevice();
+    final points = <GeoPoint>[];
+    device.actionHandler = (action) async {
+      if (action == 'foreground') device.state = readyState();
+    };
+    device.locationHandler = () async => DeviceLocationFix(
+      latitude: 55,
+      longitude: 82.43,
+      accuracyMeters: 18,
+      capturedAt: DateTime.now().toUtc(),
+    );
+    final action = MapLocationAction(
+      device: device,
+      isAllowed: () => true,
+      onLocation: points.add,
+      onError: (_) {},
+    );
+    addTearDown(action.dispose);
+    await action.locateAutomatically();
+    await action.locateAutomatically();
+    expect(points, hasLength(1));
+    expect(device.calls.where((v) => v == 'foreground'), hasLength(1));
+    expect(device.calls.where((v) => v == 'currentLocation'), hasLength(1));
+    expect(action.accuracyMeters, 18);
+  });
+  testWidgets(
+    'Новый экран после отказа автоматически не повторяет системный запрос',
+    (tester) async {
+      final device = FakeDevice()
+        ..state = const DeviceState(foregroundLocationRequested: true);
+      final action = MapLocationAction(
+        device: device,
+        isAllowed: () => true,
+        onLocation: (_) {},
+        onError: (_) {},
+      );
+      addTearDown(action.dispose);
+      await action.locateAutomatically();
+      expect(device.calls, ['read']);
+    },
+  );
+  testWidgets(
+    'Постоянный запрет предлагает настройки вместо системного запроса',
+    (tester) async {
+      final device = FakeDevice()
+        ..state = const DeviceState(
+          foregroundLocationRequested: true,
+          locationPermanentlyDenied: true,
+        );
+      final errors = <String>[];
+      final action = MapLocationAction(
+        device: device,
+        isAllowed: () => true,
+        onLocation: (_) {},
+        onError: errors.add,
+      );
+      addTearDown(action.dispose);
+      await action.locateAutomatically();
+      expect(action.needsSettings, isTrue);
+      expect(errors.single, contains('настройки'));
+      expect(device.calls, ['read']);
+      await action.openSettings();
+      expect(device.calls.last, 'settings');
+    },
+  );
+  testWidgets('Недоступный экран не расходует автоматическую попытку', (
+    tester,
+  ) async {
+    var allowed = false;
+    final device = FakeDevice()..state = readyState();
+    device.locationHandler = () async => DeviceLocationFix(
+      latitude: 55,
+      longitude: 82.43,
+      accuracyMeters: 20,
+      capturedAt: DateTime.now().toUtc(),
+    );
+    final points = <GeoPoint>[];
+    final action = MapLocationAction(
+      device: device,
+      isAllowed: () => allowed,
+      onLocation: points.add,
+      onError: (_) {},
+    );
+    addTearDown(action.dispose);
+    await action.locateAutomatically();
+    expect(device.calls, isEmpty);
+    allowed = true;
+    await action.locateAutomatically();
+    expect(points, hasLength(1));
   });
 }

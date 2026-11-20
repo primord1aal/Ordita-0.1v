@@ -47,33 +47,47 @@ class DispatchPanel extends StatelessWidget {
           Text('Куда: ${trip.destination.address}'),
           const SizedBox(height: 10),
           if (!c.driver && trip.status == 'created') ...[
-            Text(
-              'Осталось до конца поиска: ${c.secondsUntil(trip.expiresAt)} с',
+            ValueListenableBuilder<int>(
+              valueListenable: c.clock,
+              builder: (context, value, child) => Text(
+                'Осталось до конца поиска: ${c.secondsUntil(trip.expiresAt)} с',
+              ),
             ),
             TextButton(
               onPressed: c.canAct ? c.cancel : null,
               child: const Text('Отменить заказ'),
             ),
           ],
-          if (offer) ...[
-            Text(
-              'Ответить за ${c.secondsUntil(state!.offerExpiresAt!)} с',
-              key: const Key('offer-countdown'),
-            ),
-            FullWidthAction(
-              'Принять',
-              key: const Key('accept-offer'),
-              onPressed: c.canAct && c.secondsUntil(state.offerExpiresAt!) > 0
-                  ? () => c.respond(true)
-                  : null,
-            ),
-            TextButton(
-              onPressed: c.canAct && c.secondsUntil(state.offerExpiresAt!) > 0
-                  ? () => c.respond(false)
-                  : null,
-              child: const Text('Отказаться'),
-            ),
-          ] else if (c.driver && next != null)
+          if (offer)
+            ValueListenableBuilder<int>(
+              valueListenable: c.clock,
+              builder: (context, value, child) {
+                final seconds = c.secondsUntil(state!.offerExpiresAt!);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Ответить за $seconds с',
+                      key: const Key('offer-countdown'),
+                    ),
+                    FullWidthAction(
+                      'Принять',
+                      key: const Key('accept-offer'),
+                      onPressed: c.canAct && seconds > 0
+                          ? () => c.respond(true)
+                          : null,
+                    ),
+                    TextButton(
+                      onPressed: c.canAct && seconds > 0
+                          ? () => c.respond(false)
+                          : null,
+                      child: const Text('Отказаться'),
+                    ),
+                  ],
+                );
+              },
+            )
+          else if (c.driver && next != null)
             FullWidthAction(
               next.$2,
               onPressed: c.canAct ? () => c.advance(next.$1) : null,

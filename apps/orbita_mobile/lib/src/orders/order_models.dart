@@ -10,6 +10,7 @@ enum OrderFailureKind {
   idempotencyConflict,
   stateChanged,
   unavailable,
+  serverNotReady,
 }
 
 /// Ответ сервера и внутренние исключения не попадают в пользовательский текст.
@@ -18,6 +19,7 @@ class OrderFailure implements Exception {
 
   factory OrderFailure.fromServerMessage(Object? message) => OrderFailure(
     switch (message) {
+      'PGRST202' || '42883' => OrderFailureKind.serverNotReady,
       'ORB_ORDER_INVALID_REQUEST' => OrderFailureKind.invalidRequest,
       'ORB_ORDER_SESSION_REQUIRED' => OrderFailureKind.sessionRequired,
       'ORB_DISPATCH_FORBIDDEN' ||
@@ -47,6 +49,8 @@ class OrderFailure implements Exception {
       'Данные отправленного заказа изменились. Обновите данные.',
     OrderFailureKind.stateChanged =>
       'Состояние заказа изменилось. Обновите данные.',
+    OrderFailureKind.serverNotReady =>
+      'Заказы временно недоступны на сервере. Обновите данные позже.',
     OrderFailureKind.unavailable =>
       'Не удалось получить данные заказа. Повторите попытку.',
   };

@@ -21,7 +21,10 @@ class PassengerAddressController extends ChangeNotifier {
     this.settings, {
     AddressService Function(String)? serviceFactory,
     this.debounce = const Duration(milliseconds: 500),
-  }) : _factory = serviceFactory ?? ((key) => GeoapifyAddressService(key)) {
+  }) : _factory =
+           serviceFactory ??
+           ((key) =>
+               GeoapifyAddressService(key, transport: settings.transport())) {
     _key = settings.clientKey;
     _service = _factory(_key);
     settings.addListener(_configurationChanged);
@@ -35,7 +38,9 @@ class PassengerAddressController extends ChangeNotifier {
   AddressField activeField = AddressField.pickup;
   bool _enabled = true, _disposed = false;
   bool _foreground = true;
-  int _generation = 0;
+  int _generation = 0, _locationRevision = 0;
+  bool _pickupFromLocation = false;
+  bool get pickupFromLocation => _pickupFromLocation;
   Timer? _timer;
   bool get enabled => _enabled && _foreground && !_disposed;
   bool get foreground => _foreground && !_disposed;
@@ -45,7 +50,10 @@ class PassengerAddressController extends ChangeNotifier {
     if ((_enabled == value && _foreground == foreground) || _disposed) return;
     _enabled = value;
     _foreground = foreground;
-    if (!enabled) _cancel();
+    if (!enabled) {
+      ++_locationRevision;
+      _cancel();
+    }
     // Маршрут выбора точки находится вне поддерева AuthScreen. Изменение
     // полномочий действует немедленно; его перерисовка ждёт конца текущего build.
     if (SchedulerBinding.instance.schedulerPhase ==
@@ -75,6 +83,10 @@ class PassengerAddressController extends ChangeNotifier {
     if (!enabled) return;
     final item = draft(field);
     if (item.text == value) return;
+    if (field == AddressField.pickup) {
+      _pickupFromLocation = false;
+      ++_locationRevision;
+    }
     _cancel();
     activeField = field;
     item
@@ -134,6 +146,10 @@ class PassengerAddressController extends ChangeNotifier {
 
   void select(AddressField field, AddressPlace place) {
     if (!enabled || !place.point.valid) return;
+    if (field == AddressField.pickup) {
+      _pickupFromLocation = false;
+      ++_locationRevision;
+    }
     _cancel();
     activeField = field;
     draft(field)
@@ -143,6 +159,59 @@ class PassengerAddressController extends ChangeNotifier {
       ..message = null
       ..searched = false;
     notifyListeners();
+  }
+
+  /// A real GPS coordinate is usable even when its human address is unavailable.
+  /// Automatic results never replace input typed while the GPS was in flight.
+  /// Existing orders are guarded by the screen's location permission predicate.
+  Future<void> useCurrentLocation(
+    GeoPoint point, {
+    bool replace = false,
+  }) async {
+    if (!enabled || !point.valid) return;
+    if (!replace &&
+        !_pickupFromLocation &&
+        (pickup.text.isNotEmpty || pickup.place != null)) {
+      return;
+    }
+    final revision = ++_locationRevision;
+    _pickupFromLocation = true;
+    final label = 'Координаты: ${point.caption}';
+    pickup
+      ..text = label
+      ..place = AddressPlace(label, point)
+      ..suggestions = const []
+      ..message = settings.configured
+          ? 'Уточняем адрес местоположения…'
+          : 'Местоположение определено. Адрес пока недоступен.'
+      ..busy = settings.configured
+      ..searched = false;
+    notifyListeners();
+    if (!settings.configured) return;
+    bool current() =>
+        enabled && revision == _locationRevision && _pickupFromLocation;
+    try {
+      final address = await _service.reverse(point);
+      if (!current()) return;
+      if (address != null) {
+        pickup
+          ..text = address
+          ..place = AddressPlace(address, point)
+          ..message = null;
+      } else {
+        pickup.message = 'Адрес не найден. Сохранена точная координата GPS.';
+      }
+    } catch (_) {
+      if (current()) {
+        pickup.message =
+            'Не удалось уточнить адрес. Сохранена точная координата GPS.';
+      }
+    } finally {
+      if (current()) {
+        pickup.busy = false;
+        notifyListeners();
+      }
+    }
   }
 
   Future<String?> previewPoint(GeoPoint point) async {
@@ -214,6 +283,7 @@ class PassengerAddressController extends ChangeNotifier {
 
   void _configurationChanged() {
     if (_disposed || settings.clientKey == _key) return;
+    ++_locationRevision;
     _cancel();
     _service.close();
     _key = settings.clientKey;
@@ -226,6 +296,7 @@ class PassengerAddressController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    ++_locationRevision;
     settings.removeListener(_configurationChanged);
     _cancel();
     _service.close();

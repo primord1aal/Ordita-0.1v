@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:orbita_mobile/src/maps/geoapify_service.dart';
 import 'package:orbita_mobile/src/maps/map_settings.dart';
 import 'package:orbita_mobile/src/maps/map_tiles.dart';
@@ -74,6 +75,45 @@ void main() {
     await show(enabled: true);
     expect(tiles.calls.length, 0);
     expect(sessions, 0);
+    await tester.pumpWidget(const SizedBox());
+    settings.dispose();
+  });
+
+  testWidgets('role refresh pause preserves driver map state and camera', (
+    tester,
+  ) async {
+    final settings = MapSettings(initialKey: fakeMapKey);
+    final tiles = _Tiles();
+    final session = MapTileSession(
+      fakeMapKey,
+      transport: tiles,
+      minimumInterval: Duration.zero,
+    );
+    Future<void> show(bool active) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: orbitaTheme(brightness: Brightness.light),
+          home: Scaffold(
+            body: DriverMap(
+              mapSettings: settings,
+              enabled: active,
+              height: 256,
+              tileSessionFactory: (_) => session,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await show(true);
+    final state = tester.state(find.byType(FlutterMap));
+    final requests = tiles.calls.length;
+    await show(false);
+    expect(identical(tester.state(find.byType(FlutterMap)), state), isTrue);
+    expect(tiles.calls.length, requests);
+    await show(true);
+    expect(identical(tester.state(find.byType(FlutterMap)), state), isTrue);
     await tester.pumpWidget(const SizedBox());
     settings.dispose();
   });

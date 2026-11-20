@@ -82,6 +82,10 @@ class MainActivity : FlutterActivity() {
     private fun request(permissions: Array<String>, result: MethodChannel.Result) {
         if (!activityVisible || pendingPermission != null) { result.error("busy", "Дождитесь завершения предыдущего действия", null); return }
         pendingPermission = result
+        if (permissions.contains(Manifest.permission.ACCESS_COARSE_LOCATION)) {
+            getSharedPreferences(DeviceSupport.FOREGROUND_PERMISSION_PREFS, MODE_PRIVATE).edit()
+                .putBoolean(DeviceSupport.FOREGROUND_PERMISSION_REQUESTED, true).apply()
+        }
         requestPermissions(permissions, 612)
     }
 

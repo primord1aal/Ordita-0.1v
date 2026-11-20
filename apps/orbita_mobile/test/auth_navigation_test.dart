@@ -20,7 +20,11 @@ Future<void> mountAccount(
 ) async {
   addTearDown(() => tester.pumpWidget(const SizedBox()));
   await tester.pumpWidget(
-    OrbitaApp(device: FakeDevice(), authRepository: repository),
+    OrbitaApp(
+      device: FakeDevice(),
+      authRepository: repository,
+      diagnosticsEnabled: true,
+    ),
   );
   await tester.pumpAndSettle();
 }
@@ -47,7 +51,11 @@ void main() {
     final repository = FakeAuthRepository()..restorePending = pending;
     addTearDown(() => tester.pumpWidget(const SizedBox()));
     await tester.pumpWidget(
-      OrbitaApp(device: FakeDevice(), authRepository: repository),
+      OrbitaApp(
+        device: FakeDevice(),
+        authRepository: repository,
+        diagnosticsEnabled: true,
+      ),
     );
     await tester.pump(const Duration(seconds: 1));
     try {
@@ -263,7 +271,11 @@ void main() {
     final repository = FakeAuthRepository()..restorePending = pending;
     addTearDown(() => tester.pumpWidget(const SizedBox()));
     await tester.pumpWidget(
-      OrbitaApp(device: FakeDevice(), authRepository: repository),
+      OrbitaApp(
+        device: FakeDevice(),
+        authRepository: repository,
+        diagnosticsEnabled: true,
+      ),
     );
     await tester.pump(const Duration(seconds: 4));
     expect(find.text('Подключаемся…'), findsOneWidget);

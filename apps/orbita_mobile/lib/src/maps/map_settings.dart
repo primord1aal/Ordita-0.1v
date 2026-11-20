@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'address_models.dart';
+import 'geoapify_service.dart';
 
 abstract interface class MapKeyStore {
   Future<String?> read();
@@ -21,7 +22,15 @@ class SecureMapKeyStore implements MapKeyStore {
 }
 
 class MapSettings extends ChangeNotifier {
-  MapSettings({this.store, String initialKey = ''}) : _key = initialKey;
+  MapSettings({this.store, String initialKey = '', this.transportFactory})
+    : _key = initialKey;
+  MapSettings.managed(MapRequestProxy proxy)
+    : store = null,
+      _key = 'orbita_managed_maps_v1',
+      transportFactory = (() => GeoapifyTransport(proxy: proxy));
+  final GeoapifyTransport Function()? transportFactory;
+  GeoapifyTransport transport() =>
+      transportFactory?.call() ?? GeoapifyTransport();
   final MapKeyStore? store;
   String _key;
   bool _disposed = false;

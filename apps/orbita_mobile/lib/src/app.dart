@@ -16,7 +16,6 @@ import 'platform/device_gateway.dart';
 import 'screens/api_check_screen.dart';
 import 'screens/auth_screen.dart';
 import 'screens/device_check_screen.dart';
-import 'screens/map_settings_screen.dart';
 import 'ui/theme.dart';
 import 'ui/theme_settings.dart';
 import 'ui/driver_demo_access.dart';
@@ -31,9 +30,11 @@ class OrbitaApp extends StatefulWidget {
     this.routeServiceFactory,
     this.tileSessionFactory,
     this.themeSettings,
+    this.diagnosticsEnabled = const bool.fromEnvironment('ORBITA_DIAGNOSTICS'),
     super.key,
   });
   final DeviceGateway device;
+  final bool diagnosticsEnabled;
   final ApiProbe Function()? apiProbeFactory;
   final AuthRepository? authRepository;
   final MapSettings? mapSettings;
@@ -63,10 +64,12 @@ class _OrbitaAppState extends State<OrbitaApp> {
       });
     }
     if (widget.themeSettings == null) unawaited(_themeSettings.load());
-    widget.device.onOpenChecks(_openChecks);
+    widget.device.onOpenChecks(widget.diagnosticsEnabled ? _openChecks : null);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
-        if (await widget.device.consumeLaunchRequest() && mounted) {
+        if (await widget.device.consumeLaunchRequest() &&
+            mounted &&
+            widget.diagnosticsEnabled) {
           _openChecks();
         }
       } catch (_) {
@@ -75,7 +78,12 @@ class _OrbitaAppState extends State<OrbitaApp> {
     });
   }
 
-  void _openChecks() => _navigator.currentState?.pushNamed('/device-check');
+  void _openChecks() {
+    if (widget.diagnosticsEnabled) {
+      _navigator.currentState?.pushNamed('/device-check');
+    }
+  }
+
   @override
   void dispose() {
     widget.device.onOpenChecks(null);
@@ -99,9 +107,17 @@ class _OrbitaAppState extends State<OrbitaApp> {
         theme: orbitaTheme(brightness: Brightness.light),
         darkTheme: orbitaTheme(),
         themeMode: _themeSettings.mode,
+        onUnknownRoute: (_) => MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(
+            body: SafeArea(
+              child: Center(child: Text('Этот раздел недоступен.')),
+            ),
+          ),
+        ),
         routes: {
           '/driver-demo': (_) => const DriverDemoDeniedScreen(),
           '/': (_) => AuthScreen(
+            diagnosticsEnabled: widget.diagnosticsEnabled,
             repository: widget.authRepository ?? DisconnectedAuthRepository(),
             device: widget.device,
             mapSettings: _maps,
@@ -109,21 +125,21 @@ class _OrbitaAppState extends State<OrbitaApp> {
             routeServiceFactory: widget.routeServiceFactory,
             tileSessionFactory: widget.tileSessionFactory,
           ),
-          if (kDebugMode)
-            '/map-settings': (_) => MapSettingsScreen(settings: _maps),
-          '/api-check': (_) => ApiCheckScreen(
-            probe: (widget.apiProbeFactory ?? createApiProbe)(),
-            journal: _apiJournal,
-          ),
-          '/device-check': (_) => DeviceCheckScreen(device: widget.device),
-          '/device-check/notifications': (_) => DeviceCheckScreen(
-            device: widget.device,
-            section: DeviceCheckSection.notifications,
-          ),
-          '/device-check/location': (_) => DeviceCheckScreen(
-            device: widget.device,
-            section: DeviceCheckSection.location,
-          ),
+          if (widget.diagnosticsEnabled) ...{
+            '/api-check': (_) => ApiCheckScreen(
+              probe: (widget.apiProbeFactory ?? createApiProbe)(),
+              journal: _apiJournal,
+            ),
+            '/device-check': (_) => DeviceCheckScreen(device: widget.device),
+            '/device-check/notifications': (_) => DeviceCheckScreen(
+              device: widget.device,
+              section: DeviceCheckSection.notifications,
+            ),
+            '/device-check/location': (_) => DeviceCheckScreen(
+              device: widget.device,
+              section: DeviceCheckSection.location,
+            ),
+          },
         },
       ),
     ),

@@ -169,4 +169,45 @@ void main() {
       expect(controller.pickup.text, isEmpty);
     },
   );
+  test(
+    'Автоматический GPS сохраняет точную координату при сбое reverse',
+    () async {
+      service.failure = const MapFailure(MapFailureKind.network);
+      const point = GeoPoint(55.007123, 82.441234);
+      await controller.useCurrentLocation(point);
+      expect(controller.pickup.place!.point, same(point));
+      expect(controller.pickup.text, startsWith('Координаты:'));
+      expect(controller.pickup.message, contains('точная координата GPS'));
+    },
+  );
+  test('Автоматический GPS не заменяет уже введённое отправление', () async {
+    controller.edit(AddressField.pickup, 'Мой ручной адрес');
+    await controller.useCurrentLocation(const GeoPoint(55, 82.43));
+    expect(controller.pickup.text, 'Мой ручной адрес');
+    expect(service.points, isEmpty);
+  });
+  test('Поздний reverse GPS не перезаписывает ручное исправление', () async {
+    final pending = Completer<String?>();
+    service.reversePending = pending;
+    final request = controller.useCurrentLocation(const GeoPoint(55, 82.43));
+    controller.edit(AddressField.pickup, 'Другой адрес');
+    pending.complete('Старый GPS адрес');
+    await request;
+    expect(controller.pickup.text, 'Другой адрес');
+    expect(controller.pickup.place, isNull);
+  });
+  test('GPS reverse меняет подпись, а не реальную координату', () async {
+    const point = GeoPoint(55.007123, 82.441234);
+    await controller.useCurrentLocation(point);
+    expect(controller.pickup.place!.point, same(point));
+    expect(controller.pickup.text, service.reverseLabel);
+    expect(controller.pickupFromLocation, isTrue);
+  });
+  test('Обновление GPS не отменяет активный поиск назначения', () async {
+    controller.edit(AddressField.destination, 'Чик, Титова');
+    final cancels = service.cancels;
+    await controller.useCurrentLocation(const GeoPoint(55, 82.43));
+    expect(service.cancels, cancels);
+    expect(controller.destination.text, 'Чик, Титова');
+  });
 }

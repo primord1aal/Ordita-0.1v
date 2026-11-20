@@ -1,5 +1,6 @@
 package ru.orbita.taxi.dev
 
+import android.app.Activity
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
@@ -57,11 +58,22 @@ internal object DeviceSupport {
             .setContentIntent(pending).setVisibility(Notification.VISIBILITY_PRIVATE)
     }
 
+    const val FOREGROUND_PERMISSION_PREFS = "orbita_foreground_location_permission"
+    const val FOREGROUND_PERMISSION_REQUESTED = "requested"
+
     fun snapshot(context: Context): Map<String, Any> {
         val prefs = context.getSharedPreferences(LocationDiagnosticService.PREFS, Context.MODE_PRIVATE)
         val precise = context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val background = Build.VERSION.SDK_INT < 29 || context.checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val requested = context.getSharedPreferences(FOREGROUND_PERMISSION_PREFS, Context.MODE_PRIVATE)
+            .getBoolean(FOREGROUND_PERMISSION_REQUESTED, false)
+        val rationale = (context as? Activity)?.let {
+            it.shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION) ||
+                it.shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_COARSE_LOCATION)
+        } ?: false
         return mapOf(
+            "foregroundLocationRequested" to requested,
+            "locationPermanentlyDenied" to (requested && !hasLocation(context) && !rationale),
             "sdk" to Build.VERSION.SDK_INT,
             "notifications" to notificationsAllowed(context),
             "location" to if (precise) "precise" else if (hasLocation(context)) "approximate" else "denied",

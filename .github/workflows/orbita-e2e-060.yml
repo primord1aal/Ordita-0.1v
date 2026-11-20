@@ -1,4 +1,4 @@
-name: Орбита 0.6.0 — проверки и ARM64 APK
+name: Орбита 0.6.1 — проверки и ARM64 APK
 on:
   push:
     branches: [codex/orbita-e2e-test-060]
@@ -32,10 +32,11 @@ jobs:
           test_version="$(/usr/lib/postgresql/17/bin/postgres --version)"
           runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_orders_sql.py -v
           runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_dispatch_sql.py -v
+          runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_map_budget_sql.py -v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: ORBITA-0.6.0-local-sql
+          name: ORBITA-0.6.1-local-sql
           path: build/*-sql-results.json
           if-no-files-found: error
           retention-days: 14
@@ -76,6 +77,9 @@ jobs:
           flutter config --no-analytics --android-sdk "$ANDROID_HOME"
           (yes || true) | "$sdk_manager" --licenses > /dev/null
           "$sdk_manager" 'platforms;android-36' 'platforms;android-35' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - name: Proxy request safety tests
+        working-directory: .
+        run: node --experimental-strip-types --test supabase/functions/orbita-maps/*.test.ts
       - name: Зависимости, формат и анализ
         run: |
           flutter pub get --enforce-lockfile
@@ -106,13 +110,13 @@ jobs:
       - name: Установочный пакет
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk dist/ORBITA-0.6.0-test.apk
-          cp ../../docs/ORBITA_0.6.0.md dist/INSTALL-ANDROID.md
-          (cd dist && sha256sum ORBITA-0.6.0-test.apk > SHA256SUMS.txt)
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk dist/ORBITA-0.6.1-test.apk
+          cp ../../docs/ORBITA_0.6.1.md dist/INSTALL-ANDROID.md
+          (cd dist && sha256sum ORBITA-0.6.1-test.apk > SHA256SUMS.txt)
           echo 'APK собран. Облачная миграция диспетчеризации требует отдельного согласования владельца.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ORBITA-0.6.0-test-apk
+          name: ORBITA-0.6.1-test-apk
           path: apps/orbita_mobile/dist/
           if-no-files-found: error
           retention-days: 14

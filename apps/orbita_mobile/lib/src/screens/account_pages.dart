@@ -5,8 +5,14 @@ import '../ui/theme.dart';
 import '../ui/theme_settings.dart';
 
 class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({this.device, this.onOpenDriverDemo, super.key});
+  const SettingsScreen({
+    this.device,
+    this.onOpenDriverDemo,
+    this.diagnosticsEnabled = false,
+    super.key,
+  });
   final DeviceGateway? device;
+  final bool diagnosticsEnabled;
   final VoidCallback? onOpenDriverDemo;
 
   @override
@@ -91,6 +97,33 @@ class SettingsScreen extends StatelessWidget {
                     ?.copyWith(color: palette.muted),
               ),
               const SizedBox(height: 14),
+              if (device != null)
+                ListTile(
+                  key: const Key('permission-settings'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.location_on_outlined,
+                    color: palette.muted,
+                  ),
+                  title: const Text('Разрешения приложения'),
+                  subtitle: const Text('Местоположение и системные настройки'),
+                  trailing: Icon(Icons.open_in_new, color: palette.muted),
+                  onTap: () async {
+                    try {
+                      await device!.openSettings();
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Не удалось открыть настройки приложения.',
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.info_outline, color: palette.muted),
@@ -101,6 +134,7 @@ class SettingsScreen extends StatelessWidget {
                   MaterialPageRoute<void>(
                     builder: (_) => AboutScreen(
                       device: device,
+                      diagnosticsEnabled: diagnosticsEnabled,
                       onOpenDriverDemo: onOpenDriverDemo,
                     ),
                   ),
@@ -115,8 +149,14 @@ class SettingsScreen extends StatelessWidget {
 }
 
 class AboutScreen extends StatelessWidget {
-  const AboutScreen({this.device, this.onOpenDriverDemo, super.key});
+  const AboutScreen({
+    this.device,
+    this.onOpenDriverDemo,
+    this.diagnosticsEnabled = false,
+    super.key,
+  });
   final DeviceGateway? device;
+  final bool diagnosticsEnabled;
   final VoidCallback? onOpenDriverDemo;
 
   Future<void> _openSystemSettings(BuildContext context) async {
@@ -153,29 +193,31 @@ class AboutScreen extends StatelessWidget {
             Text('Версия $appVersion'),
             const SizedBox(height: 20),
             Divider(color: palette.divider),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                Icons.phonelink_setup_outlined,
-                color: palette.muted,
-              ),
-              title: const Text('Проверка устройства'),
-              trailing: Icon(Icons.chevron_right, color: palette.muted),
-              onTap: () => Navigator.pushNamed(context, '/device-check'),
-            ),
-            Divider(color: palette.divider),
-            if (onOpenDriverDemo != null) ...[
+            if (diagnosticsEnabled) ...[
               ListTile(
-                key: const Key('driver-demo-entry'),
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.science_outlined, color: palette.muted),
-                title: const Text('Диагностика интерфейса водителя'),
+                leading: Icon(
+                  Icons.phonelink_setup_outlined,
+                  color: palette.muted,
+                ),
+                title: const Text('Проверка устройства'),
                 trailing: Icon(Icons.chevron_right, color: palette.muted),
-                onTap: onOpenDriverDemo,
+                onTap: () => Navigator.pushNamed(context, '/device-check'),
               ),
               Divider(color: palette.divider),
+              if (onOpenDriverDemo != null) ...[
+                ListTile(
+                  key: const Key('driver-demo-entry'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.science_outlined, color: palette.muted),
+                  title: const Text('Диагностика интерфейса водителя'),
+                  trailing: Icon(Icons.chevron_right, color: palette.muted),
+                  onTap: onOpenDriverDemo,
+                ),
+                Divider(color: palette.divider),
+              ],
             ],
-            if (device != null) ...[
+            if (device != null && diagnosticsEnabled) ...[
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(Icons.settings_outlined, color: palette.muted),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../maps/address_models.dart';
@@ -58,6 +60,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
   String _tileKey = '';
   bool _choosing = false;
   MapLocationAction? _location;
+  String? _gpsMessage;
   @override
   void initState() {
     super.initState();
@@ -71,17 +74,39 @@ class _PassengerScreenState extends State<PassengerScreen> {
         device: device,
         isAllowed: () =>
             mounted && _controller.enabled && !_choosing && !_orderLocked,
-        onLocation: (point) =>
-            _controller.choosePoint(AddressField.pickup, point),
+        onLocation: (point) => _controller.useCurrentLocation(
+          point,
+          replace: _location?.automaticRequest != true,
+        ),
         onError: (message) {
+          if (_location?.automaticRequest == true) {
+            if (mounted) setState(() => _gpsMessage = message);
+            return;
+          }
           if (mounted) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(SnackBar(content: Text(message)));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message),
+                action: _location?.needsSettings == true
+                    ? SnackBarAction(
+                        label: 'Настройки',
+                        onPressed: () => unawaited(_location!.openSettings()),
+                      )
+                    : null,
+              ),
+            );
           }
         },
       );
     }
     _changed();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoLocate());
+  }
+
+  void _autoLocate() {
+    if (mounted && widget.enabled && widget.foreground && !_orderLocked) {
+      unawaited(_location?.locateAutomatically());
+    }
   }
 
   void _focusChanged() {
@@ -145,13 +170,18 @@ class _PassengerScreenState extends State<PassengerScreen> {
       _tileKey = key;
       _tiles = key.isEmpty
           ? null
-          : (widget.tileSessionFactory ?? (key) => MapTileSession(key))(key);
+          : (widget.tileSessionFactory ??
+                (key) => MapTileSession(
+                  key,
+                  transport: widget.mapSettings.transport(),
+                ))(key);
     }
   }
 
   @override
   void didUpdateWidget(covariant PassengerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoLocate());
     if (oldWidget.dispatch != widget.dispatch) {
       oldWidget.dispatch?.removeListener(_dispatchChanged);
       widget.dispatch?.addListener(_dispatchChanged);
@@ -423,7 +453,9 @@ class _PassengerScreenState extends State<PassengerScreen> {
       if (_route.busy || _route.route != null || _route.message != null) {
         extraHeight += scaler.scale(16) * 1.4 + 24;
       }
-      final compactHeight = 330 + (scaler.scale(15) - 15) * 7;
+      final compactHeight =
+          (widget.dispatch?.hasActiveTrip == true ? 320 : 390) +
+          (scaler.scale(15) - 15) * 7;
       return PopScope(
         canPop: !_searching,
         onPopInvokedWithResult: (didPop, _) {
@@ -435,7 +467,16 @@ class _PassengerScreenState extends State<PassengerScreen> {
           preferredHeight:
               compactHeight +
               extraHeight +
-              (widget.dispatch?.state?.trip != null ? 190 : 0),
+              (!_orderLocked &&
+                      (_controller.pickup.place == null ||
+                          _controller.destination.place == null)
+                  ? 44
+                  : 0) +
+              (_gpsMessage != null && _controller.pickup.place == null
+                  ? 44
+                  : 0) +
+              (widget.dispatch?.message != null ? 100 : 0) +
+              (widget.dispatch?.state == null ? 20 : 0),
           onCollapsed: _closeSearch,
           overlay: Positioned(
             top: 12,
@@ -487,10 +528,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
               pickup: _place(AddressField.pickup),
               destination: _place(AddressField.destination),
               route: _route.route,
-              focusPoint: _controller
-                  .draft(_controller.activeField)
-                  .place
-                  ?.point,
+              focusPoint: _place(_controller.activeField)?.point,
               onLocate: _orderLocked ? null : _location?.locate,
               locating: _location?.busy ?? false,
             ),
@@ -521,7 +559,9 @@ class _PassengerScreenState extends State<PassengerScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              'Куда едем?',
+                              widget.dispatch?.hasActiveTrip == true
+                                  ? 'Текущий заказ'
+                                  : 'Куда едем?',
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                           ),
@@ -534,14 +574,31 @@ class _PassengerScreenState extends State<PassengerScreen> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      _field(AddressField.pickup),
-                      const SizedBox(height: 8),
-                      _field(AddressField.destination),
-                      const SizedBox(height: 12),
+                      if (widget.dispatch?.hasActiveTrip != true) ...[
+                        _field(AddressField.pickup),
+                        const SizedBox(height: 8),
+                        _field(AddressField.destination),
+                        const SizedBox(height: 12),
+                      ],
                       if (_searching)
                         _results()
                       else ...[
+                        if (_gpsMessage != null &&
+                            _controller.pickup.place == null)
+                          Text(
+                            _gpsMessage!,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
                         _routeStatus(),
+                        if (!_orderLocked &&
+                            (_controller.pickup.place == null ||
+                                _controller.destination.place == null))
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 6),
+                            child: Text(
+                              'Выберите адрес из подсказок или точку на карте, чтобы подтвердить маршрут.',
+                            ),
+                          ),
                         if (widget.dispatch case final dispatch?) ...[
                           DispatchPanel(controller: dispatch),
                           if (!dispatch.hasActiveTrip &&

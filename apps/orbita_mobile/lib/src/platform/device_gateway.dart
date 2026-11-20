@@ -50,6 +50,8 @@ class DeviceState {
     this.sdk = 0,
     this.notifications = false,
     this.location = 'denied',
+    this.foregroundLocationRequested = false,
+    this.locationPermanentlyDenied = false,
     this.backgroundLocation = false,
     this.locationEnabled = false,
     this.serviceRunning = false,
@@ -62,6 +64,8 @@ class DeviceState {
     sdk: (map['sdk'] as num?)?.toInt() ?? 0,
     notifications: map['notifications'] == true,
     location: map['location'] as String? ?? 'denied',
+    foregroundLocationRequested: map['foregroundLocationRequested'] == true,
+    locationPermanentlyDenied: map['locationPermanentlyDenied'] == true,
     backgroundLocation: map['backgroundLocation'] == true,
     locationEnabled: map['locationEnabled'] == true,
     serviceRunning: map['serviceRunning'] == true,
@@ -73,6 +77,7 @@ class DeviceState {
   final int sdk;
   final bool notifications;
   final String location;
+  final bool foregroundLocationRequested, locationPermanentlyDenied;
   final bool backgroundLocation;
   final bool locationEnabled;
   final bool serviceRunning;

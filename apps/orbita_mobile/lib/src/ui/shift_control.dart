@@ -136,7 +136,7 @@ class _ShiftControlState extends State<ShiftControl> {
   Widget build(BuildContext context) {
     final palette = OrbitaPalette.of(context);
     final label = _pending
-        ? 'Подтверждаем…'
+        ? 'Подключаем…'
         : widget.confirmedOnline
         ? 'На линии'
         : 'Не на линии';
@@ -188,9 +188,7 @@ class _ShiftControlState extends State<ShiftControl> {
                     key: const Key('shift-track'),
                     height: _height(context, label, hint, constraints.maxWidth),
                     decoration: BoxDecoration(
-                      color: widget.confirmedOnline
-                          ? palette.accentSoft
-                          : palette.surfaceVariant,
+                      color: palette.surfaceVariant,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: _error != null

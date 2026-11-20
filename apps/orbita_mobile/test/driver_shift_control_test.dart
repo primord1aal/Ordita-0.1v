@@ -116,7 +116,7 @@ void main() {
     await slide(tester, 0.87);
     expect(calls, 1);
     expect(online, isFalse);
-    expect(find.text('Подтверждаем…'), findsOneWidget);
+    expect(find.text('Подключаем…'), findsOneWidget);
     await slide(tester, -1);
     expect(calls, 1);
     pending.complete();

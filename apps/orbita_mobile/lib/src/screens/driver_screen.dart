@@ -40,6 +40,7 @@ class DriverScreen extends StatefulWidget {
 class _DriverScreenState extends State<DriverScreen> {
   MapLocationAction? _location;
   GeoPoint? _position;
+  String? _gpsMessage;
 
   @override
   void initState() {
@@ -47,25 +48,42 @@ class _DriverScreenState extends State<DriverScreen> {
     if (widget.device case final device?) {
       _location = MapLocationAction(
         device: device,
-        isAllowed: () =>
-            mounted &&
-            widget.enabled &&
-            widget.foreground &&
-            widget.mapSettings.configured,
+        isAllowed: () => mounted && widget.enabled && widget.foreground,
         onLocation: (point) => setState(() => _position = point),
         onError: (message) {
+          if (_location?.automaticRequest == true) {
+            if (mounted) setState(() => _gpsMessage = message);
+            return;
+          }
           if (mounted) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(SnackBar(content: Text(message)));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message),
+                action: _location?.needsSettings == true
+                    ? SnackBarAction(
+                        label: 'Настройки',
+                        onPressed: () => unawaited(_location!.openSettings()),
+                      )
+                    : null,
+              ),
+            );
           }
         },
       );
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoLocate());
+  }
+
+  void _autoLocate() {
+    if (mounted && widget.enabled && widget.foreground) {
+      unawaited(_location?.locateAutomatically());
     }
   }
 
   @override
   void didUpdateWidget(covariant DriverScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoLocate());
     if (!widget.enabled || !widget.foreground) _location?.cancel(notify: false);
   }
 
@@ -91,12 +109,31 @@ class _DriverScreenState extends State<DriverScreen> {
         available:
             widget.enabled &&
             widget.foreground &&
-            (widget.dispatch?.canAct ?? false),
+            (widget.dispatch?.state != null &&
+                (widget.dispatch?.message == null ||
+                    widget.dispatch?.busy == true)),
         requestChange: widget.dispatch?.setOnline,
       ),
       panel: widget.dispatch == null
           ? const _EmptyPanel(online: false)
-          : _DriverPanel(child: DispatchPanel(controller: widget.dispatch!)),
+          : _DriverPanel(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_gpsMessage != null)
+                    Text(
+                      _gpsMessage!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  if (_location?.needsSettings == true)
+                    TextButton(
+                      onPressed: _location?.openSettings,
+                      child: const Text('Открыть настройки'),
+                    ),
+                  DispatchPanel(controller: widget.dispatch!),
+                ],
+              ),
+            ),
       panelHeight: widget.dispatch?.state?.trip != null
           ? 330
           : _EmptyPanel.height(context),
@@ -465,9 +502,9 @@ class _DriverBody extends StatelessWidget {
       if (slider != null)
         SliverToBoxAdapter(
           child: ColoredBox(
-            color: OrbitaPalette.of(context).mapLand,
+            color: OrbitaPalette.of(context).background,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
               child: slider,
             ),
           ),

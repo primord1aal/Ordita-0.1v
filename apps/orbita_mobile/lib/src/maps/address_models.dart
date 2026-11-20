@@ -37,7 +37,7 @@ class MapFailure implements Exception {
   final MapFailureKind kind;
   String get message => switch (kind) {
     MapFailureKind.configuration =>
-      'Карты пока не настроены или ключ недействителен.',
+      'Карты временно недоступны. Попробуйте обновить карту позже.',
     MapFailureKind.network =>
       'Нет связи с картографическим сервисом. Адрес можно ввести вручную.',
     MapFailureKind.timeout =>

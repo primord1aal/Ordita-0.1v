@@ -37,6 +37,8 @@ class _MapPanelLayoutState extends State<MapPanelLayout> {
   double? _extent, _lastTarget;
   double _spaceBelow = 0;
   bool _scheduled = false, _measuring = false, _wasAboveMinimum = false;
+  (Size, EdgeInsets, double)? _lastMetrics;
+  bool _animateNextTarget = false;
 
   void _measureBounds() {
     if (_measuring) return;
@@ -65,12 +67,23 @@ class _MapPanelLayoutState extends State<MapPanelLayout> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scheduled = false;
       if (!mounted || !_sheet.isAttached) return;
-      _sheet.animateTo(
-        _lastTarget!,
-        duration: const Duration(milliseconds: 280),
-        curve: Curves.easeOutCubic,
-      );
+      if (_animateNextTarget) {
+        _sheet.animateTo(
+          _lastTarget!,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _sheet.jumpTo(_lastTarget!);
+      }
+      _animateNextTarget = false;
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant MapPanelLayout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _animateNextTarget = oldWidget.expanded != widget.expanded;
   }
 
   @override
@@ -82,7 +95,15 @@ class _MapPanelLayoutState extends State<MapPanelLayout> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, area) {
-      _measureBounds();
+      final metrics = (
+        MediaQuery.sizeOf(context),
+        MediaQuery.viewInsetsOf(context),
+        area.maxHeight,
+      );
+      if (_lastMetrics != metrics) {
+        _lastMetrics = metrics;
+        _measureBounds();
+      }
       final keyboard = math
           .max(0.0, MediaQuery.viewInsetsOf(context).bottom - _spaceBelow)
           .clamp(0.0, math.max(0.0, area.maxHeight - 80.0))
@@ -97,7 +118,7 @@ class _MapPanelLayoutState extends State<MapPanelLayout> {
           );
       final target = widget.expanded ? maximum : resting;
       _sync(target);
-      final extent = (_extent ?? minimum).clamp(minimum, maximum);
+      final extent = (_extent ?? target).clamp(minimum, maximum);
       return SizedBox.expand(
         key: _bounds,
         child: Stack(
@@ -106,9 +127,7 @@ class _MapPanelLayoutState extends State<MapPanelLayout> {
               child: widget.mapBuilder(context, extent * available + keyboard),
             ),
             if (widget.overlay != null) widget.overlay!,
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
+            Positioned(
               top: 0,
               left: 0,
               right: 0,

@@ -7,7 +7,8 @@ import 'package:flutter/widgets.dart';
 import '../platform/device_gateway.dart';
 import 'address_models.dart';
 
-/// One explicit map action. No background service or automatic tracking.
+/// Foreground one-shot location. Automatic startup asks at most once per install;
+/// repeated explicit requests follow the real Android permission state.
 class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
   MapLocationAction({
     required this.device,
@@ -23,19 +24,43 @@ class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
   final FutureOr<void> Function(GeoPoint) onLocation;
   final ValueChanged<String> onError;
   bool busy = false, _disposed = false;
+  bool _automaticAttempted = false;
+  bool needsSettings = false;
+  bool automaticRequest = false;
+  double? accuracyMeters;
+  DateTime? capturedAt;
+
+  Future<void> locateAutomatically() async {
+    if (_disposed || busy || _automaticAttempted || !isAllowed()) return;
+    _automaticAttempted = true;
+    await locate(automatic: true);
+  }
+
+  Future<void> openSettings() => device.openSettings();
   int _revision = 0;
 
   bool _current(int revision) =>
       !_disposed && revision == _revision && isAllowed();
 
-  Future<void> locate() async {
+  Future<void> locate({bool automatic = false}) async {
     if (_disposed || busy || !isAllowed()) return;
     final revision = ++_revision;
     busy = true;
+    automaticRequest = automatic;
+    needsSettings = false;
     _notify();
     try {
       var state = await device.read();
       if (!_current(revision)) return;
+      if (!state.hasForegroundLocation && state.locationPermanentlyDenied) {
+        needsSettings = true;
+        throw PlatformException(code: 'permission_permanent');
+      }
+      if (!state.hasForegroundLocation &&
+          automatic &&
+          state.foregroundLocationRequested) {
+        throw PlatformException(code: 'permission');
+      }
       if (!state.hasForegroundLocation) {
         await device.requestForegroundLocation();
         if (!_current(revision)) return;
@@ -43,7 +68,10 @@ class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
         if (!_current(revision)) return;
       }
       if (!state.hasForegroundLocation) {
-        throw PlatformException(code: 'permission');
+        needsSettings = state.locationPermanentlyDenied;
+        throw PlatformException(
+          code: needsSettings ? 'permission_permanent' : 'permission',
+        );
       }
       if (!state.locationEnabled) {
         throw PlatformException(code: 'location_disabled');
@@ -53,14 +81,19 @@ class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
       final point = GeoPoint(fix.latitude, fix.longitude);
       final age = DateTime.now().toUtc().difference(fix.capturedAt);
       if (!point.valid ||
+          !fix.accuracyMeters.isFinite ||
+          fix.accuracyMeters < 0 ||
           age > const Duration(minutes: 1) ||
           age < const Duration(seconds: -5)) {
         throw PlatformException(code: 'invalid_location');
       }
+      accuracyMeters = fix.accuracyMeters;
+      capturedAt = fix.capturedAt;
       await onLocation(point);
     } on PlatformException catch (error) {
       if (_current(revision)) {
         onError(switch (error.code) {
+          'permission_permanent' => 'Доступ к местоположению запрещён. Откройте настройки приложения, чтобы разрешить его.',
           'permission' =>
             'Разрешите доступ к местоположению в настройках приложения.',
           'location_disabled' => 'Включите геолокацию на устройстве.',
@@ -85,6 +118,7 @@ class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
   void cancel({bool notify = true}) {
     ++_revision;
     final wasBusy = busy;
+    if (wasBusy && automaticRequest) _automaticAttempted = false;
     busy = false;
     if (wasBusy) {
       unawaited(device.cancelCurrentLocation().catchError((Object _) {}));

@@ -175,6 +175,29 @@ class SupabaseAuthRepository implements AuthRepository, DispatchApi {
     }
     return ServerAccess.fromJson(result, userId);
   });
+  Future<({Uri uri, Map<String, String> headers})> mapRequest(
+    Uri source,
+  ) async {
+    final session = _sdk.auth.currentSession;
+    if (session == null || session.isExpired) {
+      throw const OrderFailure(OrderFailureKind.sessionRequired);
+    }
+    return (
+      uri: Uri.https(
+        configuration.healthUri.host,
+        '/functions/v1/orbita-maps',
+        {
+          'path': source.path,
+          ...Map.of(source.queryParameters)..remove('apiKey'),
+        },
+      ),
+      headers: {
+        'Authorization': 'Bearer ${session.accessToken}',
+        'apikey': configuration.publishableKey,
+      },
+    );
+  }
+
   @override
   SessionStore orderIntentStore(String userId) => SecureSessionStore(
     projectRef: '${configuration.projectRef}.order-intent.$userId',
@@ -195,7 +218,11 @@ class SupabaseAuthRepository implements AuthRepository, DispatchApi {
       await _persist(_sdk.auth.currentSession, generation);
       return result;
     } on sdk.PostgrestException catch (error) {
-      throw OrderFailure.fromServerMessage(error.message);
+      throw OrderFailure.fromServerMessage(
+        const {'PGRST202', '42883'}.contains(error.code)
+            ? error.code
+            : error.message,
+      );
     }
   }
 

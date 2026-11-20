@@ -10,12 +10,15 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final themeSettings = ThemeSettings();
   await themeSettings.load();
+  final auth = createAuthRepository();
   runApp(
     OrbitaApp(
       themeSettings: themeSettings,
       device: AndroidDeviceGateway(),
-      authRepository: createAuthRepository(),
-      mapSettings: MapSettings(store: SecureMapKeyStore())..load(),
+      authRepository: auth,
+      mapSettings: auth is SupabaseAuthRepository
+          ? MapSettings.managed(auth.mapRequest)
+          : MapSettings(),
     ),
   );
 }
