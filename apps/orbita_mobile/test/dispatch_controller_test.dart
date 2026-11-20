@@ -2,6 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:orbita_mobile/src/maps/map_settings.dart';
+import 'package:orbita_mobile/src/screens/passenger_screen.dart';
+import 'package:orbita_mobile/src/screens/driver_screen.dart';
+import 'package:orbita_mobile/src/ui/orbita_map.dart';
+import 'package:orbita_mobile/src/ui/theme.dart';
 import 'package:orbita_mobile/src/maps/address_models.dart';
 import 'package:orbita_mobile/src/orders/dispatch_controller.dart';
 import 'package:orbita_mobile/src/services/session_store.dart';
@@ -236,4 +242,114 @@ void main() {
       expect(c.pending, isNull);
     },
   );
+  testWidgets(
+    'restored passenger trip restores address fields and map points',
+    (tester) async {
+      final intent = {
+        'request_id': '00000000-0000-4000-8000-000000000004',
+        'pickup': {'address': pickup.label, 'latitude': 55, 'longitude': 82.43},
+        'destination': {
+          'address': destination.label,
+          'latitude': 55.01,
+          'longitude': 82.44,
+        },
+      };
+      final api = FakeApi()
+        ..handler = ((action, payload) async =>
+            envelope(order: trip(intent, status: 'accepted')));
+      final c = DispatchController(api: api, userId: passenger, driver: false);
+      final maps = MapSettings();
+      c.setEnabled(true);
+      await tester.pump();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: orbitaTheme(brightness: Brightness.light),
+          home: Scaffold(
+            body: PassengerScreen(mapSettings: maps, dispatch: c),
+          ),
+        ),
+      );
+      await tester.pump();
+      final field = tester.widget<TextField>(find.byKey(const Key('pickup')));
+      expect(field.controller!.text, pickup.label);
+      expect(field.enabled, isFalse);
+      final map = tester.widget<OrbitaMap>(
+        find.byKey(const Key('passenger-map')),
+      );
+      expect(map.pickup!.label, pickup.label);
+      expect(map.destination!.label, destination.label);
+      expect(find.text('Заказ принят водителем'), findsOneWidget);
+      expect(find.byKey(const Key('create-order')), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+      maps.dispose();
+    },
+  );
+
+  testWidgets('real driver screen submits offer and trip actions to API', (
+    tester,
+  ) async {
+    final intent = {
+      'request_id': '00000000-0000-4000-8000-000000000004',
+      'pickup': {'address': pickup.label, 'latitude': 55, 'longitude': 82.43},
+      'destination': {
+        'address': destination.label,
+        'latitude': 55.01,
+        'longitude': 82.44,
+      },
+    };
+    var status = 'created';
+    final api = FakeApi()
+      ..handler = ((action, payload) async {
+        if (action == 'respond') {
+          expect(payload['response'], 'accept');
+          status = 'accepted';
+        }
+        if (action == 'advance') {
+          status = payload['status'] as String;
+        }
+        return {
+          ...envelope(isDriver: true, order: trip(intent, status: status)),
+          'offer': status == 'created'
+              ? {
+                  'id': '00000000-0000-4000-8000-000000000005',
+                  'order_id': '00000000-0000-4000-8000-000000000003',
+                  'expires_at': '2026-11-20T16:00:25Z',
+                }
+              : null,
+        };
+      });
+    final c = DispatchController(api: api, userId: driver, driver: true);
+    final maps = MapSettings();
+    c.setEnabled(true);
+    await tester.pump();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orbitaTheme(brightness: Brightness.light),
+        home: Scaffold(
+          body: DriverScreen(mapSettings: maps, dispatch: c),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.ensureVisible(find.byKey(const Key('accept-offer')));
+    await tester.tap(find.byKey(const Key('accept-offer')));
+    await tester.pump();
+    expect(c.state!.trip!.status, 'accepted');
+    for (final label in [
+      'К клиенту',
+      'На месте',
+      'Начать поездку',
+      'Завершить поездку',
+    ]) {
+      await tester.ensureVisible(find.text(label));
+      await tester.tap(find.text(label));
+      await tester.pump();
+    }
+    expect(c.state!.trip!.status, 'completed');
+    expect(find.text('Поездка завершена'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    c.dispose();
+    maps.dispose();
+  });
 }

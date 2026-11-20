@@ -63,12 +63,14 @@ class _PassengerScreenState extends State<PassengerScreen> {
     super.initState();
     _controller.setEnabled(widget.enabled, foreground: widget.foreground);
     _controller.addListener(_changed);
+    widget.dispatch?.addListener(_dispatchChanged);
     _pickupFocus.addListener(_focusChanged);
     _destinationFocus.addListener(_focusChanged);
     if (widget.device case final device?) {
       _location = MapLocationAction(
         device: device,
-        isAllowed: () => mounted && _controller.enabled && !_choosing,
+        isAllowed: () =>
+            mounted && _controller.enabled && !_choosing && !_orderLocked,
         onLocation: (point) =>
             _controller.choosePoint(AddressField.pickup, point),
         onError: (message) {
@@ -94,17 +96,42 @@ class _PassengerScreenState extends State<PassengerScreen> {
     if (_searching) setState(() => _searching = false);
   }
 
+  bool get _orderLocked =>
+      widget.dispatch?.hasActiveTrip == true ||
+      widget.dispatch?.pending != null;
+  AddressPlace? _place(AddressField field) {
+    final trip = widget.dispatch?.state?.trip;
+    if (trip?.active == true) {
+      final point = field == AddressField.pickup
+          ? trip!.pickup
+          : trip!.destination;
+      return AddressPlace(point.address, point.point);
+    }
+    return _controller.draft(field).place;
+  }
+
+  void _dispatchChanged() {
+    if (!mounted) return;
+    if (_orderLocked) {
+      _location?.cancel(notify: false);
+      _closeSearch();
+    }
+    _changed();
+  }
+
   void _changed() {
     _route.update(
-      _controller.pickup.place?.point,
-      _controller.destination.place?.point,
+      _place(AddressField.pickup)?.point,
+      _place(AddressField.destination)?.point,
       enabled: _controller.enabled && !_choosing,
     );
     for (final entry in [
       (AddressField.pickup, _pickup),
       (AddressField.destination, _destination),
     ]) {
-      final value = _controller.draft(entry.$1).text;
+      final value = widget.dispatch?.hasActiveTrip == true
+          ? _place(entry.$1)!.label
+          : _controller.draft(entry.$1).text;
       if (entry.$2.text != value) {
         entry.$2.value = TextEditingValue(
           text: value,
@@ -125,6 +152,11 @@ class _PassengerScreenState extends State<PassengerScreen> {
   @override
   void didUpdateWidget(covariant PassengerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.dispatch != widget.dispatch) {
+      oldWidget.dispatch?.removeListener(_dispatchChanged);
+      widget.dispatch?.addListener(_dispatchChanged);
+      _changed();
+    }
     if (oldWidget.enabled != widget.enabled ||
         oldWidget.foreground != widget.foreground) {
       _controller.setEnabled(widget.enabled, foreground: widget.foreground);
@@ -141,6 +173,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
     _route.dispose();
     _pickupFocus.dispose();
     _destinationFocus.dispose();
+    widget.dispatch?.removeListener(_dispatchChanged);
     _controller.removeListener(_changed);
     _controller.dispose();
     _tiles?.close();
@@ -151,7 +184,9 @@ class _PassengerScreenState extends State<PassengerScreen> {
 
   Future<void> _choosePoint(AddressField field) async {
     final session = _tiles;
-    if (!_controller.enabled || session == null || _choosing) return;
+    if (!_controller.enabled || session == null || _choosing || _orderLocked) {
+      return;
+    }
     _closeSearch();
     _location?.cancel(notify: false);
     setState(() => _choosing = true);
@@ -230,7 +265,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
             tooltip: pickup
                 ? 'Выбрать отправление на карте'
                 : 'Выбрать назначение на карте',
-            onPressed: _tiles == null || !_controller.enabled
+            onPressed: _tiles == null || !_controller.enabled || _orderLocked
                 ? null
                 : () => _choosePoint(field),
             icon: const Icon(Icons.map_outlined),
@@ -449,14 +484,14 @@ class _PassengerScreenState extends State<PassengerScreen> {
               borderRadius: BorderRadius.zero,
               session: _tiles,
               enabled: _controller.enabled && !_choosing,
-              pickup: _controller.pickup.place,
-              destination: _controller.destination.place,
+              pickup: _place(AddressField.pickup),
+              destination: _place(AddressField.destination),
               route: _route.route,
               focusPoint: _controller
                   .draft(_controller.activeField)
                   .place
                   ?.point,
-              onLocate: _location?.locate,
+              onLocate: _orderLocked ? null : _location?.locate,
               locating: _location?.busy ?? false,
             ),
           ),
