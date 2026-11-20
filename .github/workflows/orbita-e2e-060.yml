@@ -2,6 +2,7 @@ name: Орбита 0.6.0 — проверки и ARM64 APK
 on:
   push:
     branches: [codex/orbita-e2e-test-060]
+    paths: ['apps/orbita_mobile/**']
   workflow_dispatch:
 permissions:
   contents: read
