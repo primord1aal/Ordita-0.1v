@@ -49,7 +49,10 @@ class _DriverScreenState extends State<DriverScreen> {
       _location = MapLocationAction(
         device: device,
         isAllowed: () => mounted && widget.enabled && widget.foreground,
-        onLocation: (point) => setState(() => _position = point),
+        onLocation: (point) => setState(() {
+          _position = point;
+          _gpsMessage = null;
+        }),
         onError: (message) {
           if (_location?.automaticRequest == true) {
             if (mounted) setState(() => _gpsMessage = message);
