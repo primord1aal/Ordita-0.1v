@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../maps/map_settings.dart';
+import '../orders/dispatch_controller.dart';
+import '../orders/dispatch_panel.dart';
 import '../maps/map_location_action.dart';
 import '../maps/address_models.dart';
 import '../platform/device_gateway.dart';
@@ -18,6 +20,7 @@ class DriverScreen extends StatefulWidget {
   const DriverScreen({
     required this.mapSettings,
     this.device,
+    this.dispatch,
     this.enabled = true,
     this.foreground = true,
     this.tileSessionFactory,
@@ -26,6 +29,7 @@ class DriverScreen extends StatefulWidget {
 
   final MapSettings mapSettings;
   final DeviceGateway? device;
+  final DispatchController? dispatch;
   final bool enabled, foreground;
   final MapTileSession Function(String)? tileSessionFactory;
 
@@ -73,7 +77,7 @@ class _DriverScreenState extends State<DriverScreen> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: _location ?? const AlwaysStoppedAnimation<double>(0),
+    listenable: Listenable.merge([?_location, ?widget.dispatch]),
     builder: (context, _) => _DriverBody(
       mapSettings: widget.mapSettings,
       enabled: widget.enabled,
@@ -82,9 +86,20 @@ class _DriverScreenState extends State<DriverScreen> {
       focusPoint: _position,
       onLocate: _location?.locate,
       locating: _location?.busy ?? false,
-      slider: const ShiftControl(),
-      panel: const _EmptyPanel(online: false),
-      panelHeight: _EmptyPanel.height(context),
+      slider: ShiftControl(
+        confirmedOnline: widget.dispatch?.state?.online ?? false,
+        available:
+            widget.enabled &&
+            widget.foreground &&
+            (widget.dispatch?.canAct ?? false),
+        requestChange: widget.dispatch?.setOnline,
+      ),
+      panel: widget.dispatch == null
+          ? const _EmptyPanel(online: false)
+          : _DriverPanel(child: DispatchPanel(controller: widget.dispatch!)),
+      panelHeight: widget.dispatch?.state?.trip != null
+          ? 330
+          : _EmptyPanel.height(context),
     ),
   );
 }

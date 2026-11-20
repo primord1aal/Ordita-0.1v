@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../auth/auth_controller.dart';
+import '../orders/dispatch_controller.dart';
 import '../auth/auth_repository.dart';
 import '../domain/contracts.dart';
 import '../maps/map_settings.dart';
@@ -139,6 +140,10 @@ class _AuthScreenState extends State<AuthScreen> {
                                 ? PreviewRole.driver
                                 : PreviewRole.passenger,
                             device: widget.device,
+                            dispatchApi: widget.repository is DispatchApi
+                                ? widget.repository as DispatchApi
+                                : null,
+                            userId: visible.userId,
                             mapSettings: widget.mapSettings,
                             mapAccessAllowed: _controller.canUseRole,
                             mapForeground: _controller.foreground,

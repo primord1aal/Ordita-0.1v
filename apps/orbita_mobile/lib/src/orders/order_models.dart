@@ -20,7 +20,9 @@ class OrderFailure implements Exception {
     switch (message) {
       'ORB_ORDER_INVALID_REQUEST' => OrderFailureKind.invalidRequest,
       'ORB_ORDER_SESSION_REQUIRED' => OrderFailureKind.sessionRequired,
+      'ORB_DISPATCH_FORBIDDEN' ||
       'ORB_ORDER_CREATE_FORBIDDEN' => OrderFailureKind.creationForbidden,
+      'ORB_DISPATCH_NOT_FOUND' ||
       'ORB_ORDER_NOT_FOUND' => OrderFailureKind.notFound,
       'ORB_ORDER_ACTIVE_EXISTS' => OrderFailureKind.activeOrderExists,
       'ORB_ORDER_IDEMPOTENCY_CONFLICT' => OrderFailureKind.idempotencyConflict,

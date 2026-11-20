@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../domain/contracts.dart';
+import '../orders/dispatch_controller.dart';
 import '../maps/map_settings.dart';
 import '../maps/map_tiles.dart';
 import '../maps/geoapify_service.dart';
@@ -26,10 +27,14 @@ class PreviewShell extends StatefulWidget {
     this.routeServiceFactory,
     this.tileSessionFactory,
     this.accountPanel,
+    this.dispatchApi,
+    this.userId,
     this.onSignOut,
     this.onOpenDriverDemo,
     super.key,
   });
+  final DispatchApi? dispatchApi;
+  final String? userId;
   final PreviewRole role;
   final DeviceGateway device;
   final MapSettings mapSettings;
@@ -47,6 +52,32 @@ class PreviewShell extends StatefulWidget {
 
 class _PreviewShellState extends State<PreviewShell> {
   int _index = 0;
+  DispatchController? _dispatch;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.dispatchApi != null && widget.userId != null) {
+      _dispatch = DispatchController(
+        api: widget.dispatchApi!,
+        userId: widget.userId!,
+        driver: widget.role == PreviewRole.driver,
+      );
+      _dispatch!.setEnabled(widget.mapAccessAllowed && widget.mapForeground);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant PreviewShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _dispatch?.setEnabled(widget.mapAccessAllowed && widget.mapForeground);
+  }
+
+  @override
+  void dispose() {
+    _dispatch?.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final driver = widget.role == PreviewRole.driver;
@@ -73,6 +104,7 @@ class _PreviewShellState extends State<PreviewShell> {
                   driver
                       ? DriverScreen(
                           mapSettings: widget.mapSettings,
+                          dispatch: _dispatch,
                           device: widget.device,
                           enabled: widget.mapAccessAllowed && _index == 0,
                           foreground: widget.mapForeground,
@@ -80,6 +112,7 @@ class _PreviewShellState extends State<PreviewShell> {
                         )
                       : PassengerScreen(
                           mapSettings: widget.mapSettings,
+                          dispatch: _dispatch,
                           device: widget.device,
                           enabled: widget.mapAccessAllowed && _index == 0,
                           foreground: widget.mapForeground,

@@ -8,10 +8,12 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sdk;
 import '../backend/test_backend_configuration.dart';
 import '../services/session_store.dart';
 import 'auth_repository.dart';
+import '../orders/dispatch_controller.dart';
+import '../orders/order_models.dart';
 import 'bounded_http_client.dart';
 import 'secure_auth_storage.dart';
 
-class SupabaseAuthRepository implements AuthRepository {
+class SupabaseAuthRepository implements AuthRepository, DispatchApi {
   SupabaseAuthRepository(this.configuration)
     : storage = SecureAuthStorage(
         SecureSessionStore(projectRef: configuration.projectRef),
@@ -173,6 +175,30 @@ class SupabaseAuthRepository implements AuthRepository {
     }
     return ServerAccess.fromJson(result, userId);
   });
+  @override
+  SessionStore orderIntentStore(String userId) => SecureSessionStore(
+    projectRef: '${configuration.projectRef}.order-intent.$userId',
+  );
+
+  @override
+  Future<Object?> dispatch(String action, Map<String, Object?> payload) async {
+    final generation = _generation;
+    if (_sdk.auth.currentSession == null) {
+      throw const OrderFailure(OrderFailureKind.sessionRequired);
+    }
+    try {
+      final result = await _sdk.rpc(
+        'orbita_dispatch',
+        params: {'p_action': action, 'p_payload': payload},
+      );
+      _current(generation);
+      await _persist(_sdk.auth.currentSession, generation);
+      return result;
+    } on sdk.PostgrestException catch (error) {
+      throw OrderFailure.fromServerMessage(error.message);
+    }
+  }
+
   @override
   void cancelPending() {
     _generation++;

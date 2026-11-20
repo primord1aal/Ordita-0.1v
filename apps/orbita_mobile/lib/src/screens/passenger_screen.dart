@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../maps/address_models.dart';
+import '../orders/dispatch_controller.dart';
+import '../orders/dispatch_panel.dart';
 import '../maps/geoapify_service.dart';
 import '../maps/map_settings.dart';
 import '../maps/map_location_action.dart';
@@ -19,6 +21,7 @@ class PassengerScreen extends StatefulWidget {
   const PassengerScreen({
     required this.mapSettings,
     this.device,
+    this.dispatch,
     this.enabled = true,
     this.foreground = true,
     this.serviceFactory,
@@ -28,6 +31,7 @@ class PassengerScreen extends StatefulWidget {
   });
   final MapSettings mapSettings;
   final DeviceGateway? device;
+  final DispatchController? dispatch;
   final bool enabled;
   final bool foreground;
   final AddressService Function(String)? serviceFactory;
@@ -192,7 +196,10 @@ class _PassengerScreenState extends State<PassengerScreen> {
         minLines: 1,
         maxLines: 2,
         maxLength: 250,
-        enabled: _controller.enabled,
+        enabled:
+            _controller.enabled &&
+            widget.dispatch?.hasActiveTrip != true &&
+            widget.dispatch?.pending == null,
         style: TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w500,
@@ -296,7 +303,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
     builder: (context) => AlertDialog(
       title: const Text('Поиск и маршрут'),
       content: const Text(
-        'Для поиска адресов введённый текст и выбранные точки передаются Geoapify. Обе точки используются для построения маршрута. Черновик не отправляется в службу такси.',
+        'Для поиска адресов введённый текст и выбранные точки передаются Geoapify. Обе точки используются для построения маршрута. После нажатия «Заказать такси» адреса отправляются в службу такси.',
       ),
       actions: [
         TextButton(
@@ -349,7 +356,12 @@ class _PassengerScreenState extends State<PassengerScreen> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([_controller, _route, ?_location]),
+    listenable: Listenable.merge([
+      _controller,
+      _route,
+      ?_location,
+      ?widget.dispatch,
+    ]),
     builder: (context, _) {
       final palette = OrbitaPalette.of(context);
       final scaler = MediaQuery.textScalerOf(context);
@@ -385,7 +397,10 @@ class _PassengerScreenState extends State<PassengerScreen> {
         child: MapPanelLayout(
           expanded: _searching,
           compactHeight: compactHeight,
-          preferredHeight: compactHeight + extraHeight,
+          preferredHeight:
+              compactHeight +
+              extraHeight +
+              (widget.dispatch?.state?.trip != null ? 190 : 0),
           onCollapsed: _closeSearch,
           overlay: Positioned(
             top: 12,
@@ -492,16 +507,32 @@ class _PassengerScreenState extends State<PassengerScreen> {
                         _results()
                       else ...[
                         _routeStatus(),
-                        const FullWidthAction(
-                          'Заказать такси',
-                          key: Key('create-order'),
-                          onPressed: null,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Заказ недоступен.',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
+                        if (widget.dispatch case final dispatch?) ...[
+                          DispatchPanel(controller: dispatch),
+                          if (!dispatch.hasActiveTrip &&
+                              dispatch.pending == null)
+                            FullWidthAction(
+                              'Заказать такси',
+                              key: const Key('create-order'),
+                              onPressed:
+                                  dispatch.canAct &&
+                                      _controller.enabled &&
+                                      _controller.pickup.place != null &&
+                                      _controller.destination.place != null
+                                  ? () => dispatch.create(
+                                      _controller.pickup.place!,
+                                      _controller.destination.place!,
+                                    )
+                                  : null,
+                            ),
+                        ] else ...[
+                          const FullWidthAction(
+                            'Заказать такси',
+                            key: Key('create-order'),
+                            onPressed: null,
+                          ),
+                          const Text('Заказ недоступен.'),
+                        ],
                       ],
                       TextButton.icon(
                         onPressed: _addressPrivacy,
