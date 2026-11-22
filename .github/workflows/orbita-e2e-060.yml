@@ -106,7 +106,7 @@ jobs:
           path: |
             apps/orbita_mobile/build/app/test-results/testDebugUnitTest/
             apps/orbita_mobile/build/app/reports/tests/testDebugUnitTest/
-            apps/orbita_mobile/build/app/outputs/lint-results-debug.*
+            apps/orbita_mobile/build/app/reports/lint-results-debug.*
           if-no-files-found: warn
           retention-days: 7
       - name: Проверка тестовой конфигурации
