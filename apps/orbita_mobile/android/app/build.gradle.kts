@@ -59,3 +59,14 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// Robolectric downloads instrumented Android SDK jars independently of Gradle.
+// Use Maven Central's canonical endpoint for that resolver too, and retain the
+// complete cause if a remote dependency cannot be fetched.
+tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
+    systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+    testLogging {
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        events("failed", "skipped")
+    }
+}

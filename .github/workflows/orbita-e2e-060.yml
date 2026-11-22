@@ -96,6 +96,17 @@ jobs:
       - name: Android unit tests и lint
         working-directory: apps/orbita_mobile/android
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug
+      - name: Сохранить отчёты Android-проверок
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ORBITA-0.6.1-android-checks
+          path: |
+            apps/orbita_mobile/build/app/test-results/testDebugUnitTest/
+            apps/orbita_mobile/build/app/reports/tests/testDebugUnitTest/
+            apps/orbita_mobile/build/app/outputs/lint-results-debug.*
+          if-no-files-found: warn
+          retention-days: 7
       - name: Проверка тестовой конфигурации
         env:
           SUPABASE_TEST_URL: ${{ vars.SUPABASE_TEST_URL }}
