@@ -1,0 +1,156 @@
+name: Орбита — защищённая миграция карт
+run-name: "Орбита Maps: ${{ inputs.operation || 'verify' }} @ ${{ github.sha }}"
+on:
+  push:
+    branches: [codex/orbita-e2e-test-060]
+    paths:
+      - 'tools/maps_migration/**'
+      - '.github/workflows/orbita-maps-migration.yml'
+  workflow_dispatch:
+    inputs:
+      operation:
+        type: choice
+        options: [verify, preview, apply, inspect]
+        default: verify
+        description: 'Preview/Apply/Inspect требуют точного отдельного допуска Environment'
+      approved_sha:
+        type: string
+        default: ''
+        description: 'Полный SHA проверенного исходника исполнителя'
+      project_ref:
+        type: string
+        default: ''
+        description: 'Только fjqghohhohgvwlmefdmo'
+      preview_run_id:
+        type: string
+        default: ''
+        description: 'Для Apply: успешный Preview того же SHA'
+      backup_sha256:
+        type: string
+        default: ''
+        description: 'Для Apply: хеш защищённой копии из Preview'
+permissions:
+  contents: read
+concurrency:
+  group: orbita-cloud-migration-single-flight
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    container: debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+    timeout-minutes: 10
+    steps:
+      - name: Закреплённая PostgreSQL 17.11 (как в локальных проверках)
+        run: |
+          apt-get update
+          apt-get install --no-install-recommends -y python3 git ca-certificates curl gnupg
+          curl -fsSL https://deb.debian.org/debian/pool/main/p/postgresql-17/postgresql-17_17.11-0+deb13u1_amd64.deb -o /tmp/postgresql-17.deb
+          curl -fsSL https://deb.debian.org/debian/pool/main/p/postgresql-17/postgresql-client-17_17.11-0+deb13u1_amd64.deb -o /tmp/postgresql-client-17.deb
+          echo 'd2ce1ddffafa783f9acda4c92c86fc21e8288bff3782d739294f14fa797d7886  /tmp/postgresql-17.deb' | sha256sum --check
+          echo '9d8558f8dd57c8e92e218a20698383575d53742ca3f9e7c2b7fe5f246d5216ae  /tmp/postgresql-client-17.deb' | sha256sum --check
+          apt-get install --no-install-recommends -y /tmp/postgresql-17.deb /tmp/postgresql-client-17.deb
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Изолированные проверки SQL без облачных данных
+        run: |
+          mkdir -p /tmp/orbita-maps-checks build
+          chown postgres:postgres /tmp/orbita-maps-checks build
+          test_version="$(/usr/lib/postgresql/17/bin/postgres --version)"
+          runuser -u postgres -- env TMPDIR=/tmp/orbita-maps-checks PYTHONPYCACHEPREFIX=/tmp/orbita-maps-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s tools/maps_migration/tests -v > build/maps-migration-local-tests.txt 2>&1
+          cat build/maps-migration-local-tests.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: ORBITA-maps-local-tests
+          path: build/maps-migration-local-tests.txt
+          if-no-files-found: error
+          retention-days: 14
+  entry:
+    if: contains(fromJSON('["preview","apply","inspect"]'), inputs.operation) && vars.ORBITA_DISPATCH_REPO_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-e2e-test-060'
+    needs: verify
+    runs-on: ubuntu-24.04
+    outputs:
+      admitted: ${{ steps.check.outputs.admitted }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: check
+        env:
+          ORBITA_OPERATION: ${{ inputs.operation }}
+          ORBITA_DISPATCH_REPO_ENABLED: ${{ vars.ORBITA_DISPATCH_REPO_ENABLED }}
+          ORBITA_REQUEST_SHA: ${{ inputs.approved_sha }}
+          OUTSIDE_ORBITA_DISPATCH_CLOUD_ENABLED: ${{ vars.ORBITA_DISPATCH_CLOUD_ENABLED }}
+          OUTSIDE_ORBITA_DISPATCH_ALLOWED_SHA: ${{ vars.ORBITA_DISPATCH_ALLOWED_SHA }}
+          OUTSIDE_ORBITA_DISPATCH_ALLOWED_OPERATION: ${{ vars.ORBITA_DISPATCH_ALLOWED_OPERATION }}
+        run: python3 -m tools.maps_migration.github_gate entry
+  guarded:
+    if: needs.entry.outputs.admitted == 'true' && contains(fromJSON('["preview","apply","inspect"]'), inputs.operation)
+    needs: [verify, entry]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: orbita-mobile-test-orders-migrations
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Gate before database secrets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORBITA_OPERATION: ${{ inputs.operation }}
+          ORBITA_DISPATCH_REPO_ENABLED: ${{ vars.ORBITA_DISPATCH_REPO_ENABLED }}
+          ORBITA_DISPATCH_CLOUD_ENABLED: ${{ vars.ORBITA_DISPATCH_CLOUD_ENABLED }}
+          ORBITA_DISPATCH_ALLOWED_SHA: ${{ vars.ORBITA_DISPATCH_ALLOWED_SHA }}
+          ORBITA_DISPATCH_ALLOWED_OPERATION: ${{ vars.ORBITA_DISPATCH_ALLOWED_OPERATION }}
+          ORBITA_REQUEST_SHA: ${{ inputs.approved_sha }}
+          ORBITA_EXPECTED_REF: ${{ vars.SUPABASE_TEST_PROJECT_REF }}
+          ORBITA_FORBIDDEN_REF: ${{ vars.SUPABASE_FORBIDDEN_PROJECT_REF }}
+          ORBITA_REQUEST_REF: ${{ inputs.project_ref }}
+          ORBITA_PREVIEW_RUN_ID: ${{ inputs.preview_run_id }}
+          ORBITA_BACKUP_SHA256: ${{ inputs.backup_sha256 }}
+          ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
+        run: python3 -m tools.maps_migration.github_gate gate
+      - name: Fixed PostgreSQL image
+        run: docker pull postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
+      - name: Separately authorized operation
+        env:
+          PGPASSWORD: ${{ secrets.ORBITA_TEST_DB_PASSWORD }}
+          ORBITA_ORDERS_BACKUP_PASSPHRASE: ${{ inputs.operation == 'preview' && secrets.ORBITA_ORDERS_BACKUP_PASSPHRASE || '' }}
+          ORBITA_DATABASE_CA_PEM: ${{ vars.ORBITA_TEST_DB_CA_PEM }}
+          ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
+        run: python3 -m tools.maps_migration.runner
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: success() && inputs.operation == 'preview'
+        with:
+          name: ORBITA-maps-preview-${{ github.run_id }}
+          path: build/maps-public/preview.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: success() && inputs.operation == 'preview'
+        with:
+          name: ORBITA-maps-backup-${{ github.run_id }}
+          path: build/maps-backup/snapshot.tar.gpg
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && inputs.operation == 'apply'
+        with:
+          name: ORBITA-maps-apply-${{ github.run_id }}
+          path: build/maps-public/apply.json
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && inputs.operation == 'apply'
+        with:
+          name: ORBITA-maps-apply-inspection-${{ github.run_id }}
+          path: build/maps-public/apply_inspection.json
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && inputs.operation == 'inspect'
+        with:
+          name: ORBITA-maps-inspection-${{ github.run_id }}
+          path: build/maps-public/inspection.json
+          if-no-files-found: ignore

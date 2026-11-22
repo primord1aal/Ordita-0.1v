@@ -93,6 +93,8 @@ jobs:
           ' _ "$(id -un)" "$PWD/tool/checks_without_cloud.sh" "$(command -v flutter)"
       - name: Проверка компиляции Android
         run: flutter build apk --debug --no-pub --split-per-abi --target-platform android-arm64
+      - name: Подготовить проверенные Android-образы для Robolectric
+        run: python3 tool/fetch_robolectric.py
       - name: Android unit tests и lint
         working-directory: apps/orbita_mobile/android
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug

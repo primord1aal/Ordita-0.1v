@@ -1,0 +1,28 @@
+{
+  "artifacts": [
+    {
+      "artifact": "nativeruntime-dist-compat",
+      "version": "1.0.18",
+      "sha512": {
+        "pom": "fe784d6dfb4c860c95c768dcb285522f1cfd29e2b88aabb188b3623ea33525c794551dcdb4b014c22c63848d85f71af967481b762b82ac02d7bb936ee8c5b041",
+        "jar": "1d4122a1c9ea6ad7e5a8ba2d3fc08691fa5d6da9151acfbae93a111c57d2772b65d440e75abee9ed69ebf3b42c42530df1e2e17e7ab48cca2df6c215d4fd4415"
+      }
+    },
+    {
+      "artifact": "android-all-instrumented",
+      "version": "7.0.0_r1-robolectric-r1-i7",
+      "sha512": {
+        "pom": "1e5b3481d1b361b2a8cdc5420c4e523f6ee68adb3266856bb444142448877264ae3ccfe614e37e4c4ff2e34adf36ead6b9a31e94883573d3e97a42dd0a926784",
+        "jar": "0776aacfdcc10a0f11485b22016c04162697506b4c5b30678ca224cafc2550c1f4c0ab36a57f1ed899b1df02d5d8ee7d9130608dcf52173becd879a5689ad9a9"
+      }
+    },
+    {
+      "artifact": "android-all-instrumented",
+      "version": "14-robolectric-10818077-i7",
+      "sha512": {
+        "pom": "fb97a3028bb1eb4c4b3d1ab9c23c8b6b245842139f76194afc16afe002a212c2f93baff400a83cb6f35e525d0753e5b13aeda172fbdf0f628b25d21aa4a065d6",
+        "jar": "7cdc0b1306e7865f1acd25a363073149654caee5b8e278c5ae37ff4724185724eff39f0b0111800b521e640bb28698d9d2e655134a801569a0f07470e7b5f455"
+      }
+    }
+  ]
+}

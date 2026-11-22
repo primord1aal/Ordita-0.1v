@@ -1,0 +1,32 @@
+{
+  "repository": "primord1aal/Ordita-0.1v",
+  "branch": "codex/orbita-e2e-test-060",
+  "project_ref": "fjqghohhohgvwlmefdmo",
+  "forbidden_ref": "swrvjwlwxeaecdhnzkjv",
+  "environment": "orbita-mobile-test-orders-migrations",
+  "workflow": "orbita-maps-migration.yml",
+  "first_version": "202611050001",
+  "first_name": "stage3b_auth",
+  "first_path": "supabase/migrations/202611050001_stage3b_auth.sql",
+  "first_sha256": "31bf9839b8574680ace8cb168317a158b41e94a31a789f192033720afb36d79b",
+  "version": "20261120173504",
+  "name": "managed_maps",
+  "path": "supabase/proposals/20261120173504_managed_maps.sql",
+  "sha256": "bf89215b12a25eea37cbb683fe234cfc1f7e217e286f962a6190ede91daa240b",
+  "executor": "orbita_maps_transaction_v1",
+  "schemas": [
+    "auth",
+    "public",
+    "orbita_mobile_private",
+    "supabase_migrations"
+  ],
+  "second_version": "20261112172442",
+  "second_name": "passenger_orders",
+  "second_path": "supabase/proposals/20261112172442_passenger_orders.sql",
+  "second_sha256": "917623f5c455d5bf54656ee5afa50154a8d9ec7a922fb160643fdce3c75c83b0",
+  "third_version": "20261120160748",
+  "third_name": "taxi_dispatch",
+  "third_path": "supabase/proposals/20261120160748_taxi_dispatch.sql",
+  "third_sha256": "3535ec29bac1827006e7d1803be5b72d408a72bb5623bbd24c9155a49813cafb",
+  "dispatch_catalog_sha256": "6648f66cd426379483259038f290df0e47910bbab5152985785251b6302892fa"
+}

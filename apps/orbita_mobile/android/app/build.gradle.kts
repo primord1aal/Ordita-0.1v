@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -65,6 +67,7 @@ flutter {
 // complete cause if a remote dependency cannot be fetched.
 tasks.withType<org.gradle.api.tasks.testing.Test>().configureEach {
     systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+    systemProperty("maven.repo.local", File(System.getProperty("user.home"), ".m2/repository").absolutePath)
     testLogging {
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
         events("failed", "skipped")
