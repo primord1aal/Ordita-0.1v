@@ -16,7 +16,11 @@ class FakeTileTransport extends GeoapifyTransport {
   Completer<Uint8List>? pending;
   MapFailure? failure;
   @override
-  Future<Uint8List> get(Uri uri, {int maxBytes = 256 * 1024}) async {
+  Future<Uint8List> get(
+    Uri uri, {
+    int maxBytes = 256 * 1024,
+    Object? requestGroup,
+  }) async {
     calls.add(uri);
     if (failure != null) throw failure!;
     return pending?.future ?? Uint8List.fromList([1, 2, 3]);

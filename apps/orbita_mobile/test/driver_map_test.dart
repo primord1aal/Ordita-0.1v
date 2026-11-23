@@ -16,7 +16,11 @@ class _Tiles extends GeoapifyTransport {
   final calls = <Uri>[];
   int cancels = 0;
   @override
-  Future<Uint8List> get(Uri uri, {int maxBytes = 256 * 1024}) async {
+  Future<Uint8List> get(
+    Uri uri, {
+    int maxBytes = 256 * 1024,
+    Object? requestGroup,
+  }) async {
     calls.add(uri);
     return base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -24,9 +28,9 @@ class _Tiles extends GeoapifyTransport {
   }
 
   @override
-  void cancel() {
+  void cancel({Object? requestGroup}) {
     cancels++;
-    super.cancel();
+    super.cancel(requestGroup: requestGroup);
   }
 }
 

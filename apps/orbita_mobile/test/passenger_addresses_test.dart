@@ -12,8 +12,7 @@ import 'package:orbita_mobile/src/maps/passenger_address_controller.dart';
 import 'maps_test_fakes.dart';
 
 class _CloseAwareClient extends MockClient {
-  _CloseAwareClient(Future<http.Response> Function(http.Request) handler)
-    : super(handler);
+  _CloseAwareClient(super.handler);
 
   bool _closed = false;
 

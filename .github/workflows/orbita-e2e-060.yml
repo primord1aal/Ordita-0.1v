@@ -8,6 +8,8 @@ on:
       - 'supabase/functions/orbita-maps/**'
       - 'supabase/proposals/orbita_admin_read_model.sql'
       - 'supabase/tests/test_orbita_admin_read_sql.py'
+      - 'supabase/proposals/orbita_dispatch_autonomy.sql'
+      - 'supabase/tests/test_dispatch_autonomy_sql.py'
       - '.github/workflows/orbita-e2e-060.yml'
   workflow_dispatch:
 permissions:
@@ -40,6 +42,7 @@ jobs:
           runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_dispatch_sql.py -v
           runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_map_budget_sql.py -v
           runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_orbita_admin_read_sql.py -v
+          runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_dispatch_autonomy_sql.py -v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
