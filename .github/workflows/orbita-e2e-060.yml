@@ -1,8 +1,14 @@
-name: Орбита 0.6.1 — проверки и ARM64 APK
+name: Орбита 0.6.2 — проверки и ARM64 APK
 on:
   push:
     branches: [codex/orbita-e2e-test-060]
-    paths: ['apps/orbita_mobile/**']
+    paths:
+      - 'apps/orbita_mobile/**'
+      - 'apps/orbita_admin/**'
+      - 'supabase/functions/orbita-maps/**'
+      - 'supabase/proposals/orbita_admin_read_model.sql'
+      - 'supabase/tests/test_orbita_admin_read_sql.py'
+      - '.github/workflows/orbita-e2e-060.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,10 +39,11 @@ jobs:
           runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_orders_sql.py -v
           runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_dispatch_sql.py -v
           runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_map_budget_sql.py -v
+          runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_orbita_admin_read_sql.py -v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: ORBITA-0.6.1-local-sql
+          name: ORBITA-0.6.2-local-sql
           path: build/*-sql-results.json
           if-no-files-found: error
           retention-days: 14
@@ -80,6 +87,9 @@ jobs:
       - name: Proxy request safety tests
         working-directory: .
         run: node --experimental-strip-types --test supabase/functions/orbita-maps/*.test.ts
+      - name: Restricted administrative client tests
+        working-directory: .
+        run: node --test apps/orbita_admin/tests/*.test.mjs
       - name: Зависимости, формат и анализ
         run: |
           flutter pub get --enforce-lockfile
@@ -102,7 +112,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ORBITA-0.6.1-android-checks
+          name: ORBITA-0.6.2-android-checks
           path: |
             apps/orbita_mobile/build/app/test-results/testDebugUnitTest/
             apps/orbita_mobile/build/app/reports/tests/testDebugUnitTest/
@@ -123,13 +133,13 @@ jobs:
       - name: Установочный пакет
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk dist/ORBITA-0.6.1-test.apk
-          cp ../../docs/ORBITA_0.6.1.md dist/INSTALL-ANDROID.md
-          (cd dist && sha256sum ORBITA-0.6.1-test.apk > SHA256SUMS.txt)
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk dist/ORBITA-0.6.2-test.apk
+          cp ../../docs/ORBITA_0.6.2.md dist/INSTALL-ANDROID.md
+          (cd dist && sha256sum ORBITA-0.6.2-test.apk > SHA256SUMS.txt)
           echo 'APK собран. Облачная миграция диспетчеризации требует отдельного согласования владельца.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ORBITA-0.6.1-test-apk
+          name: ORBITA-0.6.2-test-apk
           path: apps/orbita_mobile/dist/
           if-no-files-found: error
           retention-days: 14

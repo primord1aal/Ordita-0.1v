@@ -33,7 +33,10 @@ class FakeAddressService implements AddressService {
   }
 
   @override
-  Future<String?> reverse(GeoPoint point) async {
+  Future<String?> reverse(
+    GeoPoint point, {
+    AddressLookup lookup = AddressLookup.form,
+  }) async {
     points.add(point);
     if (reversePending != null) return reversePending!.future;
     if (failure != null) throw failure!;
@@ -41,7 +44,7 @@ class FakeAddressService implements AddressService {
   }
 
   @override
-  void cancel() {
+  void cancel([AddressLookup? lookup]) {
     cancels++;
   }
 

@@ -74,10 +74,13 @@ class _PassengerScreenState extends State<PassengerScreen> {
         device: device,
         isAllowed: () =>
             mounted && _controller.enabled && !_choosing && !_orderLocked,
-        onLocation: (point) => _controller.useCurrentLocation(
-          point,
-          replace: _location?.automaticRequest != true,
-        ),
+        onLocation: (point) {
+          if (_gpsMessage != null) setState(() => _gpsMessage = null);
+          return _controller.useCurrentLocation(
+            point,
+            replace: _location?.automaticRequest != true,
+          );
+        },
         onError: (message) {
           if (_location?.automaticRequest == true) {
             if (mounted) setState(() => _gpsMessage = message);
@@ -110,9 +113,14 @@ class _PassengerScreenState extends State<PassengerScreen> {
   }
 
   void _focusChanged() {
-    if ((_pickupFocus.hasFocus || _destinationFocus.hasFocus) && !_searching) {
-      setState(() => _searching = true);
-    }
+    final field = _pickupFocus.hasFocus
+        ? AddressField.pickup
+        : _destinationFocus.hasFocus
+        ? AddressField.destination
+        : null;
+    if (field == null) return;
+    if (_controller.activeField != field) _controller.focus(field);
+    if (!_searching) setState(() => _searching = true);
   }
 
   void _closeSearch() {

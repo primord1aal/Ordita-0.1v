@@ -1,11 +1,35 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:orbita_mobile/src/maps/address_models.dart';
+import 'package:orbita_mobile/src/maps/geoapify_service.dart';
 import 'package:orbita_mobile/src/maps/map_settings.dart';
 import 'package:orbita_mobile/src/maps/passenger_address_controller.dart';
 
 import 'maps_test_fakes.dart';
+
+class _CloseAwareClient extends MockClient {
+  _CloseAwareClient(Future<http.Response> Function(http.Request) handler)
+    : super(handler);
+
+  bool _closed = false;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final response = await super.send(request);
+    if (_closed) throw http.ClientException('Закрыто', request.url);
+    return response;
+  }
+
+  @override
+  void close() {
+    _closed = true;
+    super.close();
+  }
+}
 
 void main() {
   late MapSettings settings;
@@ -209,5 +233,74 @@ void main() {
     await controller.useCurrentLocation(const GeoPoint(55, 82.43));
     expect(service.cancels, cancels);
     expect(controller.destination.text, 'Чик, Титова');
+  });
+
+  test(
+    'Ввод назначения не прерывает уточнение адреса по GPS',
+    () async {
+      final reverseStarted = Completer<void>();
+      final releaseReverse = Completer<void>();
+      final transport = GeoapifyTransport(
+        clientFactory: () => _CloseAwareClient((request) async {
+          final isReverse = request.url.path == '/v1/geocode/reverse';
+          if (isReverse) {
+            reverseStarted.complete();
+            await releaseReverse.future;
+          }
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode({
+                'results': [
+                  {
+                    'city': 'Чик',
+                    'street': isReverse ? 'улица Ленина' : 'улица Титова',
+                    'lat': 55.0,
+                    'lon': 82.43,
+                  },
+                ],
+              }),
+            ),
+            200,
+          );
+        }),
+      );
+      final addresses = PassengerAddressController(
+        settings,
+        serviceFactory: (key) =>
+            GeoapifyAddressService(key, transport: transport),
+      );
+      addTearDown(addresses.dispose);
+
+      const precisePoint = GeoPoint(55.007123, 82.441234);
+      final lookup = addresses.useCurrentLocation(precisePoint);
+      await reverseStarted.future;
+      addresses.edit(AddressField.destination, 'Чик, Титова');
+      await addresses.searchNow(AddressField.destination);
+      expect(addresses.pickup.busy, isTrue);
+      expect(addresses.destination.suggestions.single.label, 'Чик, улица Титова');
+
+      releaseReverse.complete();
+      await lookup;
+      expect(addresses.pickup.place!.point, same(precisePoint));
+      expect(addresses.pickup.text, 'Чик, улица Ленина');
+      expect(addresses.pickup.busy, isFalse);
+      expect(addresses.activeField, AddressField.destination);
+    },
+  );
+
+  test('Уход в фон сохраняет точку GPS и завершает ожидание адреса', () async {
+    final pending = Completer<String?>();
+    service.reversePending = pending;
+    const point = GeoPoint(55, 82.43);
+    final lookup = controller.useCurrentLocation(point);
+    controller.setEnabled(true, foreground: false);
+    controller.setEnabled(true);
+    pending.complete('Запоздалый результат');
+    await lookup;
+
+    expect(controller.pickup.place!.point, same(point));
+    expect(controller.pickup.text, startsWith('Координаты:'));
+    expect(controller.pickup.busy, isFalse);
+    expect(controller.pickup.message, contains('Адрес пока недоступен'));
   });
 }

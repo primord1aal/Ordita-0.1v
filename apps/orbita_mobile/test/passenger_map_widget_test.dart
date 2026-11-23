@@ -240,6 +240,24 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Перенос фокуса скрывает подсказки другого поля', (tester) async {
+    await mountMapAccount(tester);
+    final pickup = find.byKey(const Key('pickup'));
+    final destination = find.byKey(const Key('destination'));
+    await scrollTo(tester, pickup);
+    await tester.enterText(pickup, 'Чик, улица');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    await scrollTo(tester, find.text(examplePlace.label));
+    expect(find.text(examplePlace.label), findsOneWidget);
+
+    tester.widget<TextField>(destination).focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<TextField>(destination).focusNode!.hasFocus, isTrue);
+    expect(find.text(examplePlace.label), findsNothing);
+  });
+
   testWidgets('Периодическая проверка и вкладки сохраняют выбранный адрес', (
     tester,
   ) async {

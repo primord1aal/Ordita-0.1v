@@ -9,10 +9,15 @@ import 'package:http/io_client.dart';
 import 'address_models.dart';
 import 'geoapify_address_formatter.dart';
 
+enum AddressLookup { form, location }
+
 abstract interface class AddressService {
   Future<List<AddressPlace>> search(String query);
-  Future<String?> reverse(GeoPoint point);
-  void cancel();
+  Future<String?> reverse(
+    GeoPoint point, {
+    AddressLookup lookup = AddressLookup.form,
+  });
+  void cancel([AddressLookup? lookup]);
   void close();
 }
 
@@ -33,9 +38,13 @@ class GeoapifyTransport {
   final http.Client Function() _factory;
   final MapRequestProxy? proxy;
   final Duration timeout;
-  final _pending = <http.Client>{};
+  final _pending = <http.Client, Object?>{};
   bool _closed = false;
-  Future<Uint8List> get(Uri uri, {int maxBytes = 256 * 1024}) async {
+  Future<Uint8List> get(
+    Uri uri, {
+    int maxBytes = 256 * 1024,
+    Object? requestGroup,
+  }) async {
     if (_closed) throw const MapFailure(MapFailureKind.cancelled);
     if (uri.scheme != 'https' ||
         uri.userInfo.isNotEmpty ||
@@ -53,10 +62,13 @@ class GeoapifyTransport {
       throw const MapFailure(MapFailureKind.configuration);
     }
     final client = _factory();
-    _pending.add(client);
+    _pending[client] = requestGroup;
     try {
       return await (() async {
         final forwarded = await proxy?.call(uri);
+        if (!_pending.containsKey(client)) {
+          throw const MapFailure(MapFailureKind.cancelled);
+        }
         final request = http.Request('GET', forwarded?.uri ?? uri)
           ..followRedirects = false;
         if (forwarded != null) request.headers.addAll(forwarded.headers);
@@ -91,11 +103,13 @@ class GeoapifyTransport {
     }
   }
 
-  void cancel() {
-    for (final client in _pending.toList()) {
-      client.close();
+  void cancel({Object? requestGroup}) {
+    for (final entry in _pending.entries.toList()) {
+      if (requestGroup == null || entry.value == requestGroup) {
+        _pending.remove(entry.key);
+        entry.key.close();
+      }
     }
-    _pending.clear();
   }
 
   void close() {
@@ -139,14 +153,21 @@ class GeoapifyAddressService implements AddressService {
   }
 
   @override
-  Future<String?> reverse(GeoPoint point) async {
+  Future<String?> reverse(
+    GeoPoint point, {
+    AddressLookup lookup = AddressLookup.form,
+  }) async {
     if (!point.valid) throw const MapFailure(MapFailureKind.invalid);
-    final rows = await _rows('/v1/geocode/reverse', {
-      'lat': '${point.latitude}',
-      'lon': '${point.longitude}',
-      'lang': 'ru',
-      'limit': '1',
-    });
+    final rows = await _rows(
+      '/v1/geocode/reverse',
+      {
+        'lat': '${point.latitude}',
+        'lon': '${point.longitude}',
+        'lang': 'ru',
+        'limit': '1',
+      },
+      lookup: lookup,
+    );
     if (rows.isEmpty) return null;
     final first = rows.first;
     final label = first is Map ? formatGeoapifyAddress(first) : null;
@@ -158,8 +179,9 @@ class GeoapifyAddressService implements AddressService {
 
   Future<List<dynamic>> _rows(
     String path,
-    Map<String, String> parameters,
-  ) async {
+    Map<String, String> parameters, {
+    AddressLookup lookup = AddressLookup.form,
+  }) async {
     if (_key.isEmpty) throw const MapFailure(MapFailureKind.configuration);
     final bytes = await _transport.get(
       Uri.https('api.geoapify.com', path, {
@@ -167,6 +189,7 @@ class GeoapifyAddressService implements AddressService {
         'format': 'json',
         'apiKey': _key,
       }),
+      requestGroup: lookup,
     );
     try {
       final decoded = jsonDecode(utf8.decode(bytes));
@@ -180,7 +203,8 @@ class GeoapifyAddressService implements AddressService {
   }
 
   @override
-  void cancel() => _transport.cancel();
+  void cancel([AddressLookup? lookup]) =>
+      _transport.cancel(requestGroup: lookup);
   @override
   void close() => _transport.close();
 }

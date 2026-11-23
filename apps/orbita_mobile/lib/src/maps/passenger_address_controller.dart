@@ -51,7 +51,7 @@ class PassengerAddressController extends ChangeNotifier {
     _enabled = value;
     _foreground = foreground;
     if (!enabled) {
-      ++_locationRevision;
+      _cancelLocationLookup();
       _cancel();
     }
     // Маршрут выбора точки находится вне поддерева AuthScreen. Изменение
@@ -84,8 +84,8 @@ class PassengerAddressController extends ChangeNotifier {
     final item = draft(field);
     if (item.text == value) return;
     if (field == AddressField.pickup) {
+      _cancelLocationLookup();
       _pickupFromLocation = false;
-      ++_locationRevision;
     }
     _cancel();
     activeField = field;
@@ -109,9 +109,11 @@ class PassengerAddressController extends ChangeNotifier {
 
   Future<void> searchNow(AddressField field) async {
     if (!enabled) return;
+    final item = draft(field);
+    if (item.place != null) return;
     _cancel();
     activeField = field;
-    final item = draft(field), query = draft(field).text.trim();
+    final query = item.text.trim();
     if (!settings.configured || query.length < 3 || query.length > 250) {
       notifyListeners();
       return;
@@ -147,8 +149,8 @@ class PassengerAddressController extends ChangeNotifier {
   void select(AddressField field, AddressPlace place) {
     if (!enabled || !place.point.valid) return;
     if (field == AddressField.pickup) {
+      _cancelLocationLookup();
       _pickupFromLocation = false;
-      ++_locationRevision;
     }
     _cancel();
     activeField = field;
@@ -174,7 +176,9 @@ class PassengerAddressController extends ChangeNotifier {
         (pickup.text.isNotEmpty || pickup.place != null)) {
       return;
     }
-    final revision = ++_locationRevision;
+    if (activeField == AddressField.pickup) _cancel();
+    _cancelLocationLookup();
+    final revision = _locationRevision;
     _pickupFromLocation = true;
     final label = 'Координаты: ${point.caption}';
     pickup
@@ -191,7 +195,7 @@ class PassengerAddressController extends ChangeNotifier {
     bool current() =>
         enabled && revision == _locationRevision && _pickupFromLocation;
     try {
-      final address = await _service.reverse(point);
+      final address = await _service.reverse(point, lookup: AddressLookup.location);
       if (!current()) return;
       if (address != null) {
         pickup
@@ -277,13 +281,23 @@ class PassengerAddressController extends ChangeNotifier {
   void _cancel() {
     _generation++;
     _timer?.cancel();
-    _service.cancel();
-    pickup.busy = destination.busy = false;
+    _service.cancel(AddressLookup.form);
+    if (!_pickupFromLocation) pickup.busy = false;
+    destination.busy = false;
+  }
+
+  void _cancelLocationLookup() {
+    ++_locationRevision;
+    if (!_pickupFromLocation || !pickup.busy) return;
+    _service.cancel(AddressLookup.location);
+    pickup
+      ..busy = false
+      ..message = 'Местоположение определено. Адрес пока недоступен.';
   }
 
   void _configurationChanged() {
     if (_disposed || settings.clientKey == _key) return;
-    ++_locationRevision;
+    _cancelLocationLookup();
     _cancel();
     _service.close();
     _key = settings.clientKey;
