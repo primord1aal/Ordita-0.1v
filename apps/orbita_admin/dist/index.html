@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https://fjqghohhohgvwlmefdmo.supabase.co; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>Диспетчерская · Орбита</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <div class="brand"><span class="orbit" aria-hidden="true"></span> Орбита</div>
+      <button id="sign-out" class="button secondary" type="button" hidden>Выйти</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="sign-in-view" class="sign-in" aria-labelledby="sign-in-title">
+      <div class="sign-in-intro">
+        <h1 id="sign-in-title">Диспетчерская</h1>
+        <p>Просмотр заказов, истории поездок и очереди водителей.</p>
+      </div>
+      <form id="sign-in-form">
+        <label for="email">Электронная почта</label>
+        <input id="email" type="email" autocomplete="username" required maxlength="254">
+        <label for="password">Пароль</label>
+        <input id="password" type="password" autocomplete="current-password" required maxlength="128">
+        <button id="sign-in" class="button primary" type="submit" disabled>Войти</button>
+      </form>
+    </section>
+
+    <section id="dashboard-view" aria-labelledby="dashboard-title" hidden>
+      <div class="section-title">
+        <div>
+          <h1 id="dashboard-title" tabindex="-1">Диспетчерская</h1>
+          <p id="updated-at">Данные ещё не загружены</p>
+        </div>
+        <button id="refresh" class="button secondary" type="button">Обновить</button>
+      </div>
+    </section>
+    <p id="status" class="status" role="status" aria-live="polite">Проверяем настройки подключения…</p>
+
+    <div id="data" class="data" hidden>
+      <section class="panel" aria-labelledby="orders-title">
+        <div class="panel-head">
+          <h2 id="orders-title">Активные заказы</h2>
+          <span class="count" id="orders-count"></span>
+        </div>
+        <div class="scroll" tabindex="0" role="region" aria-labelledby="orders-title">
+          <table>
+            <thead><tr><th scope="col">Заказ</th><th scope="col">Откуда / куда</th><th scope="col">Состояние</th><th scope="col">Создан</th></tr></thead>
+            <tbody id="orders"></tbody>
+          </table>
+        </div>
+        <p id="orders-empty" class="empty" hidden>Активных заказов нет.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="queue-title">
+        <div class="panel-head">
+          <h2 id="queue-title">Очередь водителей</h2>
+          <span class="count" id="queue-count"></span>
+        </div>
+        <div class="scroll" tabindex="0" role="region" aria-labelledby="queue-title">
+          <table>
+            <thead><tr><th scope="col">Место</th><th scope="col">Водитель</th><th scope="col">Состояние</th><th scope="col">Заказ</th></tr></thead>
+            <tbody id="queue"></tbody>
+          </table>
+        </div>
+        <p id="queue-empty" class="empty" hidden>Водителей на линии нет.</p>
+      </section>
+
+      <section class="panel full" aria-labelledby="history-title">
+        <div class="panel-head">
+          <h2 id="history-title">Недавние поездки</h2>
+          <span class="count" id="history-count"></span>
+        </div>
+        <div class="scroll" tabindex="0" role="region" aria-labelledby="history-title">
+          <table>
+            <thead><tr><th scope="col">Заказ</th><th scope="col">Результат</th><th scope="col">Причина отмены</th><th scope="col">Завершён</th></tr></thead>
+            <tbody id="history"></tbody>
+          </table>
+        </div>
+        <p id="history-empty" class="empty" hidden>Завершённых заказов пока нет.</p>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
