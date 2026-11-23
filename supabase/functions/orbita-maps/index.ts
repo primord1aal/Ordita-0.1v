@@ -1,4 +1,4 @@
-import { upstream } from './proxy.ts';
+import { type MapPayload, upstream } from './proxy.ts';
 
 // The key is server-only. This is a separately approved deployment, not an APK define.
 const project = 'https://fjqghohhohgvwlmefdmo.supabase.co';
@@ -6,6 +6,31 @@ const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const providerKey = Deno.env.get('GEOAPIFY_SERVER_KEY') ?? '';
 const identities = new Map<string,{uid:string;expires:number}>();
 const verifying = new Map<string,Promise<string>>();
+const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+const pngHeader = [0, 0, 0, 13, 73, 72, 68, 82]; // Length and type of the IHDR chunk.
+
+function validPayload(kind: MapPayload, bytes: Uint8Array): boolean {
+  if (kind === 'tile') {
+    const headerSize = pngSignature.length + pngHeader.length + 13 + 4;
+    return bytes.length >= headerSize &&
+      pngSignature.every((value, index) => bytes[index] === value) &&
+      pngHeader.every((value, index) => bytes[pngSignature.length + index] === value) &&
+      !new TextDecoder().decode(bytes).includes(providerKey);
+  }
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    const payload = JSON.parse(text);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+    // Check decoded JSON too, so a Unicode-escaped echo is also rejected.
+    if (text.includes(providerKey) || JSON.stringify(payload).includes(providerKey)) return false;
+    return kind === 'places'
+      ? Array.isArray(payload.results)
+      : payload.type === 'FeatureCollection' && Array.isArray(payload.features);
+  } catch {
+    return false;
+  }
+}
+
 function response(status:number) {
   return new Response(JSON.stringify({error:status === 429 ? 'maps_limit' : 'maps_unavailable'}),
     {status,headers:{'content-type':'application/json','cache-control':'no-store'}});
@@ -15,7 +40,11 @@ async function identity(token:string):Promise<string> {
   if (known && known.expires > Date.now()) return known.uid;
   const pending = verifying.get(token); if (pending) return pending;
   const task = (async () => {
-    const auth = await fetch(project+'/auth/v1/user',{headers:{apikey:serviceKey,Authorization:token},signal:AbortSignal.timeout(5000)});
+    const auth = await fetch(project+'/auth/v1/user',{
+      headers:{apikey:serviceKey,Authorization:token},
+      redirect:'error',
+      signal:AbortSignal.timeout(5000),
+    });
     if (!auth.ok) throw Error('auth');
     const user = await auth.json(); if (typeof user.id !== 'string') throw Error('auth');
     // Only expiry of an already server-verified token is used, never decoded roles.
@@ -41,7 +70,7 @@ Deno.serve(async request => {
   try {
     const quota=await fetch(project+'/rest/v1/rpc/orbita_map_budget',{
       method:'POST',headers:{apikey:serviceKey,Authorization:'Bearer '+serviceKey,'Content-Type':'application/json'},
-      body:JSON.stringify({p_user:uid,p_units:plan.units}),signal:AbortSignal.timeout(5000)});
+      body:JSON.stringify({p_user:uid,p_units:plan.units}),redirect:'error',signal:AbortSignal.timeout(5000)});
     if (!quota.ok) return response(503);
     if (await quota.json() !== true) return response(429);
     plan.url.searchParams.set('apiKey',providerKey);
@@ -56,8 +85,8 @@ Deno.serve(async request => {
     }
     const bytes=new Uint8Array(size); let offset=0;
     for(const chunk of chunks) { bytes.set(chunk,offset); offset+=chunk.length; }
-    if(plan.type==='image/png' && !(bytes[0]===137 && bytes[1]===80 && bytes[2]===78 && bytes[3]===71)) return response(502);
-    if(plan.type==='application/json') { try { JSON.parse(new TextDecoder().decode(bytes)); } catch { return response(502); } }
-    return new Response(bytes,{headers:{'content-type':plan.type,'cache-control':'private,max-age=60','x-content-type-options':'nosniff'}});
+    if(!validPayload(plan.payload, bytes)) return response(502);
+    const type = plan.payload === 'tile' ? 'image/png' : 'application/json';
+    return new Response(bytes,{headers:{'content-type':type,'cache-control':'private,max-age=60','x-content-type-options':'nosniff'}});
   } catch { return response(504); }
 });
