@@ -195,7 +195,10 @@ class PassengerAddressController extends ChangeNotifier {
     bool current() =>
         enabled && revision == _locationRevision && _pickupFromLocation;
     try {
-      final address = await _service.reverse(point, lookup: AddressLookup.location);
+      final address = await _service.reverse(
+        point,
+        lookup: AddressLookup.location,
+      );
       if (!current()) return;
       if (address != null) {
         pickup

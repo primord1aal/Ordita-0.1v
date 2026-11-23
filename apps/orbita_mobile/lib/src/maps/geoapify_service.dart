@@ -158,16 +158,12 @@ class GeoapifyAddressService implements AddressService {
     AddressLookup lookup = AddressLookup.form,
   }) async {
     if (!point.valid) throw const MapFailure(MapFailureKind.invalid);
-    final rows = await _rows(
-      '/v1/geocode/reverse',
-      {
-        'lat': '${point.latitude}',
-        'lon': '${point.longitude}',
-        'lang': 'ru',
-        'limit': '1',
-      },
-      lookup: lookup,
-    );
+    final rows = await _rows('/v1/geocode/reverse', {
+      'lat': '${point.latitude}',
+      'lon': '${point.longitude}',
+      'lang': 'ru',
+      'limit': '1',
+    }, lookup: lookup);
     if (rows.isEmpty) return null;
     final first = rows.first;
     final label = first is Map ? formatGeoapifyAddress(first) : null;
