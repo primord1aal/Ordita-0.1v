@@ -8,6 +8,7 @@ LOCK = json.loads((Path(__file__).parent / 'lock.json').read_text())
 HEX40 = re.compile('[a-f0-9]{40}')
 HEX64 = re.compile('[a-f0-9]{64}')
 ENV_ONLY = ('ORBITA_DISPATCH_CLOUD_ENABLED', 'ORBITA_DISPATCH_ALLOWED_SHA', 'ORBITA_DISPATCH_ALLOWED_OPERATION')
+ORDERS_HISTORY_BRANCH = 'codex/orbita-flutter-design-integration'
 
 def versions():
     return [LOCK['first_version'], LOCK['second_version']]
@@ -49,13 +50,18 @@ def validate_request(c,root):
         require(str(c.get('preview_run_id','')).isdigit() and HEX64.fullmatch(c.get('backup_sha256','')),
                 'Verified Preview and backup required.')
 
-def validate_environment(environment,branches,reviews):
-    owner=LOCK['repository'].split('/')[0]
-    require(environment.get('name')==LOCK['environment'] and environment.get('can_admins_bypass') is False,
+def validate_environment(environment,branches,reviews,*,lock=LOCK):
+    owner=lock['repository'].split('/')[0]
+    require(environment.get('name')==lock['environment'] and environment.get('can_admins_bypass') is False,
             'Protected non-bypassable Environment required.')
     require(environment.get('deployment_branch_policy')=={'protected_branches':False,'custom_branch_policies':True},'Fixed branch policy required.')
     policies=branches.get('branch_policies',[])
-    require(len(policies)==1 and policies[0].get('name')==LOCK['branch'] and policies[0].get('type')=='branch','Single exact branch required.')
+    # GitHub retains the older, independently guarded orders workflow in this shared Environment.
+    # validate_source still admits only the dispatcher branch and the exact reviewed SHA.
+    expected={(lock['branch'],'branch'),(ORDERS_HISTORY_BRANCH,'branch')}
+    require(len(policies)==branches.get('total_count')==len(expected)
+            and {(rule.get('name'),rule.get('type')) for rule in policies}==expected,
+            'Expected exact dispatch and historical orders branch policies.')
     require(any(r.get('type')=='required_reviewers' and any(x.get('type')=='User'
             and x.get('reviewer',{}).get('login')==owner for x in r.get('reviewers',[]))
             for r in environment.get('protection_rules',[])),'Owner reviewer required.')

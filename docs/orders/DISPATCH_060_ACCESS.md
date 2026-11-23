@@ -16,7 +16,9 @@ Apply требует успешный Preview того же коммита и х
 
 ## Изменения настройки, требующие отдельного согласования владельца
 
-Текущий Environment [orbita-mobile-test-orders-migrations](https://github.com/primord1aal/Ordita-0.1v/settings/environments) разрешает ровно `codex/orbita-flutter-design-integration`. Для нового исполнителя требуется **заменить** единственную разрешённую ветку на `codex/orbita-e2e-test-060`, сохранив обязательного reviewer `primord1aal` и `can_admins_bypass=false`. Wildcard, разрешение всех веток и обход reviewer не нужны.
+Environment [orbita-mobile-test-orders-migrations](https://github.com/primord1aal/Ordita-0.1v/settings/environments) сохраняет два точных правила `branch`: для `codex/orbita-e2e-test-060` и исторической `codex/orbita-flutter-design-integration`. Новые исполнители сверяют весь этот список; запустить Dispatch или Maps из старой ветки нельзя, потому что вход дополнительно требует `refs/heads/codex/orbita-e2e-test-060` и согласованный SHA. Обязательный reviewer `primord1aal`, его фактическое одобрение конкретного запуска и `can_admins_bypass=false` обязательны.
+
+Ручной запуск выполняется через `gh workflow run orbita-dispatch-migration.yml --ref codex/orbita-e2e-test-060`. GitHub принял `verify` с этой ветки как запуск [45262315707](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45262315707). Этот режим запускает только изолированные проверки. Для Preview дополнительно передать `-f operation=preview -f approved_sha=<SHA> -f project_ref=fjqghohhohgvwlmefdmo` после настройки допуска ниже и дождаться штатного одобрения Environment.
 
 Repository Variable:
 

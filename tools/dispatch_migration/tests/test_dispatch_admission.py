@@ -27,21 +27,29 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(sources(ROOT)[-1]).hexdigest(),LOCK['sha256'])
         validate_request(self.context(),ROOT)
         for key,value in [('attempt','2'),('allowed_sha','b'*40),('operation','apply'),
-                          ('requested_ref',LOCK['forbidden_ref']),('git_ref','refs/heads/main')]:
+                          ('requested_ref',LOCK['forbidden_ref']),('git_ref','refs/heads/main'),
+                          ('git_ref','refs/heads/codex/orbita-flutter-design-integration')]:
             with self.subTest(key=key), self.assertRaises(GuardError):
                 validate_request({**self.context(),key:value},ROOT)
         with self.assertRaises(GuardError):
             validate_source(self.context(),ROOT,{'ORBITA_DISPATCH_ALLOWED_SHA':'a'*40})
-    def test_existing_environment_does_not_admit_new_branch(self):
+    def test_two_exact_rules_do_not_relax_source_or_owner_review(self):
         env={'name':LOCK['environment'],'id':1,'can_admins_bypass':False,
           'deployment_branch_policy':{'protected_branches':False,'custom_branch_policies':True},
           'protection_rules':[{'type':'required_reviewers','reviewers':[{'type':'User','reviewer':{'login':'primord1aal'}}]}]}
         reviews=[{'state':'approved','user':{'login':'primord1aal'},'environments':[{'id':1}]}]
-        branches=lambda name:{'branch_policies':[{'type':'branch','name':name}]}
-        with self.assertRaises(GuardError): validate_environment(env,branches('codex/orbita-flutter-design-integration'),reviews)
-        validate_environment(env,branches(LOCK['branch']),reviews)
-        with self.assertRaises(GuardError): validate_environment({**env,'can_admins_bypass':True},branches(LOCK['branch']),reviews)
-        with self.assertRaises(GuardError): validate_environment(env,branches(LOCK['branch']),[])
+        active={'type':'branch','name':LOCK['branch']}
+        legacy={'type':'branch','name':'codex/orbita-flutter-design-integration'}
+        approved={'total_count':2,'branch_policies':[legacy,active]}
+        validate_environment(env,approved,reviews)
+        for policies in ([legacy], [active,active], [active,{**legacy,'type':'tag'}],
+                         [active,{**legacy,'name':'codex/*'}], [active,legacy,{'type':'branch','name':'main'}]):
+            with self.subTest(policies=policies), self.assertRaises(GuardError):
+                validate_environment(env,{'total_count':len(policies),'branch_policies':policies},reviews)
+        with self.assertRaises(GuardError): validate_environment(env,{**approved,'total_count':3},reviews)
+        with self.assertRaises(GuardError): validate_environment({**env,'can_admins_bypass':True},approved,reviews)
+        with self.assertRaises(GuardError): validate_environment(env,approved,[])
+        with self.assertRaises(GuardError): validate_environment(env,approved,[{**reviews[0],'user':{'login':'other'}}])
     def test_no_prior_apply_and_no_unproven_backup(self):
         with self.assertRaises(GuardError): no_prior_apply([{'id':1,'event':'workflow_dispatch','display_title':'Орбита Dispatch: apply @ a'}],'2')
         with self.assertRaises(GuardError): validate_receipt({}, {**self.context(),'preview_run_id':'1','backup_sha256':'a'*64})

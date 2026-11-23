@@ -3,6 +3,7 @@ import hashlib
 import json
 import re
 from tools.orders_migration.admission import GuardError, require, validate_connection
+from tools.dispatch_migration.policy import validate_environment as validate_shared_environment
 
 LOCK = json.loads((Path(__file__).parent / 'lock.json').read_text())
 HEX40 = re.compile('[a-f0-9]{40}')
@@ -52,18 +53,7 @@ def validate_request(c,root):
                 'Verified Preview and backup required.')
 
 def validate_environment(environment,branches,reviews):
-    owner=LOCK['repository'].split('/')[0]
-    require(environment.get('name')==LOCK['environment'] and environment.get('can_admins_bypass') is False,
-            'Protected non-bypassable Environment required.')
-    require(environment.get('deployment_branch_policy')=={'protected_branches':False,'custom_branch_policies':True},'Fixed branch policy required.')
-    policies=branches.get('branch_policies',[])
-    require(len(policies)==1 and policies[0].get('name')==LOCK['branch'] and policies[0].get('type')=='branch','Single exact branch required.')
-    require(any(r.get('type')=='required_reviewers' and any(x.get('type')=='User'
-            and x.get('reviewer',{}).get('login')==owner for x in r.get('reviewers',[]))
-            for r in environment.get('protection_rules',[])),'Owner reviewer required.')
-    require(any(r.get('state')=='approved' and r.get('user',{}).get('login')==owner
-            and any(e.get('id')==environment.get('id') for e in r.get('environments',[])) for r in reviews),
-            'Actual owner approval for this run required.')
+    validate_shared_environment(environment,branches,reviews,lock=LOCK)
 
 def validate_receipt(receipt,c):
     require(receipt.get('status')=='preview_passed' and receipt.get('source_sha')==c['sha']
