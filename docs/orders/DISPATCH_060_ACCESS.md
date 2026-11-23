@@ -37,6 +37,6 @@ Variables только внутри указанного Environment:
 
 Ввод значений только через защищённые настройки GitHub, не в чат. Старые `ORBITA_TEST_DB_PASSWORD`, `ORBITA_ORDERS_BACKUP_PASSPHRASE`, `ORBITA_TEST_DB_CA_PEM`, тестовые URL/publishable key/Refs используются без смены значений. Значения старого допуска `ORBITA_ORDERS_*` не меняются.
 
-API текущего рабочего окружения позволяет прочитать защиты Environment, но возвращает HTTP 403 при чтении Secrets/Variables. Их наличие/значения не объявляются подтверждёнными. До согласования и настройки нового допуска Preview/backup/Apply не запускались. Никаких попыток обхода через прямой SQL или Supabase Editor не было.
+API текущего рабочего окружения возвращает HTTP 403 для Repository/Environment Variables. В [первом ручном запуске Preview](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45268820186) прошёл Verify, но отсутствовал положительный Repository-флаг: `entry` и `guarded` пропущены. В обновлённом workflow отсутствие флага приводит к явной ошибке в `entry`, до Environment и доступа к БД. Успешный Preview должен содержать успешный `guarded` и оба артефакта `ORBITA-dispatch-preview-<run>` и `ORBITA-dispatch-backup-<run>`.
 
 APK **0.6.0+12 от `d0cf7645f9083f5b1ba428131515cd916d84d3d7` сохраняется**. Изменений клиента и новой сборки нет; новый исполнитель проверяет тот же `contract_version=2`.

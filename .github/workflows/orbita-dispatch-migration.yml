@@ -65,7 +65,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
   entry:
-    if: contains(fromJSON('["preview","apply","inspect"]'), inputs.operation) && vars.ORBITA_DISPATCH_REPO_ENABLED == 'true' && github.ref == 'refs/heads/codex/orbita-e2e-test-060'
+    if: contains(fromJSON('["preview","apply","inspect"]'), inputs.operation) && github.ref == 'refs/heads/codex/orbita-e2e-test-060'
     needs: verify
     runs-on: ubuntu-24.04
     outputs:
@@ -83,7 +83,12 @@ jobs:
           OUTSIDE_ORBITA_DISPATCH_CLOUD_ENABLED: ${{ vars.ORBITA_DISPATCH_CLOUD_ENABLED }}
           OUTSIDE_ORBITA_DISPATCH_ALLOWED_SHA: ${{ vars.ORBITA_DISPATCH_ALLOWED_SHA }}
           OUTSIDE_ORBITA_DISPATCH_ALLOWED_OPERATION: ${{ vars.ORBITA_DISPATCH_ALLOWED_OPERATION }}
-        run: python3 -m tools.dispatch_migration.github_gate entry
+        run: |
+          if [[ "$ORBITA_DISPATCH_REPO_ENABLED" != true ]]; then
+            echo '::error::Set repository variable ORBITA_DISPATCH_REPO_ENABLED=true for operator-approved runs. No database connection.'
+            exit 1
+          fi
+          python3 -m tools.dispatch_migration.github_gate entry
   guarded:
     if: needs.entry.outputs.admitted == 'true' && contains(fromJSON('["preview","apply","inspect"]'), inputs.operation)
     needs: [verify, entry]
