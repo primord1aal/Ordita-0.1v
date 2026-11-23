@@ -93,7 +93,8 @@ jobs:
       - name: Зависимости, формат и анализ
         run: |
           flutter pub get --enforce-lockfile
-          dart format --output=none --set-exit-if-changed lib test tool
+          dart format lib test tool
+          git --no-pager diff --exit-code -- lib test tool
           flutter analyze --fatal-infos --no-pub
       - name: Flutter без внешней сети
         run: |
