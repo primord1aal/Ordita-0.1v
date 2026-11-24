@@ -44,10 +44,8 @@ def validate_source(c,root,outside=None):
 
 def validate_request(c,root):
     validate_source(c,root)
-    require(c.get('env_enabled')=='true' and c.get('allowed_sha')==c['sha']
-            and c.get('allowed_operation')==c['operation'],'Environment admission missing.')
-    require(c.get('expected_ref')==c.get('requested_ref')==LOCK['project_ref']
-            and c.get('forbidden_ref')==LOCK['forbidden_ref'],'Exact target required.')
+    from tools.migration_preflight import validate_admission_settings
+    validate_admission_settings(c, LOCK['project_ref'], LOCK['forbidden_ref'])
     if c['operation']=='apply':
         require(str(c.get('preview_run_id','')).isdigit() and HEX64.fullmatch(c.get('backup_sha256','')),
                 'Verified Preview and backup required.')

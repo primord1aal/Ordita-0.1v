@@ -5,6 +5,7 @@ on:
     branches: [codex/orbita-e2e-test-060]
     paths:
       - 'tools/dispatch_migration/**'
+      - 'tools/migration_preflight.py'
       - '.github/workflows/orbita-dispatch-migration.yml'
   workflow_dispatch:
     inputs:
@@ -29,6 +30,10 @@ on:
         type: string
         default: ''
         description: 'Для Apply: хеш защищённой копии из Preview'
+      recovery_run_id:
+        type: string
+        default: ''
+        description: 'Для восстановления после проверенного сбоя: только 45287941746 в Preview и Apply'
 permissions:
   contents: read
 concurrency:
@@ -80,9 +85,14 @@ jobs:
           ORBITA_OPERATION: ${{ inputs.operation }}
           ORBITA_DISPATCH_REPO_ENABLED: ${{ vars.ORBITA_DISPATCH_REPO_ENABLED }}
           ORBITA_REQUEST_SHA: ${{ inputs.approved_sha }}
+          ORBITA_RECOVERY_RUN_ID: ${{ inputs.recovery_run_id }}
           OUTSIDE_ORBITA_DISPATCH_CLOUD_ENABLED: ${{ vars.ORBITA_DISPATCH_CLOUD_ENABLED }}
           OUTSIDE_ORBITA_DISPATCH_ALLOWED_SHA: ${{ vars.ORBITA_DISPATCH_ALLOWED_SHA }}
           OUTSIDE_ORBITA_DISPATCH_ALLOWED_OPERATION: ${{ vars.ORBITA_DISPATCH_ALLOWED_OPERATION }}
+          OUTSIDE_ORBITA_DISPATCH_PASSENGER_EMAIL: ${{ secrets.ORBITA_DISPATCH_PASSENGER_EMAIL != '' }}
+          OUTSIDE_ORBITA_DISPATCH_PASSENGER_PASSWORD: ${{ secrets.ORBITA_DISPATCH_PASSENGER_PASSWORD != '' }}
+          OUTSIDE_ORBITA_DISPATCH_DRIVER_EMAIL: ${{ secrets.ORBITA_DISPATCH_DRIVER_EMAIL != '' }}
+          OUTSIDE_ORBITA_DISPATCH_DRIVER_PASSWORD: ${{ secrets.ORBITA_DISPATCH_DRIVER_PASSWORD != '' }}
         run: |
           if [[ "$ORBITA_DISPATCH_REPO_ENABLED" != true ]]; then
             echo '::error::Set repository variable ORBITA_DISPATCH_REPO_ENABLED=true for operator-approved runs. No database connection.'
@@ -118,6 +128,7 @@ jobs:
           ORBITA_REQUEST_REF: ${{ inputs.project_ref }}
           ORBITA_PREVIEW_RUN_ID: ${{ inputs.preview_run_id }}
           ORBITA_BACKUP_SHA256: ${{ inputs.backup_sha256 }}
+          ORBITA_RECOVERY_RUN_ID: ${{ inputs.recovery_run_id }}
           ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
         run: python3 -m tools.dispatch_migration.github_gate gate
       - name: Fixed PostgreSQL image
@@ -126,10 +137,10 @@ jobs:
         env:
           SUPABASE_TEST_PROJECT_REF: ${{ vars.SUPABASE_TEST_PROJECT_REF }}
           SUPABASE_TEST_PUBLISHABLE_KEY: ${{ vars.SUPABASE_TEST_PUBLISHABLE_KEY }}
-          ORBITA_DISPATCH_PASSENGER_EMAIL: ${{ inputs.operation == 'apply' && secrets.ORBITA_DISPATCH_PASSENGER_EMAIL || '' }}
-          ORBITA_DISPATCH_PASSENGER_PASSWORD: ${{ inputs.operation == 'apply' && secrets.ORBITA_DISPATCH_PASSENGER_PASSWORD || '' }}
-          ORBITA_DISPATCH_DRIVER_EMAIL: ${{ inputs.operation == 'apply' && secrets.ORBITA_DISPATCH_DRIVER_EMAIL || '' }}
-          ORBITA_DISPATCH_DRIVER_PASSWORD: ${{ inputs.operation == 'apply' && secrets.ORBITA_DISPATCH_DRIVER_PASSWORD || '' }}
+          ORBITA_DISPATCH_PASSENGER_EMAIL: ${{ contains(fromJSON('["preview","apply"]'), inputs.operation) && secrets.ORBITA_DISPATCH_PASSENGER_EMAIL || '' }}
+          ORBITA_DISPATCH_PASSENGER_PASSWORD: ${{ contains(fromJSON('["preview","apply"]'), inputs.operation) && secrets.ORBITA_DISPATCH_PASSENGER_PASSWORD || '' }}
+          ORBITA_DISPATCH_DRIVER_EMAIL: ${{ contains(fromJSON('["preview","apply"]'), inputs.operation) && secrets.ORBITA_DISPATCH_DRIVER_EMAIL || '' }}
+          ORBITA_DISPATCH_DRIVER_PASSWORD: ${{ contains(fromJSON('["preview","apply"]'), inputs.operation) && secrets.ORBITA_DISPATCH_DRIVER_PASSWORD || '' }}
           PGPASSWORD: ${{ secrets.ORBITA_TEST_DB_PASSWORD }}
           ORBITA_ORDERS_BACKUP_PASSPHRASE: ${{ inputs.operation == 'preview' && secrets.ORBITA_ORDERS_BACKUP_PASSPHRASE || '' }}
           ORBITA_DATABASE_CA_PEM: ${{ vars.ORBITA_TEST_DB_CA_PEM }}
@@ -141,6 +152,12 @@ jobs:
           name: ORBITA-dispatch-preview-${{ github.run_id }}
           path: build/dispatch-public/preview.json
           if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && inputs.operation == 'preview' && inputs.recovery_run_id != ''
+        with:
+          name: ORBITA-dispatch-recovery-auth-${{ github.run_id }}
+          path: build/dispatch-public/recovery-auth.json
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: success() && inputs.operation == 'preview'
         with:

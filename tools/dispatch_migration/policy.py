@@ -3,6 +3,7 @@ import hashlib
 import json
 import re
 from tools.orders_migration.admission import GuardError, require, validate_connection
+from tools.migration_preflight import validate_admission_settings
 
 LOCK = json.loads((Path(__file__).parent / 'lock.json').read_text())
 HEX40 = re.compile('[a-f0-9]{40}')
@@ -36,16 +37,17 @@ def validate_source(c,root,outside=None):
     require(c.get('repository')==LOCK['repository'] and c.get('git_ref')=='refs/heads/'+LOCK['branch'], 'Wrong repository/branch.')
     require(str(c.get('attempt'))=='1' and c.get('repo_enabled')=='true','No retry/repository admission.')
     require(HEX40.fullmatch(c.get('sha','')) and c['sha']==c.get('approved_sha')==c.get('checkout_sha'),'Exact source SHA required.')
+    if c.get('recovery_run_id'):
+        from .recovery import FAILED_APPLY_HEAD_SHA, FAILED_APPLY_RUN_ID
+        require(c['operation'] in ('preview', 'apply') and c['recovery_run_id'] == FAILED_APPLY_RUN_ID
+                and c['sha'] != FAILED_APPLY_HEAD_SHA, 'Exact recovery incident and new reviewed SHA required.')
     if outside is not None:
         require(all(not outside.get(k) for k in ENV_ONLY),'Admission controls outside Environment.')
     sources(root)
 
 def validate_request(c,root):
     validate_source(c,root)
-    require(c.get('env_enabled')=='true' and c.get('allowed_sha')==c['sha']
-            and c.get('allowed_operation')==c['operation'],'Environment admission missing.')
-    require(c.get('expected_ref')==c.get('requested_ref')==LOCK['project_ref']
-            and c.get('forbidden_ref')==LOCK['forbidden_ref'],'Exact target required.')
+    validate_admission_settings(c, LOCK['project_ref'], LOCK['forbidden_ref'])
     if c['operation']=='apply':
         require(str(c.get('preview_run_id','')).isdigit() and HEX64.fullmatch(c.get('backup_sha256','')),
                 'Verified Preview and backup required.')
@@ -74,6 +76,15 @@ def validate_receipt(receipt,c):
       and str(receipt.get('run_id'))==c['preview_run_id'] and receipt.get('project_ref')==LOCK['project_ref']
       and receipt.get('sql_sha256')==LOCK['sha256'] and receipt.get('executor')==LOCK['executor']
       and receipt.get('before_versions')==versions() and receipt.get('pending')==[LOCK['version']], 'Preview mismatch.')
+    require(receipt.get('settings_preflight') == 'passed'
+            and receipt.get('recovery_run_id', '') == c.get('recovery_run_id', ''),
+            'Preview must confirm configuration checks and match the recovery request.')
+    if c.get('recovery_run_id'):
+        from .recovery import RECOVERY_BASELINE_STATE_SHA256
+        auth = receipt.get('auth_preflight', {})
+        require(isinstance(auth, dict) and receipt.get('original_state_sha256') == RECOVERY_BASELINE_STATE_SHA256
+                and all(auth.get(field) is True for field in ('passenger', 'driver', 'local_sessions_closed')),
+                'Verified recovery account logins and cleanup required.')
     backup=receipt.get('backup',{})
     require(backup.get('encrypted_sha256')==c['backup_sha256'] and backup.get('decryption_checked') is True
       and backup.get('restore_checked') is True and backup.get('rehearsal_checked') is True
@@ -86,8 +97,3 @@ def validate_preview(run,receipt,c):
       and run.get('head_branch')==LOCK['branch'] and run.get('path')=='.github/workflows/'+LOCK['workflow']
       and run.get('display_title','').startswith('Орбита Dispatch: preview @'), 'Preview provenance mismatch.')
     validate_receipt(receipt,c)
-
-def no_prior_apply(runs,current):
-    require(not any(int(r['id'])<int(current) and r.get('event')=='workflow_dispatch'
-      and r.get('display_title','').startswith('Орбита Dispatch: apply @') for r in runs),
-      'Prior Apply attempt; read-only investigation required, no retry.')

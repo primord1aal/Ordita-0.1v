@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from tools.dispatch_migration.policy import (LOCK, GuardError, sources, history, validate_source,
-    validate_request, validate_environment, validate_receipt, no_prior_apply)
+    validate_request, validate_environment, validate_receipt)
 from tools.dispatch_migration.state import capture, state_hash, protected_hash, validate_before
 from tools.dispatch_migration.atomic import body, postflight_sql
 from tools.orders_migration.local import Native
@@ -50,8 +50,7 @@ class PolicyTests(unittest.TestCase):
         with self.assertRaises(GuardError): validate_environment({**env,'can_admins_bypass':True},approved,reviews)
         with self.assertRaises(GuardError): validate_environment(env,approved,[])
         with self.assertRaises(GuardError): validate_environment(env,approved,[{**reviews[0],'user':{'login':'other'}}])
-    def test_no_prior_apply_and_no_unproven_backup(self):
-        with self.assertRaises(GuardError): no_prior_apply([{'id':1,'event':'workflow_dispatch','display_title':'Орбита Dispatch: apply @ a'}],'2')
+    def test_no_unproven_backup(self):
         with self.assertRaises(GuardError): validate_receipt({}, {**self.context(),'preview_run_id':'1','backup_sha256':'a'*64})
 
 class TransactionTests(unittest.TestCase):

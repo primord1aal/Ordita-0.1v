@@ -5,6 +5,7 @@ on:
     branches: [codex/orbita-e2e-test-060]
     paths:
       - 'tools/maps_migration/**'
+      - 'tools/migration_preflight.py'
       - '.github/workflows/orbita-maps-migration.yml'
   workflow_dispatch:
     inputs:

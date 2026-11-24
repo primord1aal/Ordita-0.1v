@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import tempfile
+from tools.migration_preflight import SettingsError, report_settings_failure, validate_settings
 from .policy import LOCK, GuardError, require, validate_request, validate_connection, sources, validate_receipt, versions
 from .state import capture, validate_before, state_hash, protected_hash
 from .atomic import body
@@ -91,11 +92,11 @@ def main(diagnostic=None):
             'Checkout changed after gate.')
     diagnostic['stage'] = 'URL_VALIDATION'
     url=os.environ.get('ORBITA_DATABASE_URL','');validate_connection(url,LOCK['project_ref'])
+    validate_settings(c['operation'], LOCK['project_ref'])
     with tempfile.TemporaryDirectory(prefix='orbita-maps-',dir=os.environ['RUNNER_TEMP']) as directory:
         work=Path(directory);ca=work/'ca.pem'
         diagnostic['stage'] = 'CA_CONFIGURATION'
-        value=os.environ.get('ORBITA_DATABASE_CA_PEM','')
-        require(value.startswith('-----BEGIN CERTIFICATE-----'),'Verified CA required.');ca.write_text(value)
+        ca.write_text(os.environ['ORBITA_DATABASE_CA_PEM'])
         diagnostic['stage'] = 'DB_CLIENT_CONFIGURATION'
         db=MapsDatabase(url,LOCK['project_ref'],os.environ.get('PGPASSWORD',''),ca,
                           read_only=not applying,
@@ -119,6 +120,9 @@ def cli():
     try:
         main(diagnostic)
         return 0
+    except SettingsError as error:
+        report_settings_failure(error)
+        return 1
     except BaseException:
         stage = diagnostic.get('stage')
         if isinstance(stage, PreviewPhase):

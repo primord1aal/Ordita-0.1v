@@ -1,13 +1,16 @@
 """Future gated operations. No CLI against cloud, no operation/retry on import."""
 from pathlib import Path
+import hashlib
 import json
 import os
 import subprocess
 import tempfile
 from .policy import LOCK, GuardError, require, validate_request, validate_connection, sources, validate_receipt
-from .state import capture, validate_before, state_hash, protected_hash
+from .state import auth_probe_snapshot, capture, validate_auth_probe_delta, validate_before, state_hash, protected_hash
 from .atomic import body
 from .backup import PreviewPhase, create, ignore_phase
+from .recovery import RECOVERY_BASELINE_STATE_SHA256
+from tools.migration_preflight import DRIVER_EMAIL, PASSENGER_EMAIL, SettingsError, report_settings_failure, validate_settings
 from dbtools import Database, SAFE_CONNECTION_CATEGORIES
 
 class DispatchDatabase(Database):
@@ -16,7 +19,26 @@ class DispatchDatabase(Database):
         return self.tool('psql',['--no-psqlrc','--set','ON_ERROR_STOP=1','-Atq','--dbname',self.url],
                          input=body(root,expected),timeout=120,atomic_write=True)
 
-def execute(c, db, root, temporary, public, encrypted, passphrase='', proof=None, backup_factory=None, *, on_phase=ignore_phase):
+def verify_recovery_auth(db, authenticate, report):
+    before = auth_probe_snapshot(db)
+    require(before['state_sha256'] == RECOVERY_BASELINE_STATE_SHA256, 'Original recovery baseline differs.')
+    configured = {
+        role: hashlib.sha256(os.environ[key].strip().lower().encode('utf-8')).hexdigest()
+        for role, key in (('passenger', PASSENGER_EMAIL), ('driver', DRIVER_EMAIL))
+    }
+    require(before['account_count'] == 2 and before['email_hashes'] == configured,
+            'Configured accounts must be the existing active test passenger and driver.')
+    require(authenticate is not None, 'Recovery Preview requires authorized account sign-ins.')
+    report.write_text(json.dumps({'status': 'recovery_auth_started'}) + '\n')
+    authenticate()
+    after = auth_probe_snapshot(db, before['cutoff'])
+    validate_auth_probe_delta(before, after)
+    report.write_text(json.dumps({'status': 'recovery_auth_passed'}) + '\n')
+    return after['state_sha256']
+
+
+def execute(c, db, root, temporary, public, encrypted, passphrase='', proof=None, backup_factory=None,
+            *, on_phase=ignore_phase, authenticate=None):
     public=Path(public);public.mkdir(parents=True,exist_ok=True)
     on_phase(PreviewPhase.SOURCE_CATALOG)
     doc=capture(db)
@@ -31,6 +53,10 @@ def execute(c, db, root, temporary, public, encrypted, passphrase='', proof=None
     on_phase(PreviewPhase.SOURCE_FINGERPRINT)
     before=state_hash(db);protected=protected_hash(db)
     if c['operation']=='preview':
+        if c.get('recovery_run_id'):
+            on_phase('RECOVERY_AUTH_PREFLIGHT')
+            require(before == RECOVERY_BASELINE_STATE_SHA256, 'Recovery source differs from the original verified baseline.')
+            before = verify_recovery_auth(db, authenticate, public/'recovery-auth.json')
         kwargs={} if backup_factory is None else {'factory':backup_factory}
         backup=create(db,root,temporary,encrypted,passphrase,on_phase=on_phase,**kwargs)
         on_phase(PreviewPhase.RECHECK_SOURCE)
@@ -39,7 +65,11 @@ def execute(c, db, root, temporary, public, encrypted, passphrase='', proof=None
         receipt={'status':'preview_passed','source_sha':c['sha'],'run_id':c['run_id'],
                  'project_ref':LOCK['project_ref'],'sql_sha256':LOCK['sha256'],'executor':LOCK['executor'],
                  'before_versions':[LOCK['first_version'],LOCK['second_version']],'pending':[LOCK['version']],
-                 'state_sha256':before,'backup':backup}
+                 'state_sha256':before,'backup':backup,'settings_preflight':'passed'}
+        if c.get('recovery_run_id'):
+            receipt['recovery_run_id'] = c['recovery_run_id']
+            receipt['original_state_sha256'] = RECOVERY_BASELINE_STATE_SHA256
+            receipt['auth_preflight'] = {'passenger': True, 'driver': True, 'local_sessions_closed': True}
         (public/'preview.json').write_text(json.dumps(receipt,indent=2)+'\n');return receipt
     require(c['operation']=='apply' and isinstance(proof,dict)
             and proof.get('state_sha256')==before and proof.get('source_sha')==c['sha']
@@ -91,6 +121,13 @@ def main(diagnostic=None):
             'Checkout changed after gate.')
     diagnostic['stage'] = 'URL_VALIDATION'
     url=os.environ.get('ORBITA_DATABASE_URL','');validate_connection(url,LOCK['project_ref'])
+    diagnostic['stage'] = 'SETTINGS_PREFLIGHT'
+    validate_settings(c['operation'], LOCK['project_ref'], check_dispatch_accounts=True)
+    accounts = None
+    checking_recovery_accounts = c['operation'] == 'preview' and bool(c.get('recovery_run_id'))
+    if applying or checking_recovery_accounts:
+        from .real_api import Accounts
+        accounts = Accounts.from_environment()
     with tempfile.TemporaryDirectory(prefix='orbita-dispatch-',dir=os.environ['RUNNER_TEMP']) as directory:
         work=Path(directory);ca=work/'ca.pem'
         diagnostic['stage'] = 'CA_CONFIGURATION'
@@ -104,13 +141,10 @@ def main(diagnostic=None):
         diagnostic['stage'] = 'READ_ONLY_PROBE'
         require(db.query('show transaction_read_only;')=='on','Explicit read-only control query required.')
         diagnostic['stage'] = 'PREVIEW_OR_APPLY_EXECUTION'
-        accounts = None
-        if applying:
-            from .real_api import Accounts
-            accounts = Accounts.from_environment()
         execute(c,db,root,work,root/'build/dispatch-public',root/'build/dispatch-backup',
                 os.environ.get('ORBITA_ORDERS_BACKUP_PASSPHRASE',''),approved.get('preview'),
-                on_phase=lambda phase: diagnostic.update(stage=phase))
+                on_phase=lambda phase: diagnostic.update(stage=phase),
+                authenticate=accounts.verify_preview_roles if checking_recovery_accounts else None)
         if applying:
             try:
                 accounts.authenticate_and_check_roles()
@@ -125,7 +159,8 @@ def main(diagnostic=None):
 _DIAGNOSTIC_STAGES = frozenset((
     'STARTUP', 'LOCAL_SETUP', 'GATE_LOAD', 'REQUEST_VALIDATION',
     'CHECKOUT_VALIDATION', 'URL_VALIDATION', 'CA_CONFIGURATION',
-    'DB_CLIENT_CONFIGURATION', 'READ_ONLY_PROBE', 'PREVIEW_OR_APPLY_EXECUTION',
+    'SETTINGS_PREFLIGHT', 'DB_CLIENT_CONFIGURATION', 'READ_ONLY_PROBE', 'PREVIEW_OR_APPLY_EXECUTION',
+    'RECOVERY_AUTH_PREFLIGHT',
 ))
 
 def cli():
@@ -133,6 +168,9 @@ def cli():
     try:
         main(diagnostic)
         return 0
+    except SettingsError as exc:
+        report_settings_failure(exc)
+        return 1
     except BaseException:
         stage = diagnostic.get('stage')
         if isinstance(stage, PreviewPhase):

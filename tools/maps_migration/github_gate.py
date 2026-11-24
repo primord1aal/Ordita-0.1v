@@ -1,5 +1,6 @@
 """Future GitHub admission before DB secrets; never dispatches or changes settings."""
 from pathlib import Path
+from tools.migration_preflight import SettingsError, report_settings_failure
 import io
 import json
 import os
@@ -65,6 +66,9 @@ if __name__=='__main__':
         import sys
         require(sys.argv[1:] in (['entry'],['gate']),'Explicit gate command required.')
         entry() if sys.argv[1]=='entry' else gate()
+    except SettingsError as exc:
+        report_settings_failure(exc)
+        raise SystemExit(1)
     except BaseException:
         print('MAPS_ADMISSION_REJECTED; no DB secrets or raw errors emitted.')
         raise SystemExit(1)

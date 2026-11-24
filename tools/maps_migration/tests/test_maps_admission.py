@@ -1,4 +1,5 @@
 """Actual disposable PG, synthetic accounts/orders only; no cloud transport."""
+from io import StringIO
 from pathlib import Path
 import hashlib
 import json
@@ -56,6 +57,34 @@ class PolicyTests(unittest.TestCase):
         with self.assertRaises(GuardError):no_prior_apply([{'id':1,'event':'workflow_dispatch','display_title':'Орбита Maps: apply @ a'}],'2')
         with self.assertRaises(GuardError):validate_receipt({}, {**self.context(),'preview_run_id':'1','backup_sha256':'a'*64})
         with self.assertRaises(GuardError):validate_preview({'display_title':'Орбита Dispatch: preview @'}, {}, {**self.context(),'preview_run_id':'1'})
+
+    def test_preview_reports_only_maps_settings_before_opening_database(self):
+        from tools.maps_migration.runner import cli
+
+        output = StringIO()
+        context = self.context()
+        with tempfile.TemporaryDirectory() as directory:
+            gate = Path(directory) / 'orbita-maps-gate.json'
+            gate.write_text(json.dumps({'context': context}))
+            env = {
+                'GITHUB_WORKSPACE': str(ROOT),
+                'RUNNER_TEMP': directory,
+                'ORBITA_DATABASE_URL': (
+                    f"postgresql://postgres.{LOCK['project_ref']}@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full"
+                ),
+            }
+            with (patch.dict(os.environ, env, clear=True),
+                  patch('os.umask'),
+                  patch('subprocess.check_output', side_effect=[context['sha'], '']),
+                  patch('tools.maps_migration.runner.MapsDatabase') as database,
+                  patch('sys.stdout', output)):
+                self.assertEqual(cli(), 1)
+            database.assert_not_called()
+        result = output.getvalue()
+        self.assertIn('ORBITA_TEST_DB_PASSWORD', result)
+        self.assertIn('ORBITA_TEST_DB_CA_PEM', result)
+        self.assertIn('ORBITA_ORDERS_BACKUP_PASSPHRASE', result)
+        self.assertNotIn('ORBITA_DISPATCH_', result)
 
 class TransactionTests(unittest.TestCase):
     def setUp(self):

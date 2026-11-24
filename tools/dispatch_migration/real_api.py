@@ -2,6 +2,7 @@
 No admin keys, generated JWTs, role changes, raw response/credential logging.
 """
 from pathlib import Path
+import base64
 import json
 import os
 import urllib.error
@@ -37,7 +38,7 @@ class Accounts:
           tuple(os.environ.get('ORBITA_DISPATCH_PASSENGER_'+v,'') for v in ('EMAIL','PASSWORD')),
           tuple(os.environ.get('ORBITA_DISPATCH_DRIVER_'+v,'') for v in ('EMAIL','PASSWORD')))
 
-    def request(self,path,payload,role=None):
+    def request(self,path,payload,role=None,*,no_content=False):
         headers={'apikey':self.key,'Content-Type':'application/json'}
         if role: headers['Authorization']='Bearer '+self.sessions[role]['token']
         req=urllib.request.Request(self.base+path,data=json.dumps(payload).encode(),headers=headers,method='POST')
@@ -45,6 +46,9 @@ class Accounts:
             with self.http.open(req,timeout=12) as response:
                 data=response.read(1024*1024+1)
                 require(len(data)<=1024*1024,'API response too large.')
+                if no_content:
+                    require(response.status == 204 and not data, 'Local logout was not confirmed.')
+                    return None
                 return json.loads(data)
         except urllib.error.HTTPError as error:
             try:
@@ -56,15 +60,46 @@ class Accounts:
         except BaseException:
             raise RuntimeError('REAL_API_REQUEST_FAILED; raw response hidden; no automatic retry') from None
 
-    def authenticate_and_check_roles(self):
+    @staticmethod
+    def require_local_session(token):
+        # Only require a session identifier for safe local logout. Roles are checked by PostgREST.
+        try:
+            _, segment, _ = token.split('.')
+            claims = json.loads(base64.urlsafe_b64decode(segment + '=' * (-len(segment) % 4)))
+            session_id = claims['session_id']
+            parsed = uuid.UUID(session_id)
+            require(parsed.int != 0 and str(parsed) == session_id, 'Invalid Auth session identifier.')
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            require(False, 'The password grant did not return a scoped Auth session.')
+
+    def authenticate_and_check_roles(self, *, require_local_sessions=False):
         for role,(email,password) in self.credentials.items():
             session=self.request('/auth/v1/token?grant_type=password',{'email':email,'password':password})
-            self.sessions[role]={'token':session['access_token'],'uid':session['user']['id']}
+            token = session['access_token']
+            if require_local_sessions:
+                self.require_local_session(token)
+            self.sessions[role] = {'token': token}
+            self.sessions[role]['uid'] = session['user']['id']
             access=self.request('/rest/v1/rpc/orbita_get_access',{},role)
             require(access.get('status')=='active' and access.get('role')==role
               and access.get('user_id')==self.sessions[role]['uid'],'Test account server role mismatch.')
         require(self.sessions['passenger']['uid']!=self.sessions['driver']['uid'],'Separate test users required.')
         self.credentials.clear()
+
+    def verify_preview_roles(self):
+        require(not self.sessions, 'Recovery Auth requires a fresh client.')
+        try:
+            self.authenticate_and_check_roles(require_local_sessions=True)
+        finally:
+            logout_failed = False
+            for role in self.sessions:
+                try:
+                    self.request('/auth/v1/logout?scope=local', {}, role, no_content=True)
+                except Exception:
+                    logout_failed = True
+            self.sessions.clear()
+            self.credentials.clear()
+            require(not logout_failed, 'Recovery Auth local logout was not confirmed.')
 
     def rpc(self,role,action,payload=None):
         value=self.request('/rest/v1/rpc/orbita_dispatch',{'p_action':action,'p_payload':payload or {}},role)
