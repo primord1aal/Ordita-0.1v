@@ -123,6 +123,7 @@ jobs:
           PGPASSWORD: ${{ secrets.ORBITA_TEST_DB_PASSWORD }}
           ORBITA_ORDERS_BACKUP_PASSPHRASE: ${{ inputs.operation == 'preview' && secrets.ORBITA_ORDERS_BACKUP_PASSPHRASE || '' }}
           ORBITA_DATABASE_CA_PEM: ${{ vars.ORBITA_TEST_DB_CA_PEM }}
+          SUPABASE_TEST_PROJECT_REF: ${{ vars.SUPABASE_TEST_PROJECT_REF }}
           ORBITA_DATABASE_URL: postgresql://postgres.fjqghohhohgvwlmefdmo@aws-0-eu-north-1.pooler.supabase.com:5432/postgres?sslmode=verify-full
         run: python3 -m tools.maps_migration.runner
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
