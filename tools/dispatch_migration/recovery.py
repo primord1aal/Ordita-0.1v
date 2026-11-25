@@ -14,7 +14,7 @@ _REPOSITORY = 'primord1aal/Ordita-0.1v'
 _REPOSITORY_ID = 1443030751
 _BRANCH = 'codex/orbita-e2e-test-060'
 _WORKFLOW_PATH = '.github/workflows/orbita-dispatch-migration.yml'
-_WORKFLOW_ID = 425221225
+DISPATCH_WORKFLOW_ID = 425221225
 _ENVIRONMENT = 'orbita-mobile-test-orders-migrations'
 _ENVIRONMENT_ID = 27244178038
 _OWNER = 'primord1aal'
@@ -63,7 +63,7 @@ def _validate_run_provenance(run, operation, expected_sha=None):
             and run.get('display_title') == _TITLE.format(operation=operation, sha=sha)
             and run.get('event') == 'workflow_dispatch'
             and run.get('path') == _WORKFLOW_PATH
-            and _same_id(run.get('workflow_id'), _WORKFLOW_ID)
+            and _same_id(run.get('workflow_id'), DISPATCH_WORKFLOW_ID)
             and run.get('head_branch') == _BRANCH
             and type(run.get('run_attempt')) is int and run['run_attempt'] == 1
             and _matches_project(run.get('repository'))
@@ -100,7 +100,7 @@ def validate_prior_attempts(runs, current_run_id, recovery_run_id=None, *, opera
                 'Incomplete or duplicate workflow run history.')
         if recovery_run_id is not None and run_id < current_id:
             require(run['event'] in ('push', 'workflow_dispatch') and run.get('path') == _WORKFLOW_PATH
-                    and _same_id(run.get('workflow_id'), _WORKFLOW_ID),
+                    and _same_id(run.get('workflow_id'), DISPATCH_WORKFLOW_ID),
                     'Unrecognized historical workflow run.')
             if run['event'] == 'workflow_dispatch':
                 title = _MANUAL_TITLE.fullmatch(run['display_title'])

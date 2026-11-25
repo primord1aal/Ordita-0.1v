@@ -73,6 +73,10 @@ jobs:
     if: contains(fromJSON('["preview","apply","inspect"]'), inputs.operation) && github.ref == 'refs/heads/codex/orbita-e2e-test-060'
     needs: verify
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      deployments: read
     outputs:
       admitted: ${{ steps.check.outputs.admitted }}
     steps:
@@ -99,6 +103,15 @@ jobs:
             exit 1
           fi
           python3 -m tools.dispatch_migration.github_gate entry
+      - name: Check recovery archive and Environment rules
+        if: inputs.recovery_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ORBITA_OPERATION: ${{ inputs.operation }}
+          ORBITA_DISPATCH_REPO_ENABLED: ${{ vars.ORBITA_DISPATCH_REPO_ENABLED }}
+          ORBITA_REQUEST_SHA: ${{ inputs.approved_sha }}
+          ORBITA_RECOVERY_RUN_ID: ${{ inputs.recovery_run_id }}
+        run: python3 -m tools.dispatch_migration.github_gate recovery-precheck
   guarded:
     if: needs.entry.outputs.admitted == 'true' && contains(fromJSON('["preview","apply","inspect"]'), inputs.operation)
     needs: [verify, entry]
