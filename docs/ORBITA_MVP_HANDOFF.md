@@ -1,19 +1,37 @@
-# Орбита: продолжение работ над MVP
+# Орбита — передача состояния MVP
 
-Контрольная точка 24 ноября 2026 года. Рабочая ветка `codex/orbita-e2e-test-060`, тестовый проект `orbita-mobile-test`, Ref `fjqghohhohgvwlmefdmo`. Актуальный ход работ хранится на листе «Работа над MVP» в [ревизии Excel](audits/Orbita_audit_2026-11-24.xlsx).
+**26 ноября 2026 года, Новосибирск.** Разработка продолжается в `codex/orbita-night-mvp-20261126`. Защищённая ветка `codex/orbita-e2e-test-060` зафиксирована на `a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7`. [Ветка разработки](https://github.com/primord1aal/Ordita-0.1v/tree/codex/orbita-night-mvp-20261126) · [Коммит Maps Preview](https://github.com/primord1aal/Ordita-0.1v/commit/a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7)
 
-## Серверный допуск
+## Maps Preview и Apply
 
-Обе существующие точные ветки Environment сохранены. Dispatch и Maps дополнительно требуют `codex/orbita-e2e-test-060`, согласованный SHA, положительные флаги и одобрение `primord1aal` для конкретного запуска. `main` менять для ручного запуска через CLI не потребовалось.
+В замороженном коммите шаг Maps runner получил обязательный `SUPABASE_TEST_PROJECT_REF` из GitHub Variables. Допуск, список миграций, ручное одобрение и SQL остались прежними. В изолированной PostgreSQL 17.11 прошли 9 проверок, включая шифрование и восстановление. Правильный Ref принят всеми тремя режимами, отсутствующий и неверный отклоняются до соединения с базой. SQL `supabase/proposals/20261120173504_managed_maps.sql` имеет SHA-256 `bf89215b12a25eea37cbb683fe234cfc1f7e217e286f962a6190ede91daa240b`. Зафиксированный SHA опубликован, автоматический GitHub Verify успешен. [Maps Verify](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45722918438)
 
-В [первой попытке Preview](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45268820186) прошёл Verify, а шаги `entry` и `guarded` были пропущены. Причина — отсутствовал положительный флаг `ORBITA_DISPATCH_REPO_ENABLED`. Следующая версия workflow сообщает об этом явно. API этой интеграции вернул HTTP 403 при чтении Repository и Environment Variables.
+Защищённых Maps Preview и Apply ещё не было. Успешный Dispatch Apply подтвердил три записи на момент применения: `202611050001`, `20261112172442`, `20261120160748`. Отдельный серверный тест подтвердил вход пассажира и водителя и завершение реальной тестовой поездки. Текущее состояние БД снова сверит штатный Maps Preview. [Recovery Preview](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45711472774) · [Dispatch Apply](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45717039419) · [Серверный тест](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45717039419/artifacts/15070059011)
 
-Для продолжения владелец включает Repository Variable `ORBITA_DISPATCH_REPO_ENABLED=true` и выставляет только в `orbita-mobile-test-orders-migrations` значения `ORBITA_DISPATCH_CLOUD_ENABLED=true`, `ORBITA_DISPATCH_ALLOWED_SHA` равным текущему SHA рабочей ветки и `ORBITA_DISPATCH_ALLOWED_OPERATION=preview`. После этого выполнить [защищённый Preview](orders/DISPATCH_060_ACCESS.md) и получить штатное одобрение Environment. Признаки завершения — успешный `guarded`, отчёт `preview.json` и зашифрованный архив с подтверждённым восстановлением. Для отдельно согласуемого Apply нужен Preview того же SHA, поэтому после запуска сохраните вершину ветки до решения по применению.
+### Действия владельца для Preview
 
-В тестовой базе две прежние миграции, Dispatch и квота Maps ещё не применены. `orbita-maps` не развёрнута. `pg_cron` 1.6.4 доступен и не установлен. SQL для панели и автономных сроков подготовлен локально под отдельные допуски после фиксированных миграций Dispatch и Maps.
+1. Убедиться, что вершина `codex/orbita-e2e-test-060` соответствует `a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7`. Сохранить существующие правила веток, обязательное одобрение `primord1aal` и запрет обхода в `orbita-mobile-test-orders-migrations`.
+2. Проверить Repository Variable `ORBITA_DISPATCH_REPO_ENABLED=true`. Только в Environment выставить `ORBITA_DISPATCH_CLOUD_ENABLED=true`, `ORBITA_DISPATCH_ALLOWED_OPERATION=preview` и `ORBITA_DISPATCH_ALLOWED_SHA=a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7`. Сверить `SUPABASE_TEST_PROJECT_REF=fjqghohhohgvwlmefdmo`, существующие `SUPABASE_FORBIDDEN_PROJECT_REF`, `ORBITA_TEST_DB_CA_PEM` и наличие закрытых `ORBITA_TEST_DB_PASSWORD`, `ORBITA_ORDERS_BACKUP_PASSPHRASE`.
+3. Запустить новый `.github/workflows/orbita-maps-migration.yml` с указанной ветки и одобрить `guarded` для конкретного запуска. Пример запроса на запуск с пустыми `preview_run_id` и `backup_sha256`.
 
-## Проверки и среда
+```sh
+gh workflow run orbita-maps-migration.yml \
+  --repo primord1aal/Ordita-0.1v \
+  --ref codex/orbita-e2e-test-060 \
+  -f operation=preview \
+  -f approved_sha=a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7 \
+  -f project_ref=fjqghohhohgvwlmefdmo
+```
 
-- [Тестовый Android 0.6.2+14](ORBITA_0.6.2.md), [шлюз карт и план запуска](orders/DISPATCH_060_ACCESS.md), [диспетчерская](orders/ADMIN_READ_TEST.md), [автономные сроки](orders/DISPATCH_AUTONOMY.md), [телефонный вход и пилот в РФ](OTP_RU_READINESS.md).
-- В [GitHub CI для 0.6.2](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45272297923) прошли 463 Flutter-теста, 43 SQL-сценария, 11 тестов шлюза и 4 проверки клиента панели. Android unit tests и lint завершены. [Тестовый ARM64 debug APK 0.6.2+14](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45272297923/artifacts/14865153370) собран на `fedf60012ed0ff5f5e00b2486bf13b4ffa4050f2`. Архив хранится до 8 декабря 2026 года 04:51 по Новосибирску. Первый сквозной заказ на телефонах требует серверных допусков и отдельной физической проверки.
-- Фактическая политика терминала при ревизии — `workspace-write`, запись в `/workspace` и `/tmp` разрешена. Обычный HTTPS из терминала вернул `000`, локальный bind для тестового сервера — `EPERM`. GitHub-интеграция читает и публикует код независимо от этого ограничения. Ошибку самого приложения, связь с которой объясняла бы запросы доступа, не подтвердили.
+4. Сверить успех `guarded`, отчёт `ORBITA-maps-preview-<run>`, зашифрованный `ORBITA-maps-backup-<run>`, три исходные миграции, одну ожидающую Maps и успешное восстановление и репетицию. [Maps workflow](https://github.com/primord1aal/Ordita-0.1v/actions/workflows/orbita-maps-migration.yml)
+5. Для отдельно согласованного Apply сохранить ветку и SHA. Изменить в Environment допустимую операцию на `apply`, передать `operation=apply`, тот же `approved_sha`, `project_ref`, `preview_run_id` и `backup_sha256` из успешного Preview. Требуется новое одобрение. При неясном результате потребуется отдельный Inspect. После завершения закрыть облачный флаг.
+
+## Карты и Android
+
+- Локальный шлюз различает отказ авторизации, временный сбой Auth или Geoapify, тайм-аут и исчерпание квоты. Клиент карты один раз повторяет временно упавшую загрузку, сохраняя камеру, и оставляет ручной повтор. Серверные лимиты, OSM и атрибуции сохранены. Прошли 14 тестов шлюза и 34 целевые Flutter-проверки.
+- Для карт в тестовом облаке требуются Maps Apply и отдельное разрешение на публикацию `orbita-maps` и установку `GEOAPIFY_SERVER_KEY` в секретах сервера. Телефоны используют авторизованный шлюз.
+- Последний подтверждённый APK — 0.6.2+14, исходный SHA `fedf60012ed0ff5f5e00b2486bf13b4ffa4050f2`. Исправления ветки разработки в него не входят. [Сборка 0.6.2+14](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45272297923/artifacts/14865153370) · [Сценарии на телефонах](ORBITA_0.6.2.md)
+
+## Следующая контрольная точка
+
+Проверить локально восстановление пассажирского заказа и водительской поездки после потери связи и перезапуска. После карт на тестовом сервере выполнить поездку на двух телефонах с разрешённым и отклонённым GPS, проверить отказы и сроки. Фоновый Push, автономное расписание, облачная диспетчерская, профильная плавность на Tecno и условия пилота в РФ ещё требуют отдельных проверок. [Автономные сроки](orders/DISPATCH_AUTONOMY.md) · [Диспетчерская](orders/ADMIN_READ_TEST.md) · [Телефонный вход и размещение](OTP_RU_READINESS.md) · [Ревизия 24 ноября](audits/Orbita_audit_2026-11-24.xlsx)

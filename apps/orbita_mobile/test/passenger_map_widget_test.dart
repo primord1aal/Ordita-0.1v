@@ -1,20 +1,41 @@
 import 'package:flutter/material.dart';
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:orbita_mobile/src/app.dart';
 import 'package:orbita_mobile/src/auth/auth_repository.dart';
+import 'package:orbita_mobile/src/maps/address_models.dart';
 import 'package:orbita_mobile/src/maps/map_settings.dart';
 import 'package:orbita_mobile/src/screens/map_picker_screen.dart';
 import 'package:orbita_mobile/src/screens/preview_screens.dart';
+import 'package:orbita_mobile/src/ui/orbita_map.dart';
+import 'package:orbita_mobile/src/ui/theme.dart';
 
 import 'fake_auth_repository.dart';
 import 'fake_device.dart';
 import 'maps_test_fakes.dart';
 import 'responsive_test.dart' show checkHorizontalBounds;
 import 'test_helpers.dart';
+
+class _OfflineMapTiles extends FakeMapTiles {
+  bool offline = true;
+  int retries = 0;
+
+  @override
+  Future<Uint8List> tile(TileCoordinates coordinate) async {
+    if (offline) throw const MapFailure(MapFailureKind.network);
+    return super.tile(coordinate);
+  }
+
+  @override
+  void retry() {
+    retries++;
+    super.retry();
+  }
+}
 
 Future<void> mountMapAccount(
   WidgetTester tester, {
@@ -41,6 +62,40 @@ Future<void> mountMapAccount(
 }
 
 void main() {
+  testWidgets('Карта ограничивает автоповтор и сохраняет камеру', (
+    tester,
+  ) async {
+    final tiles = _OfflineMapTiles();
+    addTearDown(tiles.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orbitaTheme(),
+        home: Scaffold(body: OrbitaMap(session: tiles)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final camera = tester
+        .widget<FlutterMap>(find.byType(FlutterMap))
+        .mapController;
+    expect(find.text('Нет связи с картами.'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(find.text('Нет связи с картами.'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+    expect(tiles.retries, 1);
+
+    tiles.offline = false;
+    await tester.tap(find.text('Повторить'));
+    await tester.pumpAndSettle();
+    expect(tiles.retries, 2);
+    expect(find.text('Нет связи с картами.'), findsNothing);
+    expect(
+      tester.widget<FlutterMap>(find.byType(FlutterMap)).mapController,
+      same(camera),
+    );
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'В фоне открытый выбор точки скрывает координаты и восстанавливается без сброса',
     (tester) async {

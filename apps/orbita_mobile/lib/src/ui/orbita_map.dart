@@ -71,6 +71,8 @@ class _OrbitaMapState extends State<OrbitaMap> {
   MapFailureKind _tileFailure = MapFailureKind.unavailable;
   int _reload = 0;
   Timer? _cameraTimer;
+  Timer? _tileRetryTimer;
+  bool _automaticTileRetryUsed = false;
   GeoPoint? _pickingPoint;
   double _visibleHeight = 0, _mapWidth = 0;
 
@@ -142,7 +144,17 @@ class _OrbitaMapState extends State<OrbitaMap> {
   @override
   void didUpdateWidget(covariant OrbitaMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.session != widget.session) _matchTheme();
+    if (oldWidget.session != widget.session) {
+      _matchTheme();
+      _tileRetryTimer?.cancel();
+      _tileError = false;
+      _automaticTileRetryUsed = false;
+    } else if (oldWidget.enabled && !widget.enabled) {
+      _tileRetryTimer?.cancel();
+    } else if (!oldWidget.enabled && widget.enabled) {
+      _automaticTileRetryUsed = false;
+      if (_tileError && _canRetryTilesAutomatically) _reloadTiles();
+    }
     if (widget.picking &&
         widget.focusPoint != null &&
         widget.focusPoint != oldWidget.focusPoint) {
@@ -154,14 +166,28 @@ class _OrbitaMapState extends State<OrbitaMap> {
         widget.height != oldWidget.height) {
       _scheduleFrame();
     }
-    if (oldWidget.session != widget.session) _tileError = false;
   }
 
   @override
   void dispose() {
     _cameraTimer?.cancel();
+    _tileRetryTimer?.cancel();
     _camera.dispose();
     super.dispose();
+  }
+
+  bool get _canRetryTilesAutomatically => switch (_tileFailure) {
+    MapFailureKind.network ||
+    MapFailureKind.timeout ||
+    MapFailureKind.unavailable => true,
+    _ => false,
+  };
+
+  void _reloadTiles() {
+    _tileRetryTimer?.cancel();
+    widget.session?.retry();
+    _tileError = false;
+    _reload++;
   }
 
   void _failed(Object error) {
@@ -186,6 +212,12 @@ class _OrbitaMapState extends State<OrbitaMap> {
               ? error.kind
               : MapFailureKind.unavailable;
         });
+        if (!_automaticTileRetryUsed && _canRetryTilesAutomatically) {
+          _automaticTileRetryUsed = true;
+          _tileRetryTimer = Timer(const Duration(seconds: 3), () {
+            if (mounted && widget.enabled) setState(_reloadTiles);
+          });
+        }
       }
     });
   }
@@ -577,7 +609,7 @@ class _OrbitaMapState extends State<OrbitaMap> {
                                     children: [
                                       Text(switch (_tileFailure) {
                                         MapFailureKind.configuration =>
-                                          'Ключ карт не принят.',
+                                          'Карты временно недоступны.',
                                         MapFailureKind.limit =>
                                           'Лимит сервиса карт.',
                                         MapFailureKind.network =>
@@ -588,11 +620,7 @@ class _OrbitaMapState extends State<OrbitaMap> {
                                       }),
                                       TextButton(
                                         onPressed: widget.enabled
-                                            ? () => setState(() {
-                                                widget.session?.retry();
-                                                _tileError = false;
-                                                _reload++;
-                                              })
+                                            ? () => setState(_reloadTiles)
                                             : null,
                                         child: const Text('Повторить'),
                                       ),

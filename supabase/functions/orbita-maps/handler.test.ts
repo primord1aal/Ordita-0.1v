@@ -57,6 +57,73 @@ test('unavailable budget fails closed and hides upstream details',async()=>{
   const reply=await handler(new Request(url,{headers:{Authorization:token()}}));
   assert.equal(reply.status,503); assert(!(await reply.text()).includes('SQL'));
 });
+test('malformed quota response is unavailable and never reaches Geoapify', async () => {
+  globalThis.fetch = async (input) => {
+    const path = new URL(String(input)).pathname;
+    if (path === '/auth/v1/user') return Response.json({id:'synthetic-user'});
+    assert.equal(path, '/rest/v1/rpc/orbita_map_budget');
+    return Response.json({allowed: true});
+  };
+  const reply = await handler(request('/v1/geocode/autocomplete', {text: 'Пушкина 20'}));
+  assert.equal(reply.status, 503);
+  assert.deepEqual(await reply.json(), {error:'maps_unavailable'});
+});
+test('authentication failure, outage and timeout stay distinct and a retry can recover', async () => {
+  const addressed = request('/v1/geocode/autocomplete', {text: 'Пушкина 20'});
+  const stages: string[] = [];
+  let authStatus = 401;
+  globalThis.fetch = async (input) => {
+    const path = new URL(String(input)).pathname;
+    stages.push(path);
+    if (path === '/auth/v1/user') {
+      if (authStatus === 504) throw new DOMException('private timeout', 'TimeoutError');
+      return authStatus === 200 ? Response.json({id:'synthetic-user'}) : new Response(null, {status:authStatus});
+    }
+    if (path === '/rest/v1/rpc/orbita_map_budget') return Response.json(true);
+    return Response.json({results: []});
+  };
+  for (const [upstream, expected] of [[401, 401], [429, 503], [503, 503], [504, 504]]) {
+    authStatus = upstream;
+    const reply = await handler(addressed);
+    assert.equal(reply.status, expected);
+    assert.deepEqual(await reply.json(), {error:'maps_unavailable'});
+  }
+  assert.deepEqual(stages, Array(4).fill('/auth/v1/user'));
+
+  authStatus = 200;
+  const reply = await handler(addressed);
+  assert.equal(reply.status, 200);
+  assert.deepEqual(await reply.json(), {results: []});
+  assert.deepEqual(stages.slice(-3), ['/auth/v1/user', '/rest/v1/rpc/orbita_map_budget', '/v1/geocode/autocomplete']);
+});
+test('provider quota, transport failure and timeout can recover without automatic retries', async () => {
+  const addressed = request('/v1/geocode/autocomplete', {text: 'Пушкина 20'});
+  const stages: string[] = [];
+  const failures = [
+    {status: 429, reply: () => new Response('private provider error', {status: 429})},
+    {status: 502, reply: () => { throw new TypeError('private transport failure'); }},
+    {status: 504, reply: () => { throw new DOMException('private timeout', 'TimeoutError'); }},
+    {status: 200, reply: () => Response.json({results: []})},
+  ];
+  for (const failure of failures) {
+    globalThis.fetch = async (input) => {
+      const path = new URL(String(input)).pathname;
+      stages.push(path);
+      if (path === '/auth/v1/user') return Response.json({id:'synthetic-user'});
+      if (path === '/rest/v1/rpc/orbita_map_budget') return Response.json(true);
+      return failure.reply();
+    };
+    const reply = await handler(addressed);
+    assert.equal(reply.status, failure.status);
+    const expected = failure.status === 200 ? {results: []}
+      : {error: failure.status === 429 ? 'maps_limit' : 'maps_unavailable'};
+    assert.deepEqual(await reply.json(), expected);
+  }
+  assert.deepEqual(stages, [
+    '/auth/v1/user',
+    ...failures.flatMap(() => ['/rest/v1/rpc/orbita_map_budget', '/v1/geocode/autocomplete']),
+  ]);
+});
 test('accepted route is charged once and sends each credential only to its service',async()=>{
   const route = {type: 'FeatureCollection', features: []};
   const hosts: string[] = [];
