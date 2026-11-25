@@ -42,18 +42,13 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    container: debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+    container: postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
     timeout-minutes: 10
     steps:
-      - name: Закреплённая PostgreSQL 17.11 (как в локальных проверках)
+      - name: Инструменты тестов в закреплённом образе PostgreSQL
         run: |
           apt-get update
-          apt-get install --no-install-recommends -y python3 git ca-certificates curl gnupg
-          curl -fsSL https://deb.debian.org/debian/pool/main/p/postgresql-17/postgresql-17_17.11-0+deb13u1_amd64.deb -o /tmp/postgresql-17.deb
-          curl -fsSL https://deb.debian.org/debian/pool/main/p/postgresql-17/postgresql-client-17_17.11-0+deb13u1_amd64.deb -o /tmp/postgresql-client-17.deb
-          echo 'd2ce1ddffafa783f9acda4c92c86fc21e8288bff3782d739294f14fa797d7886  /tmp/postgresql-17.deb' | sha256sum --check
-          echo '9d8558f8dd57c8e92e218a20698383575d53742ca3f9e7c2b7fe5f246d5216ae  /tmp/postgresql-client-17.deb' | sha256sum --check
-          apt-get install --no-install-recommends -y /tmp/postgresql-17.deb /tmp/postgresql-client-17.deb
+          apt-get install --no-install-recommends -y python3 git ca-certificates gnupg
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Изолированные проверки SQL без облачных данных
         run: |
