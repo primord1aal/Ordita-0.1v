@@ -42,19 +42,25 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    container: postgres@sha256:839fbb5a4942a7758dd93e18b42ea5649807491a0545b5eeeb8f0b8bb11857a5
+    container: debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
     timeout-minutes: 10
     steps:
-      - name: Инструменты тестов в закреплённом образе PostgreSQL
+      - name: Закреплённые пакеты PostgreSQL 17.11 из архива Debian
         run: |
           apt-get update
-          apt-get install --no-install-recommends -y python3 git ca-certificates gnupg
+          apt-get install --no-install-recommends -y python3 git ca-certificates curl gnupg
+          curl -fsSL https://snapshot.debian.org/file/64c21255846b0fcc1df39e3712140a5255cea134 -o /tmp/postgresql-17.deb
+          curl -fsSL https://snapshot.debian.org/file/f4c7150d18ab72ccc25e0c03571293bac0f5edec -o /tmp/postgresql-client-17.deb
+          echo 'd2ce1ddffafa783f9acda4c92c86fc21e8288bff3782d739294f14fa797d7886  /tmp/postgresql-17.deb' | sha256sum --check
+          echo '9d8558f8dd57c8e92e218a20698383575d53742ca3f9e7c2b7fe5f246d5216ae  /tmp/postgresql-client-17.deb' | sha256sum --check
+          apt-get install --no-install-recommends -y /tmp/postgresql-17.deb /tmp/postgresql-client-17.deb
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Изолированные проверки SQL без облачных данных
         run: |
           mkdir -p /tmp/orbita-dispatch-checks build
           chown postgres:postgres /tmp/orbita-dispatch-checks build
           test_version="$(/usr/lib/postgresql/17/bin/postgres --version)"
+          printf '%s\n' "$test_version"
           runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s tools/dispatch_migration/tests -v
           runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_dispatch_sql.py -v
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
