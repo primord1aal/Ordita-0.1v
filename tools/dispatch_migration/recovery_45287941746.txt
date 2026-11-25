@@ -1,0 +1,13 @@
+2026-11-23T23:24:38.5426086Z ##[group]Run python3 -m tools.dispatch_migration.runner
+2026-11-23T23:24:38.5452694Z env:
+2026-11-23T23:24:38.5453774Z   ORBITA_DISPATCH_PASSENGER_EMAIL:
+2026-11-23T23:24:38.5454080Z   ORBITA_DISPATCH_PASSENGER_PASSWORD:
+2026-11-23T23:24:38.5454353Z   ORBITA_DISPATCH_DRIVER_EMAIL:
+2026-11-23T23:24:38.5454650Z   ORBITA_DISPATCH_DRIVER_PASSWORD:
+2026-11-23T23:24:38.5464858Z ##[endgroup]
+2026-11-23T23:24:41.9522133Z DISPATCH_OPERATION_FAILED: stage=PREVIEW_OR_APPLY_EXECUTION; category=UNKNOWN_PRIVATE_ERROR; no raw errors; no automatic retry.
+2026-11-23T23:24:41.9607141Z ##[error]Process completed with exit code 1.
+2026-11-23T23:24:42.0957766Z No files were found with the provided path: build/dispatch-public/apply.json. No artifacts will be uploaded.
+2026-11-23T23:24:42.2378349Z No files were found with the provided path: build/dispatch-public/server-test.json
+2026-11-23T23:24:42.2379107Z build/dispatch-public/*error*.json
+2026-11-23T23:24:42.2379647Z build/dispatch-public/*inspection*.json. No artifacts will be uploaded.

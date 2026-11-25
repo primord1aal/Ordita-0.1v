@@ -1,5 +1,7 @@
 """Read-only evidence for the single, proven pre-write Dispatch Apply failure."""
 
+from hashlib import sha256
+from pathlib import Path
 import re
 
 from tools.orders_migration.admission import require
@@ -9,6 +11,7 @@ FAILED_APPLY_RUN_ID = '45287941746'
 FAILED_APPLY_HEAD_SHA = '8816874afe3c4c8d963e94c48f693162706ab221'
 FAILED_GUARDED_JOB_ID = 138089504572
 RECOVERY_BASELINE_STATE_SHA256 = '05864c515ebd493d0d604fc5a57997e2dcd9d26b39a3552b3604ac66977b05eb'
+_REVIEWED_LOG_SHA256 = '1c7839e46a86ec0f29eab71359d4c20d913b4c0da72bbdf49a10e84cf1da99b9'
 
 _REPOSITORY = 'primord1aal/Ordita-0.1v'
 _REPOSITORY_ID = 1443030751
@@ -221,6 +224,15 @@ def _validate_guarded_log(log):
     require(after.index(_NO_APPLY) < server_test_index
             and tuple(after[server_test_index:server_test_index + len(_NO_SERVER_TEST)]) == _NO_SERVER_TEST,
             'Original guarded output paths do not match.')
+
+
+def reviewed_guarded_log():
+    # This excerpt was checked against the original job log through the GitHub
+    # integration. It contains only the empty inputs and pre-write failure markers.
+    path = Path(__file__).with_name(f'recovery_{FAILED_APPLY_RUN_ID}.txt')
+    content = path.read_bytes()
+    require(sha256(content).hexdigest() == _REVIEWED_LOG_SHA256, 'Reviewed recovery log differs.')
+    return content.decode('utf-8')
 
 
 def validate_failed_run(run, jobs, artifacts, approvals, *, log):

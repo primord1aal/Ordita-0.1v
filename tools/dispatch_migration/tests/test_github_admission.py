@@ -3,7 +3,7 @@ from io import StringIO
 import unittest
 from unittest.mock import patch
 
-from tools.dispatch_migration import github_gate
+from tools.dispatch_migration import github_gate, recovery
 from tools.dispatch_migration.policy import GuardError
 
 
@@ -38,3 +38,9 @@ class GitHubAdmissionTests(unittest.TestCase):
             self.assertEqual(github_gate.cli(['recovery-precheck']), 1)
         self.assertIn('stage=RECOVERY_LOG', output.getvalue())
         self.assertNotIn('synthetic-private-detail', output.getvalue())
+
+    def test_reviewed_log_proves_empty_inputs_and_pre_write_stop(self):
+        recovery._validate_guarded_log(recovery.reviewed_guarded_log())
+        with patch.object(recovery.Path, 'read_bytes', return_value=b'edited excerpt'):
+            with self.assertRaises(GuardError):
+                recovery.reviewed_guarded_log()

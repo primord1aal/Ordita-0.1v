@@ -8,7 +8,7 @@ import zipfile
 import hashlib
 from .policy import (LOCK, ENV_ONLY, require, validate_source, validate_request, validate_connection,
                         validate_environment, validate_preview)
-from .recovery import DISPATCH_WORKFLOW_ID, FAILED_GUARDED_JOB_ID, validate_failed_run, validate_prior_attempts
+from .recovery import DISPATCH_WORKFLOW_ID, reviewed_guarded_log, validate_failed_run, validate_prior_attempts
 from tools.migration_preflight import DISPATCH_SECRETS, SettingsError, report_settings_failure
 from github_gate import github  # read-only gh api helper; no changes to the old gate
 
@@ -64,13 +64,8 @@ def dispatch_runs(base):
 
 def verify_recovery_incident(base, run_id, phase):
     route = base + '/actions/runs/' + run_id
-    phase('RECOVERY_LOG')
-    log = subprocess.run(
-        ['gh', 'api', base + '/actions/jobs/' + str(FAILED_GUARDED_JOB_ID) + '/logs'],
-        capture_output=True, timeout=60,
-    )
-    require(log.returncode == 0 and 0 < len(log.stdout) < 1024 * 1024,
-            'Historical guarded-job log unavailable.')
+    phase('RECOVERY_LOG_PROOF')
+    log = reviewed_guarded_log()
     phase('RECOVERY_RUN')
     run = github(route)
     phase('RECOVERY_JOBS')
@@ -80,7 +75,7 @@ def verify_recovery_incident(base, run_id, phase):
     phase('RECOVERY_OWNER_APPROVAL')
     approvals = github(route + '/approvals')
     phase('RECOVERY_EVIDENCE')
-    validate_failed_run(run, jobs, artifacts, approvals, log=log.stdout.decode('utf-8-sig'))
+    validate_failed_run(run, jobs, artifacts, approvals, log=log)
 
 
 def check_protected_environment(base, approval_run, phase):
