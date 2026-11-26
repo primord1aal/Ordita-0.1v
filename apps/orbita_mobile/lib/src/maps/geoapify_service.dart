@@ -64,7 +64,7 @@ class GeoapifyTransport {
     final client = _factory();
     _pending[client] = requestGroup;
     try {
-      return await (() async {
+      final payload = await (() async {
         final forwarded = await proxy?.call(uri);
         if (!_pending.containsKey(client)) {
           throw const MapFailure(MapFailureKind.cancelled);
@@ -79,6 +79,7 @@ class GeoapifyTransport {
           throw MapFailure(switch (response.statusCode) {
             401 || 403 => MapFailureKind.configuration,
             429 => MapFailureKind.limit,
+            504 => MapFailureKind.timeout,
             _ => MapFailureKind.unavailable,
           });
         }
@@ -91,15 +92,24 @@ class GeoapifyTransport {
         }
         return bytes.takeBytes();
       })().timeout(timeout);
-    } on MapFailure {
-      rethrow;
-    } on TimeoutException {
-      throw const MapFailure(MapFailureKind.timeout);
-    } catch (_) {
+      if (!_pending.containsKey(client)) {
+        throw const MapFailure(MapFailureKind.cancelled);
+      }
+      return payload;
+    } catch (error) {
+      if (!_pending.containsKey(client)) {
+        throw const MapFailure(MapFailureKind.cancelled);
+      }
+      if (error is MapFailure) rethrow;
+      if (error is TimeoutException) {
+        throw const MapFailure(MapFailureKind.timeout);
+      }
       throw const MapFailure(MapFailureKind.network);
     } finally {
-      _pending.remove(client);
-      client.close();
+      if (_pending.containsKey(client)) {
+        _pending.remove(client);
+        client.close();
+      }
     }
   }
 

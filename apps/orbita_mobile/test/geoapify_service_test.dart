@@ -191,6 +191,7 @@ void main() {
     (403, MapFailureKind.configuration),
     (429, MapFailureKind.limit),
     (503, MapFailureKind.unavailable),
+    (504, MapFailureKind.timeout),
     (302, MapFailureKind.unavailable),
   ]) {
     test(
@@ -272,6 +273,39 @@ void main() {
       await Future<void>.delayed(Duration.zero);
     },
   );
+  test('Отмена HTTP приостанавливает работу без ложной ошибки сети', () async {
+    final reply = Completer<http.Response>();
+    final sent = Completer<void>();
+    var calls = 0;
+    final transport = GeoapifyTransport(
+      clientFactory: () => MockClient((_) async {
+        if (calls++ == 0) {
+          sent.complete();
+          return reply.future;
+        }
+        return http.Response('{"results":[]}', 200);
+      }),
+    );
+    addTearDown(transport.close);
+    final uri = Uri.https('api.geoapify.com', '/v1/geocode/autocomplete');
+    final first = transport.get(uri, requestGroup: AddressLookup.form);
+    final cancelled = expectLater(
+      first,
+      throwsA(
+        isA<MapFailure>().having(
+          (e) => e.kind,
+          'kind',
+          MapFailureKind.cancelled,
+        ),
+      ),
+    );
+    await sent.future;
+    transport.cancel(requestGroup: AddressLookup.form);
+    reply.completeError(http.ClientException('connection closed'));
+    await cancelled;
+    expect(await transport.get(uri), isNotEmpty);
+    expect(calls, 2);
+  });
   test(
     'Другие серверы, URL с логином и нестандартным портом запрещены до HTTP',
     () async {
