@@ -11,11 +11,46 @@ $preflight$;
 
 create function orbita_mobile_private.dispatch_scheduled_tick() returns boolean
 language plpgsql volatile security invoker set search_path='' as $tick$
+declare
+  v_now timestamptz := clock_timestamp();
 begin
-  -- An idle project should not rewrite the access mutex on every timer interval.
-  if not exists (select 1 from public.orbita_orders where status='created')
-     and not exists (select 1 from orbita_mobile_private.dispatch_offers where status='pending')
-     and not exists (select 1 from orbita_mobile_private.dispatch_drivers where online) then
+  -- Readiness check for the fixed Dispatch migration. Actual transitions and
+  -- queue ordering remain in dispatch_tick(), under the shared access mutex.
+  if not (
+    exists (
+      select 1 from public.orbita_orders
+      where status = 'created' and expires_at <= v_now
+    ) or exists (
+      select 1 from orbita_mobile_private.dispatch_drivers d
+      where d.online and (d.heartbeat_at <= v_now - interval '15 seconds'
+        or not orbita_mobile_private.dispatch_allowed(d.driver_id, 'driver'))
+    ) or exists (
+      select 1 from orbita_mobile_private.dispatch_offers f
+      join public.orbita_orders o on o.id = f.order_id
+      join orbita_mobile_private.dispatch_drivers d on d.driver_id = f.driver_id
+      where f.status = 'pending'
+        and (f.expires_at <= v_now or o.status <> 'created' or not d.online)
+    ) or exists (
+      select 1 from public.orbita_orders o
+      where o.status = 'created' and not exists (
+        select 1 from orbita_mobile_private.dispatch_offers f
+        where f.order_id = o.id and f.status = 'pending'
+      ) and exists (
+        select 1 from orbita_mobile_private.dispatch_drivers d
+        where d.online and d.heartbeat_at > v_now - interval '15 seconds'
+          and orbita_mobile_private.dispatch_allowed(d.driver_id, 'driver')
+          and not exists (
+            select 1 from public.orbita_orders busy
+            where busy.driver_id = d.driver_id
+              and busy.status in ('accepted', 'to_pickup', 'arrived', 'riding')
+          ) and not exists (
+            select 1 from orbita_mobile_private.dispatch_offers f
+            where f.driver_id = d.driver_id
+              and (f.status = 'pending' or f.order_id = o.id)
+          )
+      )
+    )
+  ) then
     return false;
   end if;
 
