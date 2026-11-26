@@ -340,6 +340,27 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('На узком тёмном экране GPS доступен при крупном тексте', (
+    tester,
+  ) async {
+    await _mount(
+      tester,
+      dark: true,
+      tiles: true,
+      size: const Size(320, 568),
+      scale: 4,
+    );
+    expect(tester.getSize(find.byType(OrbitaLogo)).width, 32);
+
+    final gps = find.byTooltip('Моё местоположение');
+    await scrollTo(tester, gps);
+    expect(gps.hitTestable(), findsOneWidget);
+    expect(tester.getSize(gps), const Size(48, 48));
+    expect(find.byType(MapAttribution), findsOneWidget);
+    checkHorizontalBounds(tester);
+    expect(tester.takeException(), isNull);
+  });
+
   final shots = [
     ('driver-off-light', false, null, const Size(390, 844), 1.0),
     ('driver-off-dark', true, null, const Size(390, 844), 1.0),
@@ -399,13 +420,16 @@ void main() {
         await tester.pumpAndSettle();
       }
       if (spec.$4 == 1) {
-        // 1: один header74/logo42; 2: дорожка64/бегунок50.
+        // 1: шапка 74, рабочий логотип 32; 2: дорожка 64, бегунок 50.
         expect(find.byType(BrandHeader), findsOneWidget);
         expect(
           tester.getSize(find.byType(BrandHeader)).height,
           closeTo(74, .5),
         );
-        expect(tester.getSize(find.byType(OrbitaLogo)).width, 42);
+        expect(
+          tester.getSize(find.byType(OrbitaLogo)).width,
+          spec.$3 == null ? 32 : 42,
+        );
         expect(
           tester.getRect(find.byType(OrbitaLogo)).top,
           greaterThanOrEqualTo(28),
@@ -531,6 +555,7 @@ void main() {
         expect(find.textContaining('ДЕМО'), findsNothing);
       } else {
         expect(find.byType(DriverScreen), findsOneWidget);
+        expect(tester.getSize(find.byType(OrbitaLogo)).width, 32);
         if (name == 'attribution-3.2') {
           await scrollTo(tester, find.text('Powered by Geoapify'));
         }

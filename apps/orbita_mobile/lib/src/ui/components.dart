@@ -56,10 +56,12 @@ class BrandHeader extends StatelessWidget {
   const BrandHeader({
     this.showShift = false,
     this.driverTypography = false,
+    this.compact = false,
     super.key,
   });
   final bool showShift;
   final bool driverTypography;
+  final bool compact;
   @override
   Widget build(BuildContext context) => Container(
     constraints: const BoxConstraints(minHeight: 74),
@@ -77,15 +79,17 @@ class BrandHeader extends StatelessWidget {
     child: LayoutBuilder(
       builder: (context, constraints) {
         final style = TextStyle(
-          fontSize: driverTypography ? 25 : 22,
-          fontWeight: driverTypography ? FontWeight.w700 : FontWeight.w800,
-          letterSpacing: driverTypography ? -1.375 : null,
+          fontSize: compact ? 20 : (driverTypography ? 25 : 22),
+          fontWeight: driverTypography && !compact
+              ? FontWeight.w700
+              : FontWeight.w800,
+          letterSpacing: driverTypography && !compact ? -1.375 : null,
           height: 1.2,
         );
         final title = Row(
           children: [
-            const OrbitaLogo(size: 42),
-            const SizedBox(width: 10),
+            OrbitaLogo(size: compact ? 32 : 42),
+            SizedBox(width: compact ? 8 : 10),
             Expanded(child: Text('орбита.', style: style)),
           ],
         );

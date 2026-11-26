@@ -1,6 +1,7 @@
 // Flutter widget-снимки с вымышленными аккаунтами и FakeAuthRepository.
 // В обычном CI обязательны структурные проверки; PNG — в явном режиме.
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbita_mobile/src/app.dart';
 import 'package:orbita_mobile/src/auth/auth_repository.dart';
@@ -182,6 +183,22 @@ void main() {
       await scrollTo(tester, find.text('Настройки'), delta: -180);
       await tester.tap(find.text('Настройки'));
       await tester.pumpAndSettle();
+      void expectFullTitle(String title) {
+        final titleText = find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text(title),
+        );
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.descendant(of: titleText, matching: find.byType(RichText)),
+        );
+        expect(paragraph.didExceedMaxLines, isFalse);
+        expect(
+          tester.getBottomLeft(titleText).dy,
+          lessThanOrEqualTo(tester.getBottomLeft(find.byType(AppBar)).dy),
+        );
+      }
+
+      expectFullTitle('Настройки');
       for (final mode in [ThemeMode.dark, ThemeMode.system, ThemeMode.light]) {
         await scrollTo(
           tester,
@@ -198,6 +215,12 @@ void main() {
         );
         checkHorizontalBounds(tester);
       }
+      await scrollTo(tester, find.text('О приложении'));
+      await tester.tap(find.text('О приложении'));
+      await tester.pumpAndSettle();
+      expectFullTitle('О приложении');
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       await scrollTo(tester, find.byKey(const Key('sign-out')));

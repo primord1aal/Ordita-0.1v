@@ -1,8 +1,32 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../platform/device_gateway.dart';
 import '../ui/theme.dart';
 import '../ui/theme_settings.dart';
+
+double _toolbarHeight(BuildContext context, String title, double minimum) {
+  final theme = Theme.of(context);
+  final spacing =
+      theme.appBarTheme.titleSpacing ?? NavigationToolbar.kMiddleSpacing;
+  final titleWidth =
+      MediaQuery.sizeOf(context).width -
+      MediaQuery.paddingOf(context).horizontal -
+      kToolbarHeight -
+      2 * spacing;
+  final painter = TextPainter(
+    text: TextSpan(
+      text: title,
+      style: theme.appBarTheme.titleTextStyle ?? theme.textTheme.titleLarge,
+    ),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout(maxWidth: math.max(1, titleWidth));
+  final height = math.max(minimum, painter.height + 20);
+  painter.dispose();
+  return height;
+}
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
@@ -19,10 +43,11 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = OrbitaPalette.of(context);
     final settings = ThemeSettingsScope.of(context);
+    const title = 'Настройки';
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Настройки'),
-        toolbarHeight: 74,
+        title: const Text(title, softWrap: true),
+        toolbarHeight: _toolbarHeight(context, title, 74),
         backgroundColor: palette.background,
         scrolledUnderElevation: 0,
       ),
@@ -106,7 +131,7 @@ class SettingsScreen extends StatelessWidget {
                     color: palette.muted,
                   ),
                   title: const Text('Разрешения приложения'),
-                  subtitle: const Text('Местоположение и системные настройки'),
+                  subtitle: const Text('Местоположение и уведомления'),
                   trailing: Icon(Icons.open_in_new, color: palette.muted),
                   onTap: () async {
                     try {
@@ -176,8 +201,12 @@ class AboutScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = OrbitaPalette.of(context);
+    const title = 'О приложении';
     return Scaffold(
-      appBar: AppBar(title: const Text('О приложении')),
+      appBar: AppBar(
+        title: const Text(title, softWrap: true),
+        toolbarHeight: _toolbarHeight(context, title, kToolbarHeight),
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),

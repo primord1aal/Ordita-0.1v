@@ -107,6 +107,8 @@ class _DriverScreenState extends State<DriverScreen> {
           trip != null && trip.active && trip.status != 'created' ? trip : null;
       return _DriverBody(
         mapSettings: widget.mapSettings,
+        compactBrand: true,
+        minimumMapHeight: 180,
         enabled: widget.enabled,
         foreground: widget.foreground,
         tileSessionFactory: widget.tileSessionFactory,
@@ -482,6 +484,8 @@ class _DriverBody extends StatelessWidget {
     this.onTools,
     this.enabled = true,
     this.foreground = true,
+    this.compactBrand = false,
+    this.minimumMapHeight = 140,
     this.tileSessionFactory,
     this.focusPoint,
     this.trip,
@@ -495,9 +499,10 @@ class _DriverBody extends StatelessWidget {
   final MapSettings mapSettings;
   final Widget panel;
   final double panelHeight;
+  final double minimumMapHeight;
   final Widget? slider;
   final VoidCallback? onTools;
-  final bool enabled, foreground;
+  final bool enabled, foreground, compactBrand;
   final MapTileSession Function(String)? tileSessionFactory;
   @override
   Widget build(BuildContext context) => CustomScrollView(
@@ -507,7 +512,7 @@ class _DriverBody extends StatelessWidget {
         child: GestureDetector(
           key: const Key('driver-tools'),
           onLongPress: onTools,
-          child: const BrandHeader(driverTypography: true),
+          child: BrandHeader(driverTypography: true, compact: compactBrand),
         ),
       ),
       if (slider != null)
@@ -525,7 +530,7 @@ class _DriverBody extends StatelessWidget {
           final pickup = trip?.pickup;
           final destination = trip?.destination;
           final height = math.max(
-            140.0,
+            minimumMapHeight,
             constraints.viewportMainAxisExtent -
                 constraints.precedingScrollExtent -
                 panelHeight,
