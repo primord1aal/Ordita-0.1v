@@ -39,6 +39,8 @@ class PassengerAddressController extends ChangeNotifier {
   bool _enabled = true, _disposed = false;
   bool _foreground = true;
   int _generation = 0, _locationRevision = 0;
+  int _pickupInputRevision = 0;
+  int get pickupInputRevision => _pickupInputRevision;
   bool _pickupFromLocation = false;
   bool get pickupFromLocation => _pickupFromLocation;
   Timer? _timer;
@@ -84,6 +86,7 @@ class PassengerAddressController extends ChangeNotifier {
     final item = draft(field);
     if (item.text == value) return;
     if (field == AddressField.pickup) {
+      _pickupInputRevision++;
       _cancelLocationLookup();
       _pickupFromLocation = false;
     }
@@ -149,6 +152,7 @@ class PassengerAddressController extends ChangeNotifier {
   void select(AddressField field, AddressPlace place) {
     if (!enabled || !place.point.valid) return;
     if (field == AddressField.pickup) {
+      _pickupInputRevision++;
       _cancelLocationLookup();
       _pickupFromLocation = false;
     }

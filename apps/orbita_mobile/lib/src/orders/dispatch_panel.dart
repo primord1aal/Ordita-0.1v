@@ -10,7 +10,7 @@ class DispatchPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = controller, state = c.state;
     final trip = state?.trip;
-    final offer = state?.offerId != null;
+    final offerId = state?.offerId;
     final next = switch (trip?.status) {
       'accepted' => ('to_pickup', 'К клиенту'),
       'to_pickup' => ('arrived', 'На месте'),
@@ -37,7 +37,7 @@ class DispatchPanel extends StatelessWidget {
           Semantics(
             liveRegion: true,
             child: Text(
-              offer ? 'Новый заказ' : trip.label,
+              offerId != null ? 'Новый заказ' : trip.label,
               key: const Key('trip-status'),
               style: Theme.of(context).textTheme.titleMedium,
             ),
@@ -54,11 +54,11 @@ class DispatchPanel extends StatelessWidget {
               ),
             ),
             TextButton(
-              onPressed: c.canAct ? c.cancel : null,
+              onPressed: c.canAct ? () => c.cancel(trip.id) : null,
               child: const Text('Отменить заказ'),
             ),
           ],
-          if (offer)
+          if (offerId != null)
             ValueListenableBuilder<int>(
               valueListenable: c.clock,
               builder: (context, value, child) {
@@ -74,12 +74,12 @@ class DispatchPanel extends StatelessWidget {
                       'Принять',
                       key: const Key('accept-offer'),
                       onPressed: c.canAct && seconds > 0
-                          ? () => c.respond(true)
+                          ? () => c.respond(true, offerId: offerId)
                           : null,
                     ),
                     TextButton(
                       onPressed: c.canAct && seconds > 0
-                          ? () => c.respond(false)
+                          ? () => c.respond(false, offerId: offerId)
                           : null,
                       child: const Text('Отказаться'),
                     ),
@@ -90,7 +90,9 @@ class DispatchPanel extends StatelessWidget {
           else if (c.driver && next != null)
             FullWidthAction(
               next.$2,
-              onPressed: c.canAct ? () => c.advance(next.$1) : null,
+              onPressed: c.canAct
+                  ? () => c.advance(next.$1, orderId: trip.id)
+                  : null,
             ),
         ],
         if (c.driver && state != null && trip?.active != true) ...[

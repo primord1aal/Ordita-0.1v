@@ -99,48 +99,54 @@ class _DriverScreenState extends State<DriverScreen> {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: Listenable.merge([?_location, ?widget.dispatch]),
-    builder: (context, _) => _DriverBody(
-      mapSettings: widget.mapSettings,
-      enabled: widget.enabled,
-      foreground: widget.foreground,
-      tileSessionFactory: widget.tileSessionFactory,
-      focusPoint: _position,
-      onLocate: _location?.locate,
-      locating: _location?.busy ?? false,
-      slider: ShiftControl(
-        confirmedOnline: widget.dispatch?.state?.online ?? false,
-        available:
-            widget.enabled &&
-            widget.foreground &&
-            (widget.dispatch?.state != null &&
-                (widget.dispatch?.message == null ||
-                    widget.dispatch?.busy == true)),
-        requestChange: widget.dispatch?.setOnline,
-      ),
-      panel: widget.dispatch == null
-          ? const _EmptyPanel(online: false)
-          : _DriverPanel(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_gpsMessage != null)
-                    Text(
-                      _gpsMessage!,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  if (_location?.needsSettings == true)
-                    TextButton(
-                      onPressed: _location?.openSettings,
-                      child: const Text('Открыть настройки'),
-                    ),
-                  DispatchPanel(controller: widget.dispatch!),
-                ],
+    builder: (context, _) {
+      final dispatch = widget.dispatch;
+      final state = dispatch?.state;
+      final trip = state?.trip;
+      final acceptedTrip =
+          trip != null && trip.active && trip.status != 'created' ? trip : null;
+      return _DriverBody(
+        mapSettings: widget.mapSettings,
+        enabled: widget.enabled,
+        foreground: widget.foreground,
+        tileSessionFactory: widget.tileSessionFactory,
+        focusPoint: _position,
+        trip: acceptedTrip,
+        onLocate: _location?.locate,
+        locating: _location?.busy ?? false,
+        slider: ShiftControl(
+          confirmedOnline: state?.online ?? false,
+          available:
+              widget.enabled &&
+              widget.foreground &&
+              dispatch != null &&
+              dispatch.hasCurrentSnapshot &&
+              (dispatch.message == null || dispatch.busy),
+          requestChange: dispatch?.setOnline,
+        ),
+        panel: dispatch == null
+            ? const _EmptyPanel(online: false)
+            : _DriverPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_gpsMessage != null)
+                      Text(
+                        _gpsMessage!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    if (_location?.needsSettings == true)
+                      TextButton(
+                        onPressed: _location?.openSettings,
+                        child: const Text('Открыть настройки'),
+                      ),
+                    DispatchPanel(controller: dispatch),
+                  ],
+                ),
               ),
-            ),
-      panelHeight: widget.dispatch?.state?.trip != null
-          ? 330
-          : _EmptyPanel.height(context),
-    ),
+        panelHeight: trip != null ? 330 : _EmptyPanel.height(context),
+      );
+    },
   );
 }
 
@@ -478,10 +484,12 @@ class _DriverBody extends StatelessWidget {
     this.foreground = true,
     this.tileSessionFactory,
     this.focusPoint,
+    this.trip,
     this.onLocate,
     this.locating = false,
   });
   final GeoPoint? focusPoint;
+  final Trip? trip;
   final VoidCallback? onLocate;
   final bool locating;
   final MapSettings mapSettings;
@@ -514,6 +522,8 @@ class _DriverBody extends StatelessWidget {
         ),
       SliverLayoutBuilder(
         builder: (context, constraints) {
+          final pickup = trip?.pickup;
+          final destination = trip?.destination;
           final height = math.max(
             140.0,
             constraints.viewportMainAxisExtent -
@@ -531,6 +541,13 @@ class _DriverBody extends StatelessWidget {
                   height: height,
                   tileSessionFactory: tileSessionFactory,
                   focusPoint: focusPoint,
+                  tripId: trip?.id,
+                  pickup: pickup == null
+                      ? null
+                      : AddressPlace(pickup.address, pickup.point),
+                  destination: destination == null
+                      ? null
+                      : AddressPlace(destination.address, destination.point),
                   onLocate: onLocate,
                   locating: locating,
                 ),

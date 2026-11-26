@@ -114,7 +114,7 @@ class DispatchController extends ChangeNotifier {
   final SessionStore _store;
   final Stopwatch _age = Stopwatch();
   Timer? _timer;
-  int _generation = 0, _ticks = 0;
+  int _generation = 0, _snapshotGeneration = -1, _ticks = 0;
   bool _enabled = false, _disposed = false, _loaded = false;
   bool busy = false;
   Completer<void>? _flight;
@@ -127,7 +127,8 @@ class DispatchController extends ChangeNotifier {
   DispatchState? state;
   Map<String, Object?>? pending;
   bool get enabled => _enabled;
-  bool get canAct => _enabled && !busy && state != null && message == null;
+  bool get hasCurrentSnapshot => _enabled && _snapshotGeneration == _generation;
+  bool get canAct => !busy && hasCurrentSnapshot && message == null;
   bool get hasActiveTrip => state?.trip?.active ?? false;
   int secondsUntil(DateTime deadline) => max(
     0,
@@ -143,13 +144,19 @@ class DispatchController extends ChangeNotifier {
     ++_generation;
     _timer?.cancel();
     if (value) {
-      unawaited(refresh());
+      unawaited(_refreshAfterEnable(_generation));
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         ++_ticks;
         if (_ticks % (message == null ? 3 : 15) == 0) unawaited(refresh());
         clock.value++;
       });
     }
+  }
+
+  Future<void> _refreshAfterEnable(int generation) async {
+    final flight = _flight;
+    if (flight != null) await flight.future;
+    if (generation == _generation) await refresh();
   }
 
   Future<void> _load() async {
@@ -199,37 +206,43 @@ class DispatchController extends ChangeNotifier {
     }
   }
 
-  Future<void> cancel() async {
+  Future<void> cancel(String orderId) async {
     await _waitForPoll();
-    if (!canAct || state?.trip?.status != 'created') return;
-    await _run('cancel', {'order_id': state!.trip!.id});
+    final trip = state?.trip;
+    if (!canAct || trip?.id != orderId || trip?.status != 'created') return;
+    await _run('cancel', {'order_id': orderId});
   }
 
   Future<void> setOnline(bool value) async {
+    final generation = _generation;
     await _waitForPoll();
-    if (!canAct) return;
+    if (!canAct || generation != _generation) {
+      throw const OrderFailure(OrderFailureKind.unavailable);
+    }
     await _run('online', {'online': value});
-    if (message != null) throw const OrderFailure(OrderFailureKind.unavailable);
+    if (!canAct || generation != _generation || state?.online != value) {
+      throw const OrderFailure(OrderFailureKind.unavailable);
+    }
   }
 
-  Future<void> respond(bool accept) async {
+  Future<void> respond(bool accept, {required String offerId}) async {
     await _waitForPoll();
     final current = state;
     if (!canAct ||
-        current?.offerId == null ||
+        current?.offerId != offerId ||
         secondsUntil(current!.offerExpiresAt!) == 0) {
       return;
     }
     await _run('respond', {
-      'offer_id': current.offerId,
+      'offer_id': offerId,
       'response': accept ? 'accept' : 'decline',
     });
   }
 
-  Future<void> advance(String status) async {
+  Future<void> advance(String status, {required String orderId}) async {
     await _waitForPoll();
-    if (!canAct || state?.trip == null) return;
-    await _run('advance', {'order_id': state!.trip!.id, 'status': status});
+    if (!canAct || state?.trip?.id != orderId) return;
+    await _run('advance', {'order_id': orderId, 'status': status});
   }
 
   Future<void> _run(
@@ -241,7 +254,7 @@ class DispatchController extends ChangeNotifier {
     final generation = _generation;
     final silent =
         (action == 'driver_poll' || action == 'passenger_poll') &&
-        state != null;
+        hasCurrentSnapshot;
     final oldSignature = _signature;
     final oldMessage = message;
     _flight = Completer<void>();
@@ -267,6 +280,7 @@ class DispatchController extends ChangeNotifier {
       }
       if (generation != _generation || !_enabled) return;
       state = fresh;
+      _snapshotGeneration = generation;
       _age
         ..reset()
         ..start();

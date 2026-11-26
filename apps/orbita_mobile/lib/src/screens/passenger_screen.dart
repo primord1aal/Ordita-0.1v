@@ -60,6 +60,8 @@ class _PassengerScreenState extends State<PassengerScreen> {
   String _tileKey = '';
   bool _choosing = false;
   MapLocationAction? _location;
+  GeoPoint? _position;
+  int? _pickupRevisionWhenLocating;
   String? _gpsMessage;
   @override
   void initState() {
@@ -74,9 +76,15 @@ class _PassengerScreenState extends State<PassengerScreen> {
         device: device,
         isAllowed: () =>
             mounted && _controller.enabled && !_choosing && !_orderLocked,
-        onLocation: (point) {
-          if (_gpsMessage != null) setState(() => _gpsMessage = null);
-          return _controller.useCurrentLocation(
+        onLocation: (point) async {
+          setState(() {
+            _position = point;
+            _gpsMessage = null;
+          });
+          if (_pickupRevisionWhenLocating != _controller.pickupInputRevision) {
+            return;
+          }
+          await _controller.useCurrentLocation(
             point,
             replace: _location?.automaticRequest != true,
           );
@@ -108,7 +116,18 @@ class _PassengerScreenState extends State<PassengerScreen> {
 
   void _autoLocate() {
     if (mounted && widget.enabled && widget.foreground && !_orderLocked) {
-      unawaited(_location?.locateAutomatically());
+      unawaited(_locatePickup(automatic: true));
+    }
+  }
+
+  Future<void> _locatePickup({bool automatic = false}) async {
+    final location = _location;
+    if (location == null || location.busy) return;
+    _pickupRevisionWhenLocating = _controller.pickupInputRevision;
+    if (automatic) {
+      await location.locateAutomatically();
+    } else {
+      await location.locate();
     }
   }
 
@@ -537,7 +556,10 @@ class _PassengerScreenState extends State<PassengerScreen> {
               destination: _place(AddressField.destination),
               route: _route.route,
               focusPoint: _place(_controller.activeField)?.point,
-              onLocate: _orderLocked ? null : _location?.locate,
+              userPosition: _position,
+              onLocate: _orderLocked || _location == null
+                  ? null
+                  : _locatePickup,
               locating: _location?.busy ?? false,
             ),
           ),

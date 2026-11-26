@@ -10,6 +10,7 @@ import 'package:orbita_mobile/src/ui/orbita_map.dart';
 import 'package:orbita_mobile/src/ui/theme.dart';
 import 'package:orbita_mobile/src/maps/address_models.dart';
 import 'package:orbita_mobile/src/orders/dispatch_controller.dart';
+import 'package:orbita_mobile/src/orders/order_models.dart';
 import 'package:orbita_mobile/src/services/session_store.dart';
 
 const passenger = '00000000-0000-4000-8000-000000000001';
@@ -176,6 +177,81 @@ void main() {
     await settle();
     expect(c.canAct, isTrue);
   });
+  test(
+    'foreground waits for the old request and refreshes immediately',
+    () async {
+      final api = FakeApi();
+      final c = DispatchController(api: api, userId: passenger, driver: false);
+      addTearDown(c.dispose);
+      c.setEnabled(true);
+      await settle();
+      expect(c.canAct, isTrue);
+
+      final oldReply = Completer<Object?>();
+      final resumedReply = Completer<Object?>();
+      api.handler = (_, _) => oldReply.future;
+      final oldPoll = c.refresh();
+      await settle();
+      c.setEnabled(false);
+      c.setEnabled(true);
+      expect(c.canAct, isFalse);
+      expect(api.calls, hasLength(2));
+
+      api.handler = (_, _) => resumedReply.future;
+      oldReply.complete(envelope());
+      await oldPoll;
+      await settle();
+      expect(
+        api.calls.map((call) => call.action),
+        List.filled(3, 'passenger_poll'),
+      );
+      expect(c.canAct, isFalse);
+      resumedReply.complete(envelope());
+      await settle();
+      expect(c.canAct, isTrue);
+    },
+  );
+  test(
+    'accept tap cannot apply to a replacement offer returned by polling',
+    () async {
+      const originalOffer = '00000000-0000-4000-8000-000000000005';
+      const replacementOffer = '00000000-0000-4000-8000-000000000006';
+      final order = trip({
+        'request_id': '00000000-0000-4000-8000-000000000004',
+        'pickup': {'address': pickup.label, 'latitude': 55, 'longitude': 82.43},
+        'destination': {
+          'address': destination.label,
+          'latitude': 55.01,
+          'longitude': 82.44,
+        },
+      });
+      Map<String, dynamic> offer(String id) => {
+        ...envelope(isDriver: true, order: order),
+        'offer': {
+          'id': id,
+          'order_id': order['id'],
+          'expires_at': '2026-11-20T16:00:25Z',
+        },
+      };
+
+      final api = FakeApi()..handler = (_, _) async => offer(originalOffer);
+      final c = DispatchController(api: api, userId: driver, driver: true);
+      addTearDown(c.dispose);
+      c.setEnabled(true);
+      await settle();
+      final reply = Completer<Object?>();
+      api.handler = (_, _) => reply.future;
+      final polling = c.refresh();
+      final accept = c.respond(true, offerId: originalOffer);
+      reply.complete(offer(replacementOffer));
+      await Future.wait([polling, accept]);
+
+      expect(c.state!.offerId, replacementOffer);
+      expect(api.calls.where((call) => call.action == 'respond'), isEmpty);
+      await c.respond(true, offerId: replacementOffer);
+      expect(api.calls.last.payload['offer_id'], replacementOffer);
+    },
+  );
   test('foreign snapshot fails closed', () async {
     final api = FakeApi()
       ..handler = ((action, payload) async => envelope(isDriver: true));
@@ -186,6 +262,26 @@ void main() {
     expect(c.state, isNull);
     expect(c.canAct, isFalse);
   });
+  test(
+    'shift only succeeds when the server confirms the requested state',
+    () async {
+      var confirm = false;
+      final api = FakeApi()
+        ..handler = (action, payload) async => {
+          ...envelope(isDriver: true),
+          'online': action == 'online' && confirm && payload['online'] == true,
+        };
+      final c = DispatchController(api: api, userId: driver, driver: true);
+      addTearDown(c.dispose);
+      c.setEnabled(true);
+      await settle();
+      await expectLater(c.setOnline(true), throwsA(isA<OrderFailure>()));
+      expect(c.state!.online, isFalse);
+      confirm = true;
+      await c.setOnline(true);
+      expect(c.state!.online, isTrue);
+    },
+  );
   test(
     'driver restart restores active trip and repeat uses same target status',
     () async {
@@ -206,8 +302,8 @@ void main() {
       c.setEnabled(true);
       await settle();
       expect(c.state!.trip!.status, 'accepted');
-      await c.advance('to_pickup');
-      await c.advance('to_pickup');
+      await c.advance('to_pickup', orderId: c.state!.trip!.id);
+      await c.advance('to_pickup', orderId: c.state!.trip!.id);
       expect(api.calls.last.payload, {
         'order_id': c.state!.trip!.id,
         'status': 'to_pickup',

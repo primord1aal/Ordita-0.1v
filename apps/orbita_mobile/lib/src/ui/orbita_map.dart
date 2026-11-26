@@ -19,6 +19,7 @@ class OrbitaMap extends StatefulWidget {
     this.enabled = true,
     this.pickup,
     this.destination,
+    this.selectionId,
     this.initialCenter = localMapCenter,
     this.focusPoint,
     this.picking = false,
@@ -38,6 +39,7 @@ class OrbitaMap extends StatefulWidget {
   final double height;
   final bool enabled, picking;
   final AddressPlace? pickup, destination;
+  final String? selectionId;
   final GeoPoint initialCenter;
   final GeoPoint? focusPoint;
   final ValueChanged<GeoPoint>? onCenterChanged;
@@ -73,6 +75,7 @@ class _OrbitaMapState extends State<OrbitaMap> {
   Timer? _cameraTimer;
   Timer? _tileRetryTimer;
   bool _automaticTileRetryUsed = false;
+  String? _framedDriverSelection;
   GeoPoint? _pickingPoint;
   double _visibleHeight = 0, _mapWidth = 0;
 
@@ -84,8 +87,19 @@ class _OrbitaMapState extends State<OrbitaMap> {
     offset: Offset(0, -widget.coveredHeight / 2),
   );
 
-  void _frameSelection() {
+  void _frameSelection({bool focusLocation = false}) {
     if (!_ready || !widget.enabled || _visibleHeight < 140) return;
+    final focusPoint = widget.focusPoint;
+    if (focusLocation && focusPoint != null) {
+      _focus(focusPoint, zoom: 17);
+      return;
+    }
+    final driverSelection = widget.controls == MapControls.driver
+        ? widget.selectionId
+        : null;
+    if (driverSelection != null && driverSelection == _framedDriverSelection) {
+      return;
+    }
     final route = widget.route;
     final points = [
       if (route != null) ...route.points,
@@ -117,17 +131,18 @@ class _OrbitaMapState extends State<OrbitaMap> {
           minZoom: 4,
         ),
       );
-    } else if (widget.focusPoint case final point?) {
-      _focus(point, zoom: 17);
+      _framedDriverSelection = driverSelection;
+    } else if (focusPoint != null) {
+      _focus(focusPoint, zoom: 17);
     } else if (widget.picking) {
       _focus(_pickingPoint ?? widget.focusPoint ?? widget.initialCenter);
     }
   }
 
-  void _scheduleFrame() {
+  void _scheduleFrame({bool focusLocation = false}) {
     _cameraTimer?.cancel();
     _cameraTimer = Timer(const Duration(milliseconds: 300), () {
-      if (mounted) _frameSelection();
+      if (mounted) _frameSelection(focusLocation: focusLocation);
     });
   }
 
@@ -160,7 +175,17 @@ class _OrbitaMapState extends State<OrbitaMap> {
         widget.focusPoint != oldWidget.focusPoint) {
       _pickingPoint = widget.focusPoint;
     }
-    if (widget.focusPoint != oldWidget.focusPoint ||
+    final focusChanged = widget.focusPoint != oldWidget.focusPoint;
+    if (widget.controls == MapControls.driver) {
+      if (widget.selectionId != null &&
+          widget.selectionId != _framedDriverSelection &&
+          (widget.selectionId != oldWidget.selectionId ||
+              !oldWidget.enabled && widget.enabled)) {
+        _scheduleFrame();
+      } else if (focusChanged) {
+        _scheduleFrame(focusLocation: true);
+      }
+    } else if (focusChanged ||
         widget.route != oldWidget.route ||
         widget.coveredHeight != oldWidget.coveredHeight ||
         widget.height != oldWidget.height) {

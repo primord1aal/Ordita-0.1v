@@ -12,6 +12,8 @@ import 'package:orbita_mobile/src/auth/auth_repository.dart';
 import 'package:orbita_mobile/src/domain/contracts.dart';
 import 'package:orbita_mobile/src/maps/map_settings.dart';
 import 'package:orbita_mobile/src/maps/map_tiles.dart';
+import 'package:orbita_mobile/src/orders/dispatch_controller.dart';
+import 'package:orbita_mobile/src/platform/device_gateway.dart';
 import 'package:orbita_mobile/src/screens/driver_screen.dart';
 import 'package:orbita_mobile/src/screens/passenger_screen.dart';
 import 'package:orbita_mobile/src/ui/driver_demo_access.dart';
@@ -23,6 +25,9 @@ import 'package:orbita_mobile/src/ui/components.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'design_test_fonts.dart';
+import 'dispatch_controller_test.dart'
+    as dispatch_fakes
+    show FakeApi, driver, envelope;
 import 'fake_auth_repository.dart';
 import 'fake_device.dart';
 import 'maps_test_fakes.dart';
@@ -121,6 +126,86 @@ Future<void> _slide(WidgetTester tester) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(loadDesignTestFonts);
+
+  testWidgets('Водитель получает GPS после выдачи разрешения в настройках', (
+    tester,
+  ) async {
+    final device = FakeDevice()
+      ..state = const DeviceState(
+        foregroundLocationRequested: true,
+        locationPermanentlyDenied: true,
+      )
+      ..locationHandler = () async => DeviceLocationFix(
+        latitude: 55.01,
+        longitude: 82.44,
+        accuracyMeters: 10,
+        capturedAt: DateTime.now().toUtc(),
+      );
+    final maps = MapSettings(initialKey: fakeMapKey);
+    final dispatch = DispatchController(
+      api: dispatch_fakes.FakeApi()
+        ..handler = (_, _) async => dispatch_fakes.envelope(isDriver: true),
+      userId: dispatch_fakes.driver,
+      driver: true,
+    )..setEnabled(true);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox());
+      dispatch.dispose();
+      maps.dispose();
+    });
+
+    Future<void> show({bool foreground = true}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: orbitaTheme(),
+          home: Scaffold(
+            body: DriverScreen(
+              mapSettings: maps,
+              device: device,
+              dispatch: dispatch,
+              foreground: foreground,
+              tileSessionFactory: (_) => FakeMapTiles(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await show();
+    final warning = find.textContaining('Доступ к местоположению запрещён');
+    expect(warning, findsOneWidget);
+    final settings = find.text('Открыть настройки');
+    await tester.ensureVisible(settings);
+    await tester.tap(settings);
+    expect(device.calls, contains('settings'));
+    expect(device.calls, isNot(contains('currentLocation')));
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await show(foreground: false);
+    device.state = const DeviceState(
+      location: 'precise',
+      foregroundLocationRequested: true,
+      locationEnabled: true,
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await show();
+
+    expect(
+      device.calls.where((call) => call == 'currentLocation'),
+      hasLength(1),
+    );
+    expect(device.calls, isNot(contains('foreground')));
+    expect(warning, findsNothing);
+    expect(settings, findsNothing);
+    final position = tester
+        .widget<OrbitaMap>(find.byType(OrbitaMap))
+        .userPosition;
+    expect(position?.latitude, 55.01);
+    expect(position?.longitude, 82.44);
+    expect(tester.takeException(), isNull);
+    dispatch.setEnabled(false);
+  });
 
   for (final (role, status, signedIn) in [
     (UserRole.driver, AccessStatus.active, true),

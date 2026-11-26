@@ -6,8 +6,8 @@ import '../maps/map_tiles.dart';
 import 'orbita_map.dart';
 import 'theme.dart';
 
-/// Водительская карта не подписывается на геолокацию и не рисует позицию авто.
-/// Скрытый IndexedStack содержит только этот лёгкий lifecycle-контейнер.
+/// Показывает координату, полученную от рабочего экрана. Загрузка тайлов
+/// останавливается, когда водительская вкладка скрыта или приложение в фоне.
 class DriverMap extends StatefulWidget {
   const DriverMap({
     required this.mapSettings,
@@ -16,6 +16,9 @@ class DriverMap extends StatefulWidget {
     this.height = 300,
     this.tileSessionFactory,
     this.focusPoint,
+    this.tripId,
+    this.pickup,
+    this.destination,
     this.onLocate,
     this.locating = false,
     super.key,
@@ -26,6 +29,8 @@ class DriverMap extends StatefulWidget {
   final double height;
   final MapTileSession Function(String)? tileSessionFactory;
   final GeoPoint? focusPoint;
+  final String? tripId;
+  final AddressPlace? pickup, destination;
   final VoidCallback? onLocate;
   final bool locating;
 
@@ -101,16 +106,26 @@ class _DriverMapState extends State<DriverMap> {
         width: double.infinity,
         child: ColoredBox(
           color: OrbitaPalette.of(context).mapLand,
-          child: const Align(
+          child: Align(
             alignment: Alignment.bottomRight,
             child: Padding(
-              padding: EdgeInsets.fromLTRB(0, 0, 16, 12),
+              padding: const EdgeInsets.fromLTRB(0, 0, 16, 12),
               child: SizedBox.square(
                 dimension: 48,
                 child: IconButton(
                   tooltip: 'Моё местоположение',
-                  onPressed: null,
-                  icon: Icon(Icons.my_location),
+                  onPressed: _requested && !widget.locating
+                      ? widget.onLocate
+                      : null,
+                  icon: widget.locating
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            semanticsLabel: 'Определяем местоположение',
+                          ),
+                        )
+                      : const Icon(Icons.my_location),
                 ),
               ),
             ),
@@ -126,6 +141,9 @@ class _DriverMapState extends State<DriverMap> {
       borderRadius: BorderRadius.zero,
       controls: MapControls.driver,
       focusPoint: widget.focusPoint,
+      selectionId: widget.tripId,
+      pickup: widget.pickup,
+      destination: widget.destination,
       userPosition: widget.focusPoint,
       onLocate: widget.onLocate,
       locating: widget.locating,

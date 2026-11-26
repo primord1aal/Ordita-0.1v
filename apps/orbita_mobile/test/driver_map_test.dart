@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:orbita_mobile/src/maps/address_models.dart';
 import 'package:orbita_mobile/src/maps/geoapify_service.dart';
 import 'package:orbita_mobile/src/maps/map_settings.dart';
 import 'package:orbita_mobile/src/maps/map_tiles.dart';
@@ -118,6 +120,118 @@ void main() {
     expect(tiles.calls.length, requests);
     await show(true);
     expect(identical(tester.state(find.byType(FlutterMap)), state), isTrue);
+    await tester.pumpWidget(const SizedBox());
+    settings.dispose();
+  });
+
+  testWidgets('GPS доступен без тайлов только на рабочем экране', (
+    tester,
+  ) async {
+    final settings = MapSettings();
+    var locationRequests = 0;
+    var sessions = 0;
+    final locate = find.byTooltip('Моё местоположение');
+
+    Future<void> show({bool foreground = true, bool locating = false}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: orbitaTheme(),
+          home: Scaffold(
+            body: DriverMap(
+              mapSettings: settings,
+              foreground: foreground,
+              locating: locating,
+              onLocate: () => locationRequests++,
+              tileSessionFactory: (_) {
+                sessions++;
+                return FakeMapTiles();
+              },
+            ),
+          ),
+        ),
+      );
+    }
+
+    await show();
+    await tester.tap(locate);
+    expect(locationRequests, 1);
+    await show(locating: true);
+    expect(
+      tester.widget<IconButton>(find.byType(IconButton)).onPressed,
+      isNull,
+    );
+    await show(foreground: false);
+    expect(
+      tester.widget<IconButton>(find.byType(IconButton)).onPressed,
+      isNull,
+    );
+    expect(sessions, 0);
+    await tester.pumpWidget(const SizedBox());
+    settings.dispose();
+  });
+
+  testWidgets('Принятая поездка показывает точки и не сбрасывает камеру', (
+    tester,
+  ) async {
+    final settings = MapSettings(initialKey: fakeMapKey);
+    final map = find.byType(FlutterMap);
+    const pickup = GeoPoint(55.11, 82.52);
+    const destination = GeoPoint(55.13, 82.54);
+
+    Future<void> show({
+      String? tripId,
+      GeoPoint? location,
+      bool foreground = true,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: orbitaTheme(),
+          home: Scaffold(
+            body: DriverMap(
+              mapSettings: settings,
+              height: 300,
+              foreground: foreground,
+              tripId: tripId,
+              pickup: tripId == null ? null : AddressPlace('Подача', pickup),
+              destination: tripId == null
+                  ? null
+                  : AddressPlace('Назначение', destination),
+              focusPoint: location,
+              tileSessionFactory: (_) => FakeMapTiles(),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+    }
+
+    await show();
+    final camera = tester.widget<FlutterMap>(map).mapController!;
+    expect(
+      camera.camera.center.latitude,
+      closeTo(localMapCenter.latitude, .01),
+    );
+    await show(tripId: 'first');
+    expect(find.byTooltip('Откуда: Подача'), findsOneWidget);
+    expect(find.byTooltip('Куда: Назначение'), findsOneWidget);
+    expect(camera.camera.center.latitude, closeTo(55.12, .01));
+
+    const panned = LatLng(55.117, 82.529);
+    camera.move(panned, 16);
+    await show(tripId: 'first');
+    await show(tripId: 'first', foreground: false);
+    await show(tripId: 'first');
+    expect(tester.widget<FlutterMap>(map).mapController, same(camera));
+    expect(camera.camera.center, panned);
+
+    await show(tripId: 'first', location: const GeoPoint(55.115, 82.528));
+    expect(camera.camera.center, const LatLng(55.115, 82.528));
+    await show();
+    expect(find.byTooltip('Откуда: Подача'), findsNothing);
+    expect(find.byTooltip('Куда: Назначение'), findsNothing);
+    expect(tester.widget<FlutterMap>(map).mapController, same(camera));
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     settings.dispose();
   });

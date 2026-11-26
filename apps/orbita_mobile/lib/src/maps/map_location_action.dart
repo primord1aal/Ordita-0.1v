@@ -25,6 +25,7 @@ class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
   final ValueChanged<String> onError;
   bool busy = false, _disposed = false;
   bool _automaticAttempted = false;
+  bool _waitingForLocationSettings = false;
   bool needsSettings = false;
   bool automaticRequest = false;
   double? accuracyMeters;
@@ -58,7 +59,7 @@ class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
       }
       if (!state.hasForegroundLocation &&
           automatic &&
-          state.foregroundLocationRequested) {
+          (state.foregroundLocationRequested || _waitingForLocationSettings)) {
         throw PlatformException(code: 'permission');
       }
       if (!state.hasForegroundLocation) {
@@ -76,6 +77,7 @@ class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
       if (!state.locationEnabled) {
         throw PlatformException(code: 'location_disabled');
       }
+      _waitingForLocationSettings = false;
       final fix = await device.currentLocation();
       if (!_current(revision)) return;
       final point = GeoPoint(fix.latitude, fix.longitude);
@@ -92,6 +94,10 @@ class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
       await onLocation(point);
     } on PlatformException catch (error) {
       if (_current(revision)) {
+        _waitingForLocationSettings = switch (error.code) {
+          'permission_permanent' || 'permission' || 'location_disabled' => true,
+          _ => false,
+        };
         onError(switch (error.code) {
           'permission_permanent' => 'Доступ к местоположению запрещён. Откройте настройки приложения, чтобы разрешить его.',
           'permission' =>
@@ -140,7 +146,11 @@ class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
+    if (state == AppLifecycleState.resumed && _waitingForLocationSettings) {
+      // Экран повторно проверит доступ после восстановления роли. Повторный
+      // системный запрос из автоматического сценария по-прежнему запрещён.
+      _automaticAttempted = false;
+    } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
       cancel();

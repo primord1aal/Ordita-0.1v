@@ -9,6 +9,7 @@ import 'package:orbita_mobile/src/app.dart';
 import 'package:orbita_mobile/src/auth/auth_repository.dart';
 import 'package:orbita_mobile/src/maps/address_models.dart';
 import 'package:orbita_mobile/src/maps/map_settings.dart';
+import 'package:orbita_mobile/src/platform/device_gateway.dart';
 import 'package:orbita_mobile/src/screens/map_picker_screen.dart';
 import 'package:orbita_mobile/src/screens/preview_screens.dart';
 import 'package:orbita_mobile/src/ui/orbita_map.dart';
@@ -41,6 +42,7 @@ Future<void> mountMapAccount(
   WidgetTester tester, {
   FakeAuthRepository? auth,
   FakeAddressService? service,
+  FakeDevice? device,
 }) async {
   final settings = MapSettings(initialKey: fakeMapKey);
   addTearDown(() async {
@@ -49,7 +51,7 @@ Future<void> mountMapAccount(
   });
   await tester.pumpWidget(
     OrbitaApp(
-      device: FakeDevice(),
+      device: device ?? FakeDevice(),
       authRepository: auth ?? (FakeAuthRepository()..saved = testSession()),
       mapSettings: settings,
       addressServiceFactory: (_) => service ?? FakeAddressService(),
@@ -62,6 +64,86 @@ Future<void> mountMapAccount(
 }
 
 void main() {
+  testWidgets('После выдачи разрешения GPS определяет позицию и адрес', (
+    tester,
+  ) async {
+    final device = FakeDevice()
+      ..state = const DeviceState(
+        foregroundLocationRequested: true,
+        locationPermanentlyDenied: true,
+      );
+    final service = FakeAddressService();
+    await mountMapAccount(tester, device: device, service: service);
+    final denied = find.textContaining('Доступ к местоположению запрещён');
+    expect(denied, findsOneWidget);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    device
+      ..state = readyState(background: false)
+      ..locationHandler = () async => DeviceLocationFix(
+        latitude: 55.006,
+        longitude: 82.437,
+        accuracyMeters: 9,
+        capturedAt: DateTime.now().toUtc(),
+      );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    final map = tester.widget<OrbitaMap>(
+      find.byKey(const Key('passenger-map')),
+    );
+    expect(map.pickup?.label, service.reverseLabel);
+    expect(map.userPosition?.latitude, 55.006);
+    expect(map.pickup?.point, same(map.userPosition));
+    expect(device.calls, isNot(contains('foreground')));
+    expect(denied, findsNothing);
+  });
+
+  testWidgets('Поздний GPS показывает позицию и сохраняет выбранный адрес', (
+    tester,
+  ) async {
+    final device = FakeDevice()
+      ..state = const DeviceState(foregroundLocationRequested: true);
+    await mountMapAccount(tester, device: device);
+    final pending = Completer<DeviceLocationFix>();
+    device
+      ..state = readyState(background: false)
+      ..locationHandler = () => pending.future;
+    final mapFinder = find.byKey(const Key('passenger-map'));
+    tester.widget<OrbitaMap>(mapFinder).onLocate!();
+    await tester.pump();
+    expect(device.calls, contains('currentLocation'));
+
+    final pickup = find.byKey(const Key('pickup'));
+    await tester.ensureVisible(pickup);
+    await tester.enterText(pickup, 'Чик, улица');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    final suggestion = find.text(examplePlace.label);
+    await tester.ensureVisible(suggestion);
+    await tester.tap(suggestion);
+    await tester.pump();
+    pending.complete(
+      DeviceLocationFix(
+        latitude: 55.006,
+        longitude: 82.437,
+        accuracyMeters: 9,
+        capturedAt: DateTime.now().toUtc(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final map = tester.widget<OrbitaMap>(mapFinder);
+    expect(map.pickup, same(examplePlace));
+    expect(map.userPosition?.latitude, 55.006);
+    expect(
+      tester.widget<TextField>(pickup).controller!.text,
+      examplePlace.label,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Карта ограничивает автоповтор и сохраняет камеру', (
     tester,
   ) async {

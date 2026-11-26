@@ -193,6 +193,45 @@ void main() {
       expect(device.calls.last, 'settings');
     },
   );
+  testWidgets('Возврат из настроек проверяет GPS без повторного запроса', (
+    tester,
+  ) async {
+    final device = FakeDevice()..state = const DeviceState();
+    device.locationHandler = () async => DeviceLocationFix(
+      latitude: 55,
+      longitude: 82.43,
+      accuracyMeters: 20,
+      capturedAt: DateTime.now().toUtc(),
+    );
+    final points = <GeoPoint>[];
+    final action = MapLocationAction(
+      device: device,
+      isAllowed: () => true,
+      onLocation: points.add,
+      onError: (_) {},
+    );
+    addTearDown(action.dispose);
+
+    await action.locateAutomatically();
+    expect(device.calls, ['read', 'foreground', 'read']);
+
+    action.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await action.locateAutomatically();
+    expect(device.calls, ['read', 'foreground', 'read', 'read']);
+    expect(points, isEmpty);
+
+    device.state = readyState();
+    action.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await action.locateAutomatically();
+    expect(points, hasLength(1));
+
+    action.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await action.locateAutomatically();
+    expect(
+      device.calls.where((call) => call == 'currentLocation'),
+      hasLength(1),
+    );
+  });
   testWidgets('Недоступный экран не расходует автоматическую попытку', (
     tester,
   ) async {
