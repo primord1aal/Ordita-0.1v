@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../auth/auth_controller.dart';
 import '../orders/dispatch_controller.dart';
+import '../orders/driver_offer_open.dart';
 import '../auth/auth_repository.dart';
 import '../domain/contracts.dart';
 import '../maps/map_settings.dart';
@@ -27,6 +28,7 @@ class AuthScreen extends StatefulWidget {
     this.diagnosticsEnabled = false,
     this.routeServiceFactory,
     this.tileSessionFactory,
+    this.driverOfferOpens,
     super.key,
   });
   final AuthRepository repository;
@@ -36,6 +38,7 @@ class AuthScreen extends StatefulWidget {
   final AddressService Function(String)? addressServiceFactory;
   final RouteService Function(String)? routeServiceFactory;
   final MapTileSession Function(String)? tileSessionFactory;
+  final DriverOfferOpens? driverOfferOpens;
   @override
   State<AuthScreen> createState() => _AuthScreenState();
 }
@@ -154,6 +157,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             addressServiceFactory: widget.addressServiceFactory,
                             routeServiceFactory: widget.routeServiceFactory,
                             tileSessionFactory: widget.tileSessionFactory,
+                            driverOfferOpens: widget.driverOfferOpens,
                             accountPanel: _accountPanel(visible),
                             onSignOut: _controller.signOut,
                             onOpenDriverDemo:

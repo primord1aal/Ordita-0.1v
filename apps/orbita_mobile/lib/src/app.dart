@@ -12,6 +12,7 @@ import 'maps/map_settings.dart';
 import 'maps/map_tiles.dart';
 import 'maps/geoapify_service.dart';
 import 'maps/route_preview.dart';
+import 'orders/driver_offer_open.dart';
 import 'platform/device_gateway.dart';
 import 'screens/api_check_screen.dart';
 import 'screens/auth_screen.dart';
@@ -48,8 +49,14 @@ class OrbitaApp extends StatefulWidget {
 
 class _OrbitaAppState extends State<OrbitaApp> {
   static bool _fontLicenseRegistered = false;
+  static const _offerChannel = MethodChannel(
+    'ru.orbita.taxi.foundation/driver_offer_open',
+  );
   final _navigator = GlobalKey<NavigatorState>();
   final _apiJournal = ProbeJournal();
+  final _driverOfferOpens = DriverOfferOpens();
+  final _hasOfferBridge =
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
   late final _themeSettings = widget.themeSettings ?? ThemeSettings();
   late final _maps = widget.mapSettings ?? MapSettings();
   @override
@@ -65,6 +72,12 @@ class _OrbitaAppState extends State<OrbitaApp> {
     }
     if (widget.themeSettings == null) unawaited(_themeSettings.load());
     widget.device.onOpenChecks(widget.diagnosticsEnabled ? _openChecks : null);
+    if (_hasOfferBridge) {
+      _offerChannel.setMethodCallHandler((call) async {
+        if (call.method == 'offerOpenAvailable') await _readOfferOpen();
+      });
+      unawaited(_readOfferOpen());
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         if (await widget.device.consumeLaunchRequest() &&
@@ -78,6 +91,19 @@ class _OrbitaAppState extends State<OrbitaApp> {
     });
   }
 
+  Future<void> _readOfferOpen() async {
+    try {
+      final payload = await _offerChannel.invokeMethod<Object?>(
+        'takeOfferOpen',
+      );
+      if (mounted) _driverOfferOpens.add(payload);
+    } on MissingPluginException {
+      // Android-мост отсутствует в локальной среде или другой сборке.
+    } on PlatformException {
+      // Внешнее уведомление не влияет на обычный запуск приложения.
+    }
+  }
+
   void _openChecks() {
     if (widget.diagnosticsEnabled) {
       _navigator.currentState?.pushNamed('/device-check');
@@ -87,6 +113,8 @@ class _OrbitaAppState extends State<OrbitaApp> {
   @override
   void dispose() {
     widget.device.onOpenChecks(null);
+    if (_hasOfferBridge) _offerChannel.setMethodCallHandler(null);
+    _driverOfferOpens.dispose();
     if (widget.mapSettings == null) _maps.dispose();
     if (widget.themeSettings == null) _themeSettings.dispose();
     super.dispose();
@@ -124,6 +152,7 @@ class _OrbitaAppState extends State<OrbitaApp> {
             addressServiceFactory: widget.addressServiceFactory,
             routeServiceFactory: widget.routeServiceFactory,
             tileSessionFactory: widget.tileSessionFactory,
+            driverOfferOpens: _driverOfferOpens,
           ),
           if (widget.diagnosticsEnabled) ...{
             '/api-check': (_) => ApiCheckScreen(

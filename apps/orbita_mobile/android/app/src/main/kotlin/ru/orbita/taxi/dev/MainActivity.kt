@@ -12,7 +12,14 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private companion object {
+        const val OPEN_DRIVER_OFFER = "ru.orbita.taxi.dev.OPEN_DRIVER_OFFER"
+        const val OFFER_ID = "offer_id"
+        const val OFFER_EXPIRES_AT = "expires_at"
+    }
+
     private lateinit var channel: MethodChannel
+    private lateinit var offerOpenChannel: MethodChannel
     private var pendingPermission: MethodChannel.Result? = null
     private var activityVisible = false
     private val currentLocationRequest by lazy { CurrentLocationRequest(this) { activityVisible } }
@@ -28,6 +35,11 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        offerOpenChannel = MethodChannel(engine.dartExecutor.binaryMessenger, "ru.orbita.taxi.foundation/driver_offer_open")
+        offerOpenChannel.setMethodCallHandler { call, result ->
+            if (call.method == "takeOfferOpen") result.success(takeOfferOpen())
+            else result.notImplemented()
+        }
         channel = MethodChannel(engine.dartExecutor.binaryMessenger, "ru.orbita.taxi.foundation/device")
         channel.setMethodCallHandler { call, result ->
             try {
@@ -79,6 +91,21 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun takeOfferOpen(): Map<String, String>? {
+        val source = intent ?: return null
+        if (source.action != OPEN_DRIVER_OFFER) return null
+        source.action = null
+        return try {
+            val offerId = source.getStringExtra(OFFER_ID) ?: return null
+            val expiresAt = source.getStringExtra(OFFER_EXPIRES_AT) ?: return null
+            source.removeExtra(OFFER_ID)
+            source.removeExtra(OFFER_EXPIRES_AT)
+            mapOf("kind" to "driver_offer", OFFER_ID to offerId, OFFER_EXPIRES_AT to expiresAt)
+        } catch (_: RuntimeException) {
+            null
+        }
+    }
+
     private fun request(permissions: Array<String>, result: MethodChannel.Result) {
         if (!activityVisible || pendingPermission != null) { result.error("busy", "Дождитесь завершения предыдущего действия", null); return }
         pendingPermission = result
@@ -108,6 +135,10 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.action == OPEN_DRIVER_OFFER) {
+            if (::offerOpenChannel.isInitialized) offerOpenChannel.invokeMethod("offerOpenAvailable", null)
+            return
+        }
         if (intent.getBooleanExtra(DeviceSupport.OPEN_CHECKS, false) && ::channel.isInitialized) {
             intent.removeExtra(DeviceSupport.OPEN_CHECKS)
             channel.invokeMethod("openChecks", null)

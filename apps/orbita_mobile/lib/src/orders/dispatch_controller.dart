@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../maps/address_models.dart';
 import '../services/session_store.dart';
+import 'driver_offer_open.dart';
 import 'order_models.dart';
 
 abstract interface class DispatchApi {
@@ -169,6 +170,29 @@ class DispatchController extends ChangeNotifier {
   }
 
   Future<void> refresh() => _run(driver ? 'driver_poll' : 'passenger_poll', {});
+
+  Future<bool> verifyOfferOpen(DriverOfferOpen open) async {
+    if (!driver || !_enabled) return false;
+    final generation = _generation;
+    while (_flight != null &&
+        generation == _generation &&
+        open.expiresAt.isAfter(DateTime.now())) {
+      await _flight!.future;
+    }
+    if (generation != _generation || !open.expiresAt.isAfter(DateTime.now())) {
+      return false;
+    }
+    await refresh();
+    final confirmedExpiry = state?.offerExpiresAt;
+    return generation == _generation &&
+        canAct &&
+        open.expiresAt.isAfter(DateTime.now()) &&
+        state?.offerId == open.offerId &&
+        confirmedExpiry != null &&
+        confirmedExpiry.millisecondsSinceEpoch ==
+            open.expiresAt.millisecondsSinceEpoch &&
+        secondsUntil(confirmedExpiry) > 0;
+  }
 
   Future<void> create(AddressPlace pickup, AddressPlace destination) async {
     await _waitForPoll();

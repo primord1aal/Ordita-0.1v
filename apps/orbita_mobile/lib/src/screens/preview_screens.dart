@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../domain/contracts.dart';
 import '../orders/dispatch_controller.dart';
+import '../orders/driver_offer_open.dart';
 import '../maps/map_settings.dart';
 import '../maps/map_tiles.dart';
 import '../maps/geoapify_service.dart';
@@ -30,12 +33,14 @@ class PreviewShell extends StatefulWidget {
     this.accountPanel,
     this.dispatchApi,
     this.userId,
+    this.driverOfferOpens,
     this.onSignOut,
     this.onOpenDriverDemo,
     super.key,
   });
   final DispatchApi? dispatchApi;
   final String? userId;
+  final DriverOfferOpens? driverOfferOpens;
   final PreviewRole role;
   final DeviceGateway device;
   final MapSettings mapSettings;
@@ -55,6 +60,14 @@ class PreviewShell extends StatefulWidget {
 class _PreviewShellState extends State<PreviewShell> {
   int _index = 0;
   DispatchController? _dispatch;
+  bool _handlingOfferOpen = false;
+
+  bool get _canCheckOfferOpen =>
+      widget.role == PreviewRole.driver &&
+      widget.mapAccessAllowed &&
+      widget.mapForeground &&
+      _dispatch != null;
+
   @override
   void initState() {
     super.initState();
@@ -66,16 +79,51 @@ class _PreviewShellState extends State<PreviewShell> {
       );
       _dispatch!.setEnabled(widget.mapAccessAllowed && widget.mapForeground);
     }
+    widget.driverOfferOpens?.addListener(_scheduleOfferOpen);
+    _scheduleOfferOpen();
   }
 
   @override
   void didUpdateWidget(covariant PreviewShell oldWidget) {
     super.didUpdateWidget(oldWidget);
     _dispatch?.setEnabled(widget.mapAccessAllowed && widget.mapForeground);
+    if (oldWidget.driverOfferOpens != widget.driverOfferOpens) {
+      oldWidget.driverOfferOpens?.removeListener(_scheduleOfferOpen);
+      widget.driverOfferOpens?.addListener(_scheduleOfferOpen);
+    }
+    _scheduleOfferOpen();
+  }
+
+  void _scheduleOfferOpen() {
+    if (_handlingOfferOpen ||
+        !_canCheckOfferOpen ||
+        widget.driverOfferOpens?.hasPending != true) {
+      return;
+    }
+    _handlingOfferOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_openConfirmedOffer());
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  Future<void> _openConfirmedOffer() async {
+    try {
+      if (!_canCheckOfferOpen) return;
+      final open = widget.driverOfferOpens?.take();
+      if (open == null || !await _dispatch!.verifyOfferOpen(open)) return;
+      if (!mounted || !_canCheckOfferOpen) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      if (_index != 0) setState(() => _index = 0);
+    } finally {
+      _handlingOfferOpen = false;
+      if (mounted) _scheduleOfferOpen();
+    }
   }
 
   @override
   void dispose() {
+    widget.driverOfferOpens?.removeListener(_scheduleOfferOpen);
     _dispatch?.dispose();
     super.dispose();
   }
