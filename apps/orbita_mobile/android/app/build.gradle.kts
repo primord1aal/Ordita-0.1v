@@ -6,6 +6,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val ruStorePushProjectId = providers.environmentVariable("ORBITA_RUSTORE_PUSH_PROJECT_ID")
+    .orNull.orEmpty()
+require(ruStorePushProjectId.isEmpty() || ruStorePushProjectId.matches(Regex("[A-Za-z0-9_-]{1,128}"))) {
+    "Invalid RuStore Push project ID"
+}
+val ruStorePushEnabled = ruStorePushProjectId.isNotEmpty()
+
 android {
     namespace = "ru.orbita.taxi.dev"
     compileSdk = flutter.compileSdkVersion
@@ -29,6 +36,12 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["orbitaRuStorePushEnabled"] = ruStorePushEnabled.toString()
+        manifestPlaceholders["orbitaRuStorePushProjectId"] = ruStorePushProjectId
+    }
+
+    sourceSets.named("main") {
+        java.srcDir(if (ruStorePushEnabled) "src/rustore/kotlin" else "src/noRustore/kotlin")
     }
 
     buildTypes {
@@ -42,7 +55,20 @@ android {
     }
 }
 
+if (ruStorePushEnabled) {
+    repositories {
+        maven {
+            url = uri("https://nexus-external.rustore.ru/repository/maven-rustore-exposed/")
+            content {
+                includeGroup("ru.rustore.sdk")
+                includeGroup("ru.ok.tracer")
+            }
+        }
+    }
+}
+
 dependencies {
+    if (ruStorePushEnabled) implementation("ru.rustore.sdk:pushclient:7.6.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16.1")
 }

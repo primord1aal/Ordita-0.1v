@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../auth/auth_controller.dart';
 import '../orders/dispatch_controller.dart';
 import '../orders/driver_offer_open.dart';
+import '../orders/driver_push_registration.dart';
 import '../auth/auth_repository.dart';
 import '../domain/contracts.dart';
 import '../maps/map_settings.dart';
@@ -45,6 +46,7 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   late final AuthController _controller;
+  DriverPushRegistration? _driverPush;
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _starting = true, _obscurePassword = true;
@@ -54,12 +56,26 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void initState() {
     super.initState();
+    final repository = widget.repository;
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android &&
+        repository is DriverPushApi) {
+      _driverPush = DriverPushRegistration(
+        repository as DriverPushApi,
+        widget.device,
+      );
+    }
     _controller = AuthController(widget.repository)..addListener(_changed);
     unawaited(_controller.start());
   }
 
   void _changed() {
-    if (_controller.busy) return;
+    if (_controller.busy) {
+      if (_controller.checkKind == AuthCheckKind.signingOut) {
+        _driverPush?.authorize(null);
+      }
+      return;
+    }
     _starting = false;
     final fresh = _controller.access;
     final permitted =
@@ -79,10 +95,18 @@ class _AuthScreenState extends State<AuthScreen> {
     }
     _resolvedAccess = permitted ? fresh : null;
     _resolvedPhase = _controller.phase;
+    if (_controller.foreground) {
+      _driverPush?.authorize(
+        permitted && fresh?.role == UserRole.driver
+            ? _controller.session
+            : null,
+      );
+    }
   }
 
   @override
   void dispose() {
+    _driverPush?.dispose();
     _controller.removeListener(_changed);
     _controller.dispose();
     _email.dispose();
@@ -158,6 +182,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             routeServiceFactory: widget.routeServiceFactory,
                             tileSessionFactory: widget.tileSessionFactory,
                             driverOfferOpens: widget.driverOfferOpens,
+                            onDriverOnline: _driverPush?.setConfirmedOnline,
                             accountPanel: _accountPanel(visible),
                             onSignOut: _controller.signOut,
                             onOpenDriverDemo:

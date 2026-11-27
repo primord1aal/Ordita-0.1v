@@ -98,7 +98,7 @@ class DispatchPanel extends StatelessWidget {
         if (c.driver && state != null && trip?.active != true) ...[
           const SizedBox(height: 8),
           Text(state.online ? 'На линии · ожидаем заказ' : 'Не на линии'),
-          const Text('Заказы поступают, пока приложение открыто.'),
+          const Text('Для новых предложений оставайтесь на линии.'),
         ],
         if (!c.driver && c.pending != null) ...[
           const Text(

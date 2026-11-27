@@ -12,14 +12,10 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private companion object {
-        const val OPEN_DRIVER_OFFER = "ru.orbita.taxi.dev.OPEN_DRIVER_OFFER"
-        const val OFFER_ID = "offer_id"
-        const val OFFER_EXPIRES_AT = "expires_at"
-    }
-
     private lateinit var channel: MethodChannel
     private lateinit var offerOpenChannel: MethodChannel
+    private lateinit var driverPushChannel: MethodChannel
+    private val pushTokenChanged: () -> Unit = { driverPushChannel.invokeMethod("tokenChanged", null) }
     private var pendingPermission: MethodChannel.Result? = null
     private var activityVisible = false
     private val currentLocationRequest by lazy { CurrentLocationRequest(this) { activityVisible } }
@@ -39,6 +35,34 @@ class MainActivity : FlutterActivity() {
         offerOpenChannel.setMethodCallHandler { call, result ->
             if (call.method == "takeOfferOpen") result.success(takeOfferOpen())
             else result.notImplemented()
+        }
+        driverPushChannel = MethodChannel(engine.dartExecutor.binaryMessenger, "ru.orbita.taxi.foundation/driver_push")
+        DriverPushTokenEvents.onChanged = pushTokenChanged
+        driverPushChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getToken" -> RuStoreDriverPush.getToken { result.success(it) }
+                "setEnabled" -> {
+                    val enabled = call.arguments as? Boolean
+                    if (enabled == null) {
+                        result.error("invalid_input", "Некорректный параметр уведомлений", null)
+                    } else {
+                        val active = enabled && RuStoreDriverPush.configured
+                        if (!active) DriverShiftHeartbeatService.stop(applicationContext)
+                        val saved = DriverOfferNotifications.setEnabled(applicationContext, active)
+                        if (saved) result.success(null)
+                        else result.error("push_configuration", "Не удалось сохранить настройку уведомлений", null)
+                    }
+                }
+                "startHeartbeat" -> {
+                    val values = call.arguments as? Map<*, *>
+                    result.success(values != null && DriverShiftHeartbeatService.start(applicationContext, values))
+                }
+                "stopHeartbeat" -> {
+                    DriverShiftHeartbeatService.stop(applicationContext)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
         }
         channel = MethodChannel(engine.dartExecutor.binaryMessenger, "ru.orbita.taxi.foundation/device")
         channel.setMethodCallHandler { call, result ->
@@ -100,7 +124,9 @@ class MainActivity : FlutterActivity() {
             val expiresAt = source.getStringExtra(OFFER_EXPIRES_AT) ?: return null
             source.removeExtra(OFFER_ID)
             source.removeExtra(OFFER_EXPIRES_AT)
-            mapOf("kind" to "driver_offer", OFFER_ID to offerId, OFFER_EXPIRES_AT to expiresAt)
+            val payload = mapOf("kind" to "driver_offer", OFFER_ID to offerId, OFFER_EXPIRES_AT to expiresAt)
+            val offer = DriverOfferNotice.parse(payload, System.currentTimeMillis()) ?: return null
+            if (DriverOfferNotifications.wasDisplayed(applicationContext, offer)) offer.payload() else null
         } catch (_: RuntimeException) {
             null
         }
@@ -125,9 +151,14 @@ class MainActivity : FlutterActivity() {
         if (code == 612) { val result = pendingPermission; pendingPermission = null; result?.success(null) }
     }
 
-    override fun onResume() { super.onResume(); activityVisible = true }
+    override fun onResume() {
+        super.onResume()
+        activityVisible = true
+        DriverShiftHeartbeatService.activityVisible = true
+    }
     override fun onPause() {
         activityVisible = false
+        DriverShiftHeartbeatService.activityVisible = false
         currentLocationRequest.cancel("not_visible", "Экран карты закрыт")
         super.onPause()
     }
@@ -146,6 +177,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        if (DriverPushTokenEvents.onChanged === pushTokenChanged) DriverPushTokenEvents.onChanged = null
+        if (::driverPushChannel.isInitialized) driverPushChannel.setMethodCallHandler(null)
         currentLocationRequest.cancel("closed", "Экран закрыт")
         pendingPermission?.error("closed", "Экран закрыт", null)
         pendingPermission = null

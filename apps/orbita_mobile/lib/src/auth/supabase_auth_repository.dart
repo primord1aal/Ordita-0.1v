@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart' as sdk;
 
 import '../backend/test_backend_configuration.dart';
+import '../orders/driver_push_registration.dart';
 import '../services/session_store.dart';
 import 'auth_repository.dart';
 import '../orders/dispatch_controller.dart';
@@ -13,7 +14,8 @@ import '../orders/order_models.dart';
 import 'bounded_http_client.dart';
 import 'secure_auth_storage.dart';
 
-class SupabaseAuthRepository implements AuthRepository, DispatchApi {
+class SupabaseAuthRepository
+    implements AuthRepository, DispatchApi, DriverPushApi {
   SupabaseAuthRepository(this.configuration)
     : storage = SecureAuthStorage(
         SecureSessionStore(projectRef: configuration.projectRef),
@@ -226,6 +228,36 @@ class SupabaseAuthRepository implements AuthRepository, DispatchApi {
     }
   }
 
+  bool _hasBoundPushDevice = false;
+
+  @override
+  Future<bool> bindDriverPushDevice(String? token) async {
+    final generation = _generation;
+    if (_sdk.auth.currentSession == null) return false;
+    final result = await _sdk.rpc(
+      'orbita_driver_push_device',
+      params: {'p_token': token},
+    );
+    _current(generation);
+    if (result == true) _hasBoundPushDevice = token != null;
+    return result == true;
+  }
+
+  @override
+  Future<bool> startDriverHeartbeat() async {
+    final session = _sdk.auth.currentSession;
+    if (session == null || session.isExpired) return false;
+    return await DriverPushRegistration.platformChannel.invokeMethod<bool>(
+          'startHeartbeat',
+          {
+            'projectUrl': configuration.url,
+            'publishableKey': configuration.publishableKey,
+            'accessToken': session.accessToken,
+          },
+        ) ??
+        false;
+  }
+
   @override
   void cancelPending() {
     _generation++;
@@ -234,6 +266,14 @@ class SupabaseAuthRepository implements AuthRepository, DispatchApi {
 
   @override
   Future<void> signOut() async {
+    if (_hasBoundPushDevice) {
+      _hasBoundPushDevice = false;
+      try {
+        await bindDriverPushDevice(null).timeout(const Duration(seconds: 2));
+      } catch (_) {
+        // Sign-out still revokes the session and its device binding.
+      }
+    }
     cancelPending();
     final old = _client;
     final transport = _http;

@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -6,6 +7,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <application
         android:label="Орбита · тест"
@@ -15,11 +17,31 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="false"
         android:icon="@mipmap/ic_launcher">
+        <meta-data
+            android:name="ru.rustore.sdk.pushclient.project_id"
+            android:value="${orbitaRuStorePushProjectId}" />
+        <meta-data
+            android:name="ru.rustore.sdk.pushclient.params_class"
+            android:value="ru.orbita.taxi.dev.OrbitaRuStorePushParams" />
+        <service
+            android:name=".RuStoreOfferMessagingService"
+            android:enabled="${orbitaRuStorePushEnabled}"
+            android:exported="${orbitaRuStorePushEnabled}"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="ru.rustore.sdk.pushclient.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
         <service
             android:name=".LocationDiagnosticService"
             android:exported="false"
             android:stopWithTask="false"
             android:foregroundServiceType="location" />
+        <service
+            android:name=".DriverShiftHeartbeatService"
+            android:exported="false"
+            android:stopWithTask="true"
+            android:foregroundServiceType="dataSync" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

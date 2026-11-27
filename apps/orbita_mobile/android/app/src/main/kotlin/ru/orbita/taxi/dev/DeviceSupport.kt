@@ -53,9 +53,13 @@ internal object DeviceSupport {
         ensureChannels(context)
         val intent = Intent(context, MainActivity::class.java).putExtra(OPEN_CHECKS, true).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val pending = PendingIntent.getActivity(context, 41, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return basicNotification(context, channel, title, body).setContentIntent(pending)
+    }
+
+    fun basicNotification(context: Context, channel: String, title: String, body: String): Notification.Builder {
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(context, channel) else Notification.Builder(context)
         return builder.setSmallIcon(R.drawable.ic_stat_orbita).setContentTitle(title).setContentText(body)
-            .setContentIntent(pending).setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
     }
 
     const val FOREGROUND_PERMISSION_PREFS = "orbita_foreground_location_permission"

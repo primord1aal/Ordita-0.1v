@@ -34,6 +34,7 @@ class PreviewShell extends StatefulWidget {
     this.dispatchApi,
     this.userId,
     this.driverOfferOpens,
+    this.onDriverOnline,
     this.onSignOut,
     this.onOpenDriverDemo,
     super.key,
@@ -41,6 +42,7 @@ class PreviewShell extends StatefulWidget {
   final DispatchApi? dispatchApi;
   final String? userId;
   final DriverOfferOpens? driverOfferOpens;
+  final ValueChanged<bool>? onDriverOnline;
   final PreviewRole role;
   final DeviceGateway device;
   final MapSettings mapSettings;
@@ -77,10 +79,20 @@ class _PreviewShellState extends State<PreviewShell> {
         userId: widget.userId!,
         driver: widget.role == PreviewRole.driver,
       );
+      if (widget.role == PreviewRole.driver) {
+        _dispatch!.addListener(_driverOnline);
+      }
       _dispatch!.setEnabled(widget.mapAccessAllowed && widget.mapForeground);
     }
     widget.driverOfferOpens?.addListener(_scheduleOfferOpen);
     _scheduleOfferOpen();
+  }
+
+  void _driverOnline() {
+    final dispatch = _dispatch;
+    if (dispatch != null && dispatch.canAct) {
+      widget.onDriverOnline?.call(dispatch.state!.online);
+    }
   }
 
   @override
@@ -124,6 +136,7 @@ class _PreviewShellState extends State<PreviewShell> {
   @override
   void dispose() {
     widget.driverOfferOpens?.removeListener(_scheduleOfferOpen);
+    _dispatch?.removeListener(_driverOnline);
     _dispatch?.dispose();
     super.dispose();
   }
