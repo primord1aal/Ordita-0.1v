@@ -1,7 +1,7 @@
 """One bounded transaction: exact fourth SQL and one history row, no retries."""
 import json
 from .policy import LOCK, require, sources, history, HEX64
-from .state import digest_sql, protected_digest_sql, history_sql
+from .state import FINGERPRINT_SETTINGS_SQL, digest_sql, protected_digest_sql, history_sql
 from tools.orders_migration.locks import lock_sql
 
 
@@ -39,8 +39,7 @@ def body(root,expected_state):
     require(HEX64.fullmatch(expected_state),'Preview state digest required.')
     delimiter=b'$orbita_fixed_maps_source$'
     require(delimiter not in source,'SQL delimiter collision.')
-    before=lock_sql()+"""
-SET LOCAL search_path=''; SET LOCAL timezone='UTC';
+    before=lock_sql()+'\n'+FINGERPRINT_SETTINGS_SQL+"""
 DO $pre$ BEGIN IF ("""+digest_sql()+") <> "+literal(expected_state)+" OR ("+history_sql()+") IS DISTINCT FROM "+literal(json.dumps(history()))+"::jsonb THEN RAISE EXCEPTION 'MAPS_BASELINE_CHANGED'; END IF; END $pre$;\n"
     before+="SELECT set_config('orbita.maps_protected',("+protected_digest_sql()+"),true);\n"
     record=(b"\nINSERT INTO supabase_migrations.schema_migrations(version,statements,name) VALUES ('"+

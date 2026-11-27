@@ -11,6 +11,10 @@ from .policy import require, history, LOCK
 DISPATCH_REL=['dispatch_drivers','dispatch_offers','dispatch_queue']
 DISPATCH_FUNCTIONS=['dispatch_allowed','dispatch_tick','dispatch_snapshot','orbita_dispatch']
 
+# to_jsonb renders bytea using the session's bytea_output setting. Use the
+# same representation on the source, the restore and inside the atomic guard.
+FINGERPRINT_SETTINGS_SQL = "SET LOCAL search_path=''; SET LOCAL timezone='UTC'; SET LOCAL bytea_output='hex';"
+
 
 def existing_catalog_sql():
     relations="('orbita_orders','dispatch_drivers','dispatch_offers','dispatch_queue')"
@@ -50,15 +54,19 @@ def digest_sql():
 
 
 def capture(db):
-    return json.loads(db.query("set local search_path='';set local timezone='UTC';"+document_sql()+';'))
+    return json.loads(db.query(FINGERPRINT_SETTINGS_SQL + document_sql() + ';'))
+
+
+def row_hashes(db):
+    return json.loads(db.query(FINGERPRINT_SETTINGS_SQL + row_hash_sql() + ';'))
 
 
 def state_hash(db):
-    return db.query("set local search_path='';set local timezone='UTC';"+digest_sql()+';')
+    return db.query(FINGERPRINT_SETTINGS_SQL + digest_sql() + ';')
 
 
 def protected_hash(db):
-    return db.query("set local search_path='';set local timezone='UTC';"+protected_digest_sql()+';')
+    return db.query(FINGERPRINT_SETTINGS_SQL + protected_digest_sql() + ';')
 
 
 def baseline_reference():

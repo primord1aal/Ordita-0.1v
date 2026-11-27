@@ -5,8 +5,8 @@ import hashlib
 import json
 import tarfile
 import io
-from .policy import LOCK, require, versions
-from .state import capture, state_hash, protected_hash, validate_before
+from .policy import LOCK, GuardError, require, versions
+from .state import capture, row_hashes, state_hash, protected_hash, validate_before
 from .atomic import body
 from tools.orders_migration.local import Docker
 from tools.orders_migration.host_rls import restore_trigger_in_isolation
@@ -33,6 +33,7 @@ class PreviewPhase(Enum):
     RESTORED_FUNCTIONS = auto()
     RESTORED_PROTECTED_CATALOG = auto()
     RESTORED_ROWS_OR_SEQUENCES = auto()
+    RECHECK_SOURCE_DATA_AFTER_RESTORE_MISMATCH = auto()
     RESTORED_HISTORY = auto()
     RESTORED_ROLE_SAFETY = auto()
     RESTORED_DEPENDENCIES = auto()
@@ -44,6 +45,19 @@ class PreviewPhase(Enum):
     WRITE_RECEIPT = auto()
 
 
+class RestoreDataDifference(Enum):
+    SOURCE_ROWS_OR_SEQUENCES_CHANGED = auto()
+    RESTORED_ROWS_DIFFER = auto()
+    RESTORED_SEQUENCES_DIFFER = auto()
+    RESTORED_ROWS_AND_SEQUENCES_DIFFER = auto()
+
+
+class RestoreDataMismatch(GuardError):
+    def __init__(self, difference):
+        self.difference = difference
+        super().__init__(difference.name)
+
+
 def ignore_phase(phase):
     pass
 
@@ -52,7 +66,7 @@ def role_names(db):
     return json.loads(db.query("select json_agg(rolname order by rolname) from pg_roles;"))
 
 def compare_restore(expected, actual, on_phase):
-    """Only the fixed section name may leave the private comparison."""
+    """Only fixed phase and category names may leave the private comparison."""
     for key, phase in (('schemas', PreviewPhase.RESTORED_SCHEMAS),
                        ('relations', PreviewPhase.RESTORED_RELATIONS),
                        ('functions', PreviewPhase.RESTORED_FUNCTIONS)):
@@ -65,6 +79,17 @@ def compare_restore(expected, actual, on_phase):
                        ('dependency_ok', PreviewPhase.RESTORED_DEPENDENCIES),
                        ('host_rls', PreviewPhase.RESTORED_HOST_RLS)):
         on_phase(phase)
+        if key == 'rows' and actual[key] != expected[key]:
+            original, restored = expected[key], actual[key]
+            changed = {name for name in original.keys() | restored.keys()
+                       if original.get(name) != restored.get(name)}
+            sequences = {f'{schema}.{name}' for schema, name, kind, *_ in expected['catalog']['relations']
+                         if kind == 'S'}
+            if changed <= sequences:
+                raise RestoreDataMismatch(RestoreDataDifference.RESTORED_SEQUENCES_DIFFER)
+            if changed & sequences:
+                raise RestoreDataMismatch(RestoreDataDifference.RESTORED_ROWS_AND_SEQUENCES_DIFFER)
+            raise RestoreDataMismatch(RestoreDataDifference.RESTORED_ROWS_DIFFER)
         require(actual[key] == expected[key], 'Restored state differs.')
     # Includes additional keys even if no specific phase exists for them yet.
     on_phase(PreviewPhase.COMPARE_RESTORE)
@@ -132,7 +157,16 @@ def create(db, root, temporary, output, passphrase, factory=Docker, *, on_phase=
                 target='PUBLIC' if grantee=='PUBLIC' else '"'+grantee.replace('"','""')+'"'
                 local.psql('grant '+privilege+' on schema '+ident+' to '+target+(' with grant option' if grantable else '')+';')
         on_phase(PreviewPhase.COMPARE_RESTORE)
-        compare_restore(before, capture(local), on_phase)
+        try:
+            compare_restore(before, capture(local), on_phase)
+        except RestoreDataMismatch:
+            # The dump and baseline use separate read-only connections. Check
+            # for concurrent source changes before attributing a mismatch to restore.
+            on_phase(PreviewPhase.RECHECK_SOURCE_DATA_AFTER_RESTORE_MISMATCH)
+            if row_hashes(db) != before['rows']:
+                raise RestoreDataMismatch(RestoreDataDifference.SOURCE_ROWS_OR_SEQUENCES_CHANGED) from None
+            on_phase(PreviewPhase.RESTORED_ROWS_OR_SEQUENCES)
+            raise
         on_phase(PreviewPhase.RESTORED_STATE_HASH)
         require(state_hash(local)==before_hash, 'Restored state hash differs.')
         on_phase(PreviewPhase.REHEARSE_MAPS)

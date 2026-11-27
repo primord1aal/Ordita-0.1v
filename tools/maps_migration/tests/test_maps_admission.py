@@ -86,6 +86,22 @@ class PolicyTests(unittest.TestCase):
         self.assertIn('ORBITA_ORDERS_BACKUP_PASSPHRASE', result)
         self.assertNotIn('ORBITA_DISPATCH_', result)
 
+    def test_restore_data_failure_emits_only_a_fixed_category(self):
+        from tools.maps_migration.backup import PreviewPhase, RestoreDataDifference, RestoreDataMismatch
+        from tools.maps_migration.runner import cli
+
+        def fail(diagnostic):
+            diagnostic['stage'] = PreviewPhase.RESTORED_ROWS_OR_SEQUENCES
+            raise RestoreDataMismatch(RestoreDataDifference.RESTORED_SEQUENCES_DIFFER)
+
+        output = StringIO()
+        with (patch('tools.maps_migration.runner.main', side_effect=fail),
+              patch('sys.stdout', output)):
+            self.assertEqual(cli(), 1)
+        self.assertEqual(output.getvalue(),
+            'MAPS_OPERATION_FAILED: stage=RESTORED_ROWS_OR_SEQUENCES; '
+            'category=RESTORED_SEQUENCES_DIFFER; no raw errors; no automatic retry.\n')
+
 class TransactionTests(unittest.TestCase):
     def setUp(self):
         self.db=Native(os.environ.get('TMPDIR'));self.addCleanup(self.db.close)
@@ -140,6 +156,46 @@ class TransactionTests(unittest.TestCase):
             self.assertEqual(result['after_versions'],[r['version'] for r in history(True)])
             self.assertEqual(capture(self.db),self.before)
             self.assertTrue((Path(directory)/'encrypted/snapshot.tar.gpg').is_file())
+
+    def test_backup_and_atomic_guard_share_bytea_format_across_databases(self):
+        from tools.maps_migration.backup import create
+
+        self.db.psql("""
+          create table auth.synthetic_output_settings (payload bytea);
+          insert into auth.synthetic_output_settings values (decode('01207fff', 'hex'));
+          alter database postgres set bytea_output = 'escape';
+        """)
+        self.assertEqual(self.db.query('show bytea_output;'), 'escape')
+        before = capture(self.db)
+        fingerprint = state_hash(self.db)
+        protected = protected_hash(self.db)
+        with tempfile.TemporaryDirectory() as directory:
+            result = create(self.db, ROOT, Path(directory)/'work', Path(directory)/'encrypted',
+                'synthetic-maps-format-fixture', factory=Native)
+        self.assertTrue(result['restore_checked'] and result['rehearsal_checked'])
+        self.assertEqual(capture(self.db), before)
+        self.db.execute(body(ROOT, fingerprint))
+        self.assertEqual(protected_hash(self.db), protected)
+
+    def test_source_sequence_move_during_dump_blocks_preview_and_is_classified(self):
+        from tools.maps_migration.backup import create, PreviewPhase, RestoreDataDifference, RestoreDataMismatch
+
+        self.db.psql('create sequence auth.synthetic_restore_seq;')
+        dump = self.db.dump
+        phases = []
+
+        def dump_after_change(schemas):
+            self.db.psql("select nextval('auth.synthetic_restore_seq');")
+            return dump(schemas)
+
+        with (tempfile.TemporaryDirectory() as directory,
+              patch.object(self.db, 'dump', side_effect=dump_after_change),
+              self.assertRaises(RestoreDataMismatch) as error):
+            create(self.db, ROOT, Path(directory)/'work', Path(directory)/'encrypted',
+                'synthetic-maps-sequence-fixture', factory=Native, on_phase=phases.append)
+        self.assertEqual(error.exception.difference, RestoreDataDifference.SOURCE_ROWS_OR_SEQUENCES_CHANGED)
+        self.assertEqual(phases[-1], PreviewPhase.RECHECK_SOURCE_DATA_AFTER_RESTORE_MISMATCH)
+        self.assertEqual(capture(self.db)['history'], history())
     def test_missing_dispatcher_history_is_not_repaired(self):
         self.db.psql("delete from supabase_migrations.schema_migrations where version='20261120160748';")
         with self.assertRaises(GuardError):validate_before(capture(self.db))

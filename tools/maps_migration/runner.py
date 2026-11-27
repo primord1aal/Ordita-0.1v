@@ -8,7 +8,7 @@ from tools.migration_preflight import SettingsError, report_settings_failure, va
 from .policy import LOCK, GuardError, require, validate_request, validate_connection, sources, validate_receipt, versions
 from .state import capture, validate_before, state_hash, protected_hash
 from .atomic import body
-from .backup import PreviewPhase, create, ignore_phase
+from .backup import PreviewPhase, RestoreDataDifference, RestoreDataMismatch, create, ignore_phase
 from dbtools import Database, SAFE_CONNECTION_CATEGORIES
 
 class MapsDatabase(Database):
@@ -123,7 +123,7 @@ def cli():
     except SettingsError as error:
         report_settings_failure(error)
         return 1
-    except BaseException:
+    except BaseException as error:
         stage = diagnostic.get('stage')
         if isinstance(stage, PreviewPhase):
             stage = stage.name
@@ -131,7 +131,9 @@ def cli():
             stage = 'UNKNOWN'
         category = 'NOT_CONNECTED'
         db = diagnostic.get('db')
-        if db is not None:
+        if isinstance(error, RestoreDataMismatch) and isinstance(error.difference, RestoreDataDifference):
+            category = error.difference.name
+        elif db is not None:
             try:
                 candidate = db.failure_category
             except BaseException:
