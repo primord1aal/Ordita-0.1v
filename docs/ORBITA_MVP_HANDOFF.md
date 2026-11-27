@@ -1,27 +1,29 @@
 # Орбита — передача состояния MVP
 
-**27 ноября 2026 года, Новосибирск.** Разработка продолжается в `codex/orbita-night-mvp-20261126`. Защищённая ветка `codex/orbita-e2e-test-060` зафиксирована на `a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7`. [Ветка разработки](https://github.com/primord1aal/Ordita-0.1v/tree/codex/orbita-night-mvp-20261126) · [Коммит Maps Preview](https://github.com/primord1aal/Ordita-0.1v/commit/a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7)
+**28 ноября 2026 года, Новосибирск.** Разработка продолжается в `codex/orbita-night-mvp-20261126`. Защищённая ветка `codex/orbita-e2e-test-060` зафиксирована на `a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7`. [Ветка разработки](https://github.com/primord1aal/Ordita-0.1v/tree/codex/orbita-night-mvp-20261126) · [Коммит первого Maps Preview](https://github.com/primord1aal/Ordita-0.1v/commit/a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7)
 
 ## Maps Preview и Apply
 
 В замороженном коммите шаг Maps runner получил обязательный `SUPABASE_TEST_PROJECT_REF` из GitHub Variables. Допуск, список миграций, ручное одобрение и SQL остались прежними. В изолированной PostgreSQL 17.11 прошли 9 проверок, включая шифрование и восстановление. Правильный Ref принят всеми тремя режимами, отсутствующий и неверный отклоняются до соединения с базой. SQL `supabase/proposals/20261120173504_managed_maps.sql` имеет SHA-256 `bf89215b12a25eea37cbb683fe234cfc1f7e217e286f962a6190ede91daa240b`. Зафиксированный SHA опубликован, автоматический GitHub Verify успешен. [Maps Verify](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45722918438)
 
-Maps Preview `45932176395` запущен на зафиксированном SHA для `fjqghohhohgvwlmefdmo`. Задания `verify` и `entry` прошли. `guarded` ожидает одобрения владельца в `orbita-mobile-test-orders-migrations`. Для пакета Apply нужны успешный отчёт этого Preview и подтверждённый SHA-256 зашифрованной копии. [Одобрение Maps Preview](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45932176395)
+Maps Preview `45932176395` для `fjqghohhohgvwlmefdmo` прошёл `verify` и `entry`. Задание `guarded` завершилось на сверке строк и последовательностей восстановленной копии (`RESTORED_ROWS_OR_SEQUENCES`, `UNKNOWN_PRIVATE_ERROR`). Preview работает с исходной базой в режиме чтения. В запуске опубликован только отчёт изолированных тестов. Для Apply нужны успешный отчёт Preview и подтверждённый SHA-256 зашифрованной копии. [Завершившийся Maps Preview](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45932176395)
+
+На синтетической PostgreSQL ту же ошибку воспроизвели с разным форматом вывода `bytea` и с изменением исходной последовательности между первой сверкой и дампом. Облачную причину по имеющемуся логу установить невозможно. Исправление в `8c64185566e019ad63b5adb370e253ec975ef756` унифицирует формат `bytea` и при расхождении отдельно сообщает об изменении источника либо о несовпадении строк и последовательностей. SQL миграции и допуск сохранены. Все 12 изолированных тестов прошли локально и в GitHub Actions. [Коммит исправления](https://github.com/primord1aal/Ordita-0.1v/commit/8c64185566e019ad63b5adb370e253ec975ef756) · [GitHub Verify](https://github.com/primord1aal/Ordita-0.1v/actions/runs/46073651737)
 
 Успешный Dispatch Apply подтвердил записи `202611050001`, `20261112172442` и `20261120160748` на момент применения. Отдельный серверный тест подтвердил вход пассажира и водителя и завершение реальной тестовой поездки. Текущее состояние базы сверит Maps Preview. [Recovery Preview](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45711472774) · [Dispatch Apply](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45717039419) · [Серверный тест](https://github.com/primord1aal/Ordita-0.1v/actions/runs/45717039419/artifacts/15070059011)
 
-### Действия владельца для Preview
+### Следующий защищённый Maps Preview
 
-1. Убедиться, что вершина `codex/orbita-e2e-test-060` соответствует `a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7`. Сохранить существующие правила веток, обязательное одобрение `primord1aal` и запрет обхода в `orbita-mobile-test-orders-migrations`.
-2. Проверить Repository Variable `ORBITA_DISPATCH_REPO_ENABLED=true`. Только в Environment выставить `ORBITA_DISPATCH_CLOUD_ENABLED=true`, `ORBITA_DISPATCH_ALLOWED_OPERATION=preview` и `ORBITA_DISPATCH_ALLOWED_SHA=a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7`. Сверить `SUPABASE_TEST_PROJECT_REF=fjqghohhohgvwlmefdmo`, существующие `SUPABASE_FORBIDDEN_PROJECT_REF`, `ORBITA_TEST_DB_CA_PEM` и наличие закрытых `ORBITA_TEST_DB_PASSWORD`, `ORBITA_ORDERS_BACKUP_PASSPHRASE`.
-3. Запустить новый `.github/workflows/orbita-maps-migration.yml` с указанной ветки и одобрить `guarded` для конкретного запуска. Пример запроса на запуск с пустыми `preview_run_id` и `backup_sha256`.
+1. Получить согласие владельца на новый SHA для `codex/orbita-e2e-test-060`, затем выполнить fast-forward с `a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7` на `8c64185566e019ad63b5adb370e253ec975ef756` с действующими правилами ветки. Защищённый запуск требует одобрения `primord1aal` в `orbita-mobile-test-orders-migrations`.
+2. Проверить Repository Variable `ORBITA_DISPATCH_REPO_ENABLED=true`. Только в Environment выставить `ORBITA_DISPATCH_CLOUD_ENABLED=true`, `ORBITA_DISPATCH_ALLOWED_OPERATION=preview` и `ORBITA_DISPATCH_ALLOWED_SHA=8c64185566e019ad63b5adb370e253ec975ef756`. Сверить `SUPABASE_TEST_PROJECT_REF=fjqghohhohgvwlmefdmo`, существующие `SUPABASE_FORBIDDEN_PROJECT_REF`, `ORBITA_TEST_DB_CA_PEM` и наличие закрытых `ORBITA_TEST_DB_PASSWORD`, `ORBITA_ORDERS_BACKUP_PASSPHRASE`.
+3. Создать новый запуск `.github/workflows/orbita-maps-migration.yml` с указанной ветки и одобрить `guarded` на его странице. Для Preview оставить `preview_run_id` и `backup_sha256` пустыми.
 
 ```sh
 gh workflow run orbita-maps-migration.yml \
   --repo primord1aal/Ordita-0.1v \
   --ref codex/orbita-e2e-test-060 \
   -f operation=preview \
-  -f approved_sha=a648fb9dc51a3cd4d71d4c28cf708bd38f62cdc7 \
+  -f approved_sha=8c64185566e019ad63b5adb370e253ec975ef756 \
   -f project_ref=fjqghohhohgvwlmefdmo
 ```
 
@@ -79,4 +81,4 @@ Android-интеграция включает регистрацию, канал
 
 ## Следующая контрольная точка
 
-Ближайший защищённый шаг — Maps Preview на зафиксированном SHA. После Maps Apply и публикации шлюза выполнить поездку на двух телефонах с разрешённым и отклонённым GPS, проверить отказы, сроки и восстановление. Push требует настройки RuStore и защищённого включения доставки. Облачная диспетчерская, профильная плавность на Tecno и условия пилота в РФ также требуют подтверждения. [Телефонный вход и размещение](OTP_RU_READINESS.md) · [Ревизия 24 ноября](audits/Orbita_audit_2026-11-24.xlsx)
+Ближайший защищённый шаг — новый Maps Preview после допуска коммита исправления. После Maps Apply и публикации шлюза выполнить поездку на двух телефонах с разрешённым и отклонённым GPS, проверить отказы, сроки и восстановление. Push требует настройки RuStore и защищённого включения доставки. Облачная диспетчерская, профильная плавность на Tecno и условия пилота в РФ также требуют подтверждения. [Телефонный вход и размещение](OTP_RU_READINESS.md) · [Ревизия 24 ноября](audits/Orbita_audit_2026-11-24.xlsx)
