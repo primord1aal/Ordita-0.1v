@@ -53,7 +53,11 @@ begin
           case when busy.id is not null then 'busy'
                when offer.expires_at>c.captured_at then 'offered'
                when offer.id is not null then 'updating'
-               else 'waiting' end as state
+               else 'waiting' end as state,
+          case when busy.id is null and offer.id is null then
+            count(*) filter (where busy.id is null and offer.id is null)
+              over (order by d.queue_position, d.driver_id rows unbounded preceding)
+          end as queue_rank
         from orbita_mobile_private.dispatch_drivers d
         cross join captured c
         join public.orbita_profiles p on p.user_id=d.driver_id

@@ -44,6 +44,24 @@
     <p id="status" class="status" role="status" aria-live="polite">Проверяем настройки подключения…</p>
 
     <div id="data" class="data" hidden>
+      <form id="filters" class="filters full" role="search">
+        <label>Поиск по спискам
+          <input id="query" type="search" maxlength="120" autocomplete="off" placeholder="Заказ, адрес или водитель">
+        </label>
+        <label>Статус заказа
+          <select id="order-status">
+            <option value="">Все статусы</option>
+            <option value="created">Поиск водителя</option>
+            <option value="accepted">Назначен</option>
+            <option value="to_pickup">Едет к пассажиру</option>
+            <option value="arrived">Прибыл</option>
+            <option value="riding">В поездке</option>
+            <option value="completed">Завершён</option>
+            <option value="cancelled">Отменён</option>
+          </select>
+        </label>
+      </form>
+
       <section class="panel" aria-labelledby="orders-title">
         <div class="panel-head">
           <h2 id="orders-title">Активные заказы</h2>
@@ -84,6 +102,77 @@
           </table>
         </div>
         <p id="history-empty" class="empty" hidden>Завершённых заказов пока нет.</p>
+      </section>
+
+      <p id="operations-unavailable" class="full" hidden>Управление водителями, журнал и телефонные заказы пока недоступны.</p>
+
+      <section id="drivers-panel" class="panel full" aria-labelledby="drivers-title" hidden>
+        <div class="panel-head">
+          <h2 id="drivers-title">Доступ водителей</h2>
+          <span class="count" id="drivers-count"></span>
+        </div>
+        <div class="scroll" tabindex="0" role="region" aria-labelledby="drivers-title">
+          <table>
+            <thead><tr><th scope="col">Водитель</th><th scope="col">Линия</th><th scope="col">Текущая поездка</th><th scope="col">Предложения</th><th scope="col">Действие</th></tr></thead>
+            <tbody id="drivers"></tbody>
+          </table>
+        </div>
+        <p id="drivers-empty" class="empty" hidden>Водители не найдены.</p>
+      </section>
+
+      <section id="phone-panel" class="panel full" aria-labelledby="phone-title" hidden>
+        <div class="panel-head"><h2 id="phone-title">Заказ по телефону</h2></div>
+        <form id="phone-form" class="phone-form">
+          <label>UUID зарегистрированного тестового пассажира
+            <input id="phone-passenger" type="text" maxlength="36" required autocomplete="off" spellcheck="false">
+          </label>
+          <div class="phone-points">
+            <fieldset>
+              <legend>Откуда</legend>
+              <label>Адрес подачи
+                <input id="pickup-address" type="text" maxlength="500" required autocomplete="off">
+              </label>
+              <div class="coordinates">
+                <label>Широта
+                  <input id="pickup-latitude" type="number" min="-90" max="90" step="any" inputmode="decimal" required>
+                </label>
+                <label>Долгота
+                  <input id="pickup-longitude" type="number" min="-180" max="180" step="any" inputmode="decimal" required>
+                </label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Куда</legend>
+              <label>Адрес назначения
+                <input id="destination-address" type="text" maxlength="500" required autocomplete="off">
+              </label>
+              <div class="coordinates">
+                <label>Широта
+                  <input id="destination-latitude" type="number" min="-90" max="90" step="any" inputmode="decimal" required>
+                </label>
+                <label>Долгота
+                  <input id="destination-longitude" type="number" min="-180" max="180" step="any" inputmode="decimal" required>
+                </label>
+              </div>
+            </fieldset>
+          </div>
+          <button id="create-phone" class="button primary" type="submit" disabled>Создать заказ</button>
+          <p id="phone-result" class="status" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section id="audit-panel" class="panel full" aria-labelledby="audit-title" hidden>
+        <div class="panel-head">
+          <h2 id="audit-title">Журнал действий</h2>
+          <span class="count" id="audit-count"></span>
+        </div>
+        <div class="scroll" tabindex="0" role="region" aria-labelledby="audit-title">
+          <table>
+            <thead><tr><th scope="col">Время</th><th scope="col">Действие</th><th scope="col">Объект</th><th scope="col">Администратор</th></tr></thead>
+            <tbody id="audit"></tbody>
+          </table>
+        </div>
+        <p id="audit-empty" class="empty" hidden>Действий пока нет.</p>
       </section>
     </div>
   </main>

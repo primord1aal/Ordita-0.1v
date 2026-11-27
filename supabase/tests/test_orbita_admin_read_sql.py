@@ -95,7 +95,15 @@ class OrbitaAdminReadTests(unittest.TestCase):
         self.action(base.N, 'assign', 'driver')
         self.dispatch('online', base.D, {'online': True})
         self.dispatch('online', base.N, {'online': True})
+        self.assertEqual(
+            [(row['driver_id'], row['queue_rank']) for row in self.read_as()['queue']],
+            [(base.D, 1), (base.N, 2)],
+        )
         trip = self.create_order(base.B)
+        self.assertEqual(
+            [(row['driver_id'], row['queue_rank']) for row in self.read_as()['queue']],
+            [(base.D, None), (base.N, 1)],
+        )
         offer_id = self.dispatch('driver_poll', base.D, {})['offer']['id']
         self.dispatch('respond', base.D, {'offer_id': offer_id, 'response': 'accept'})
         search = self.create_order(base.M)
@@ -115,6 +123,7 @@ class OrbitaAdminReadTests(unittest.TestCase):
         self.assertEqual(orders[0]['pickup_address'], base.PICKUP['address'])
         self.assertEqual([(r['driver_id'], r['state'], r['order_id']) for r in queue],
                          [(base.N, 'updating', search['id']), (base.D, 'busy', trip['id'])])
+        self.assertEqual([row['queue_rank'] for row in queue], [None, None])
         self.assertEqual(self.admin(
             f"select status from orbita_mobile_private.dispatch_offers where order_id='{search['id']}';"),
             'pending')

@@ -72,7 +72,7 @@ p { color: var(--muted); line-height: 1.5; }
 .sign-in-intro h1 { margin-bottom: .7rem; }
 .sign-in form { display: grid; gap: .7rem; margin-top: 1.5rem; }
 label { font-size: .90rem; font-weight: 650; }
-input {
+input, select {
   width: 100%;
   min-height: 2.9rem;
   border: 1px solid #b9c9bf;
@@ -121,7 +121,25 @@ input + label { margin-top: .35rem; }
 .section-title p { margin-top: .55rem; }
 .data { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 1.1rem; }
 .panel { min-width: 0; background: var(--white); border: 1px solid var(--line); border-radius: 1rem; overflow: hidden; }
-.panel.full { grid-column: 1 / -1; }
+.full { grid-column: 1 / -1; }
+.filters, .phone-points, .coordinates { display: grid; gap: .85rem; }
+.filters { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: end; }
+.phone-points, .coordinates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.filters label, .phone-form label { display: grid; gap: .35rem; }
+.phone-form { display: grid; gap: .8rem; padding: 0 1.15rem 1.15rem; }
+.phone-form fieldset {
+  display: grid;
+  min-width: 0;
+  gap: .65rem;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: .6rem;
+  padding: .65rem;
+}
+.phone-form legend { font-weight: 650; }
+.phone-form .button { justify-self: start; }
+.phone-form .status { margin: 0; }
+.table-action { white-space: nowrap; }
 .panel-head {
   display: flex;
   flex-wrap: wrap;
@@ -151,4 +169,5 @@ abbr[title] { color: var(--ink); }
 @media (max-width: 34rem) {
   main { padding-block: 1.4rem 2.2rem; }
   .sign-in { margin-top: 1.25rem; }
+  .filters, .phone-points { grid-template-columns: minmax(0, 1fr); }
 }

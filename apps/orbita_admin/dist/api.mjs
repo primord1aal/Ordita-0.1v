@@ -46,7 +46,23 @@ function validHistory(row) {
 function validQueue(row) {
   return row && uuid(row.driver_id) && QUEUE_STATES.has(row.state) &&
     (row.display_name === null || boundedText(row.display_name, 80)) &&
-    (row.order_id === null || uuid(row.order_id));
+    (row.order_id === null || uuid(row.order_id)) &&
+    (row.queue_rank == null || (row.state === 'waiting' &&
+      Number.isInteger(row.queue_rank) && row.queue_rank > 0 && row.queue_rank <= MAX_ROWS));
+}
+
+function validDriver(row) {
+  return row && uuid(row.driver_id) &&
+    (row.display_name === null || boundedText(row.display_name, 80)) &&
+    typeof row.online === 'boolean' && typeof row.restricted === 'boolean' &&
+    (row.active_order_id === null || uuid(row.active_order_id));
+}
+
+function validAudit(row) {
+  return row && uuid(row.actor_id) && uuid(row.request_id) && uuid(row.target_id) &&
+    timestamp(row.created_at) && row.details &&
+    (row.action === 'driver_restriction' ? typeof row.details.restricted === 'boolean' :
+      row.action === 'phone_order');
 }
 
 function validRows(rows, verify) {
@@ -61,6 +77,22 @@ function checkedSnapshot(data) {
     throw new AdminApiError('invalid-response');
   }
   return data;
+}
+
+function checkedOperations(data) {
+  if (!data || data.contract_version !== 1 || !timestamp(data.captured_at) ||
+      !validRows(data.drivers, validDriver) || !validRows(data.audit, validAudit) ||
+      typeof data.truncated?.drivers !== 'boolean' || typeof data.truncated?.audit !== 'boolean' ||
+      (data.phone_orders_enabled !== undefined && typeof data.phone_orders_enabled !== 'boolean')) {
+    throw new AdminApiError('invalid-response');
+  }
+  return data;
+}
+
+function validPoint(point) {
+  return point && boundedText(point.address, 500) && point.address.trim() !== '' &&
+    Number.isFinite(point.latitude) && Math.abs(point.latitude) <= 90 &&
+    Number.isFinite(point.longitude) && Math.abs(point.longitude) <= 180;
 }
 
 async function readJson(response) {
@@ -137,6 +169,11 @@ export function createAdminApi(publishableKey, fetcher = globalThis.fetch) {
     return response;
   }
 
+  async function rpc(name, body, token, signal) {
+    if (!jwt(token)) throw new AdminApiError('access', 401);
+    return readJson(await request('/rest/v1/rpc/' + name, { body, token, signal, profile: true }));
+  }
+
   return {
     async signIn(email, password, signal) {
       const data = await readJson(await request('/auth/v1/token?grant_type=password', {
@@ -146,9 +183,36 @@ export function createAdminApi(publishableKey, fetcher = globalThis.fetch) {
       return data.access_token;
     },
     async snapshot(token, signal) {
-      return checkedSnapshot(await readJson(await request('/rest/v1/rpc/snapshot', {
-        body: {}, token, signal, profile: true,
-      })));
+      return checkedSnapshot(await rpc('snapshot', {}, token, signal));
+    },
+    async operations(token, signal) {
+      return checkedOperations(await rpc('operations', {}, token, signal));
+    },
+    async setDriverRestriction(token, { requestId, driverId, restricted }, signal) {
+      if (!uuid(requestId) || !uuid(driverId) || typeof restricted !== 'boolean') {
+        throw new AdminApiError('invalid-input');
+      }
+      const result = await rpc('set_driver_restriction', {
+        p_request_id: requestId, p_driver_id: driverId, p_restricted: restricted,
+      }, token, signal);
+      if (result?.driver_id !== driverId.toLowerCase() || result.restricted !== restricted) {
+        throw new AdminApiError('invalid-response');
+      }
+      return result;
+    },
+    async createPhoneOrder(token, { requestId, passengerId, pickup, destination }, signal) {
+      if (!uuid(requestId) || !uuid(passengerId) || !validPoint(pickup) || !validPoint(destination) ||
+          (pickup.latitude === destination.latitude && pickup.longitude === destination.longitude)) {
+        throw new AdminApiError('invalid-input');
+      }
+      const result = await rpc('create_phone_order', {
+        p_request_id: requestId, p_passenger_id: passengerId, p_pickup: pickup, p_destination: destination,
+      }, token, signal);
+      if (!uuid(result?.order_id) || !timestamp(result.expires_at) ||
+          (!ACTIVE_STATES.has(result.status) && !HISTORY_STATES.has(result.status))) {
+        throw new AdminApiError('invalid-response');
+      }
+      return result;
     },
     async signOut(token) {
       const response = await request('/auth/v1/logout?scope=local', { token });
