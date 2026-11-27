@@ -42,6 +42,11 @@ class OrbitaAdminOperationsTests(unittest.TestCase):
             'orbita_admin_operations.sql',
         ):
             self.admin('begin;\n' + (PROPOSALS / name).read_text() + '\ncommit;')
+        for driver, name in ((D, 'first'), (N, 'second')):
+            result, _ = self.client_raw(
+                f"select public.orbita_driver_push_device('synthetic-rustore-device-{name}');", uid=driver,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def restriction_sql(self, driver=D, value=True, request=None):
         request = request or uuid.uuid4()

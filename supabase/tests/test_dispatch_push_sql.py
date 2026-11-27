@@ -17,6 +17,8 @@ OUTBOX = 'orbita_mobile_private.driver_offer_push'
 CLAIM = 'orbita_mobile_private.claim_driver_offer_push'
 FINISH = 'orbita_mobile_private.finish_driver_offer_push'
 CLAIM_QUERY = f'select row_to_json(claim) from {CLAIM}(20) claim;'
+DRIVER_TOKEN = 'synthetic-rustore-device-driver'
+OTHER_TOKEN = 'synthetic-rustore-device-other'
 
 
 class DispatchPushTests(unittest.TestCase):
@@ -37,6 +39,13 @@ class DispatchPushTests(unittest.TestCase):
         dispatch.DispatchSQLTests.setUp(self)
         for name in ('20261120173504_managed_maps.sql', 'orbita_dispatch_push.sql'):
             self.admin('begin;\n' + (PROPOSALS / name).read_text() + '\ncommit;')
+        for uid, token in ((dispatch.D, DRIVER_TOKEN), (dispatch.N, OTHER_TOKEN)):
+            result, _ = self.register(uid, token)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def register(self, uid, token):
+        value = 'null' if token is None else dispatch.base.literal(token)
+        return self.client_raw(f'select public.orbita_driver_push_device({value});', uid=uid)
 
     def claim(self):
         return [json.loads(line) for line in self.admin(CLAIM_QUERY).splitlines()]
@@ -64,10 +73,11 @@ class DispatchPushTests(unittest.TestCase):
         self.assertEqual(self.admin(f'select event_id from {OUTBOX};'), offer['id'])
 
         event, = self.claim()
-        self.assertEqual(set(event), {'event_id', 'recipient_id', 'lease_id', 'expires_at'})
+        self.assertEqual(set(event), {'event_id', 'recipient_id', 'lease_id', 'expires_at', 'token'})
         self.assertEqual(event['event_id'], offer['id'])
         self.assertEqual(event['recipient_id'], dispatch.D)
         self.assertEqual(event['expires_at'], offer['expires_at'])
+        self.assertEqual(event['token'], DRIVER_TOKEN)
 
     def test_concurrent_workers_do_not_share_a_lease(self):
         self.online()
@@ -141,6 +151,56 @@ class DispatchPushTests(unittest.TestCase):
         self.assertEqual(self.claim(), [])
         self.assertEqual(self.admin(f'select attempts from {OUTBOX};'), '0')
 
+    def test_unregistered_or_revoked_device_does_not_consume_attempts(self):
+        self.online()
+        self.create()
+        result, _ = self.register(dispatch.D, None)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.claim(), [])
+        result, _ = self.register(dispatch.D, DRIVER_TOKEN)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.admin(f"delete from auth.sessions where user_id = '{dispatch.D}';")
+        self.assertEqual(self.claim(), [])
+        self.assertEqual(self.admin(f'select attempts from {OUTBOX};'), '0')
+
+    def test_only_driver_can_bind_and_a_reused_token_moves_to_current_driver(self):
+        denied, _ = self.register(dispatch.B, DRIVER_TOKEN)
+        self.assertNotEqual(denied.returncode, 0)
+        self.assertIn('ORB_PUSH_DRIVER_REQUIRED', denied.stderr)
+        invalid, _ = self.register(dispatch.D, 'invalid')
+        self.assertNotEqual(invalid.returncode, 0)
+        self.assertIn('ORB_PUSH_TOKEN_INVALID', invalid.stderr)
+        moved, _ = self.register(dispatch.N, DRIVER_TOKEN)
+        self.assertEqual(moved.returncode, 0, moved.stderr)
+        self.assertEqual(self.admin('select driver_id from orbita_push_private.devices;'), dispatch.N)
+
+    def test_heartbeat_extends_a_live_lease_and_never_rejoins_the_queue(self):
+        def heartbeat():
+            result, _ = self.client_raw('select public.orbita_driver_heartbeat();', uid=dispatch.D)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return result.stdout.rstrip().splitlines()[-1]
+
+        self.assertEqual(heartbeat(), 'f')
+        self.online()
+        self.admin("""
+          update orbita_mobile_private.dispatch_drivers
+          set heartbeat_at = clock_timestamp() - interval '10 seconds'
+          where online;
+        """)
+        before = self.admin('select queue_position from orbita_mobile_private.dispatch_drivers where online;')
+        self.assertEqual(heartbeat(), 't')
+        self.assertEqual(self.admin(
+            "select queue_position, heartbeat_at > clock_timestamp() - interval '5 seconds' "
+            "from orbita_mobile_private.dispatch_drivers where online;"
+        ), before + '|t')
+        self.admin("""
+          update orbita_mobile_private.dispatch_drivers
+          set heartbeat_at = clock_timestamp() - interval '16 seconds'
+          where online;
+        """)
+        self.assertEqual(heartbeat(), 'f')
+        self.assertEqual(self.admin('select online from orbita_mobile_private.dispatch_drivers;'), 'f')
+
     def test_outbox_and_worker_are_private(self):
         for role in ('anon', 'authenticated', 'service_role'):
             with self.subTest(role=role):
@@ -153,3 +213,9 @@ class DispatchPushTests(unittest.TestCase):
             result, _ = self.client_raw(query, uid=dispatch.D)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('permission denied', result.stderr)
+        self.assertEqual(self.admin("""
+          select has_table_privilege('service_role', 'orbita_push_private.devices', 'SELECT'),
+            has_function_privilege('service_role', 'public.orbita_driver_push_claim(integer)', 'EXECUTE'),
+            has_function_privilege('authenticated', 'public.orbita_driver_push_claim(integer)', 'EXECUTE'),
+            has_function_privilege('anon', 'public.orbita_driver_push_device(text)', 'EXECUTE');
+        """), 'f|t|f|f')
