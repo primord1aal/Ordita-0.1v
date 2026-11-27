@@ -1,4 +1,4 @@
-name: Орбита 0.6.2 — проверки и ARM64 APK
+name: Орбита 0.6.3 — проверки и ARM64 APK
 on:
   push:
     branches: [codex/orbita-e2e-test-060]
@@ -23,30 +23,36 @@ jobs:
     container: debian@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
     timeout-minutes: 10
     steps:
-      - name: Закреплённая PostgreSQL 17.11 (как в локальных проверках)
+      - name: Закреплённые PostgreSQL 17.11 и pg_cron 1.6.4
         run: |
           apt-get update
           apt-get install --no-install-recommends -y python3 git ca-certificates curl
-          curl -fsSL https://deb.debian.org/debian/pool/main/p/postgresql-17/postgresql-17_17.11-0+deb13u1_amd64.deb -o /tmp/postgresql-17.deb
-          curl -fsSL https://deb.debian.org/debian/pool/main/p/postgresql-17/postgresql-client-17_17.11-0+deb13u1_amd64.deb -o /tmp/postgresql-client-17.deb
+          curl -fsSL https://snapshot.debian.org/file/64c21255846b0fcc1df39e3712140a5255cea134 -o /tmp/postgresql-17.deb
+          curl -fsSL https://snapshot.debian.org/file/f4c7150d18ab72ccc25e0c03571293bac0f5edec -o /tmp/postgresql-client-17.deb
+          curl -fsSL https://snapshot.debian.org/file/5d8d02e179f3839b8cb9113dfc9e723f1482ca6e -o /tmp/postgresql-17-cron.deb
           echo 'd2ce1ddffafa783f9acda4c92c86fc21e8288bff3782d739294f14fa797d7886  /tmp/postgresql-17.deb' | sha256sum --check
           echo '9d8558f8dd57c8e92e218a20698383575d53742ca3f9e7c2b7fe5f246d5216ae  /tmp/postgresql-client-17.deb' | sha256sum --check
-          apt-get install --no-install-recommends -y /tmp/postgresql-17.deb /tmp/postgresql-client-17.deb
+          echo 'a53579b5964e7f6204e8688ccba66a242b541d3396f64f8c6c7d98bd60aa79e6  /tmp/postgresql-17-cron.deb' | sha256sum --check
+          apt-get install --no-install-recommends -y /tmp/postgresql-17.deb /tmp/postgresql-client-17.deb /tmp/postgresql-17-cron.deb
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Изолированные проверки SQL без облачных данных
         run: |
           mkdir -p /tmp/orbita-dispatch-checks build
           chown postgres:postgres /tmp/orbita-dispatch-checks build
           test_version="$(/usr/lib/postgresql/17/bin/postgres --version)"
-          runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_orders_sql.py -v
-          runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_dispatch_sql.py -v
-          runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_map_budget_sql.py -v
-          runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_orbita_admin_read_sql.py -v
-          runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" python3 -m unittest discover -s supabase/tests -p test_dispatch_autonomy_sql.py -v
+          for suite in test_orders_sql.py test_dispatch_sql.py test_map_budget_sql.py \
+            test_orbita_admin_read_sql.py test_dispatch_autonomy_sql.py test_dispatch_push_sql.py \
+            test_orbita_admin_operations_sql.py test_orbita_admin_phone_orders_sql.py
+          do
+            runuser -u postgres -- env TMPDIR=/tmp/orbita-dispatch-checks \
+              PYTHONPYCACHEPREFIX=/tmp/orbita-dispatch-checks/pycache \
+              ORBITA_ORDERS_PG_BIN=/usr/lib/postgresql/17/bin ORBITA_ORDERS_PG_VERSION="$test_version" \
+              python3 -m unittest discover -s supabase/tests -p "$suite" -v
+          done
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: ORBITA-0.6.2-local-sql
+          name: ORBITA-0.6.3-local-sql
           path: build/*-sql-results.json
           if-no-files-found: error
           retention-days: 14
@@ -87,9 +93,9 @@ jobs:
           flutter config --no-analytics --android-sdk "$ANDROID_HOME"
           (yes || true) | "$sdk_manager" --licenses > /dev/null
           "$sdk_manager" 'platforms;android-36' 'platforms;android-35' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
-      - name: Proxy request safety tests
+      - name: Проверки шлюзов карт и Push
         working-directory: .
-        run: node --experimental-strip-types --test supabase/functions/orbita-maps/*.test.ts
+        run: node --experimental-strip-types --test supabase/functions/orbita-maps/*.test.ts supabase/functions/orbita-driver-push/*.test.ts
       - name: Restricted administrative client tests
         working-directory: .
         run: node --test apps/orbita_admin/tests/*.test.mjs
@@ -116,7 +122,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ORBITA-0.6.2-android-checks
+          name: ORBITA-0.6.3-android-checks
           path: |
             apps/orbita_mobile/build/app/test-results/testDebugUnitTest/
             apps/orbita_mobile/build/app/reports/tests/testDebugUnitTest/
@@ -137,13 +143,20 @@ jobs:
       - name: Установочный пакет
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk dist/ORBITA-0.6.2-test.apk
-          cp ../../docs/ORBITA_0.6.2.md dist/INSTALL-ANDROID.md
-          (cd dist && sha256sum ORBITA-0.6.2-test.apk > SHA256SUMS.txt)
-          echo 'APK собран. Облачная миграция диспетчеризации требует отдельного согласования владельца.' >> "$GITHUB_STEP_SUMMARY"
+          apk=dist/ORBITA-0.6.3-test.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk "$apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk" > dist/ANDROID-SIGNATURE.txt
+          (cd dist && sha256sum ORBITA-0.6.3-test.apk > SHA256SUMS.txt)
+          {
+            printf '# Орбита 0.6.3+15\n\n'
+            printf 'Исходный SHA `%s`.\n\n' "$GITHUB_SHA"
+            printf 'ARM64 debug APK для тестового проекта. Перед установкой сверьте SHA256SUMS.txt и публичный сертификат из ANDROID-SIGNATURE.txt.\n\n'
+            printf 'Используйте существующие тестовые аккаунты и вымышленные данные. Работа облачных карт и RuStore Push зависит от отдельных допусков и настройки.\n'
+          } > dist/INSTALL-ANDROID.md
+          printf 'Тестовый APK 0.6.3+15 собран из `%s`.\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: ORBITA-0.6.2-test-apk
+          name: ORBITA-0.6.3-test-apk
           path: apps/orbita_mobile/dist/
           if-no-files-found: error
           retention-days: 14
