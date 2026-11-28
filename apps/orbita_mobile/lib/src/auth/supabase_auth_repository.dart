@@ -223,8 +223,10 @@ class SupabaseAuthRepository
   Future<Object?> loadTripHistory({
     required bool driver,
     HistoryTrip? before,
+    String? status,
   }) => _orderRpc('orbita_order_history', {
     'p_role': driver ? 'driver' : 'passenger',
+    'p_status': ?status,
     if (before != null) 'p_before_at': before.createdAt.toIso8601String(),
     if (before != null) 'p_before_id': before.id,
   });

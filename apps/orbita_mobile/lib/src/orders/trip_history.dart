@@ -1,5 +1,9 @@
 abstract interface class TripHistoryApi {
-  Future<Object?> loadTripHistory({required bool driver, HistoryTrip? before});
+  Future<Object?> loadTripHistory({
+    required bool driver,
+    HistoryTrip? before,
+    String? status,
+  });
 }
 
 class HistoryTrip {

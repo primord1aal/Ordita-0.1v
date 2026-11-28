@@ -149,14 +149,19 @@ void main() {
           );
         }
         if (screen == _Screen.profile) {
-          await tester.tap(
+          expect(
             find.descendant(
               of: find.byKey(const Key('profile-scroll')),
               matching: find.text('Поездки'),
             ),
+            findsNothing,
           );
+          await tester.tap(find.byKey(const Key('nav-1')));
           await tester.pumpAndSettle();
-          expect(find.text('Ваши поездки'), findsOneWidget);
+          expect(
+            find.text('История поездок недоступна.').hitTestable(),
+            findsOneWidget,
+          );
         }
         expect(tester.takeException(), isNull);
       });
@@ -215,13 +220,14 @@ void main() {
         );
         checkHorizontalBounds(tester);
       }
+      expect(find.text('О приложении'), findsNothing);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
       await scrollTo(tester, find.text('О приложении'));
       await tester.tap(find.text('О приложении'));
       await tester.pumpAndSettle();
       expectFullTitle('О приложении');
-      await tester.tap(find.byType(BackButton));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(BackButton));
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       await scrollTo(tester, find.byKey(const Key('sign-out')));
       await tester.tap(find.byKey(const Key('sign-out')));

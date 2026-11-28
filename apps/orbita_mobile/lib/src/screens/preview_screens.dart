@@ -8,6 +8,7 @@ import '../orders/dispatch_controller.dart';
 import '../orders/driver_push_registration.dart';
 import '../ui/trip_notice.dart';
 import '../orders/trip_history.dart';
+import '../orders/trip_people.dart';
 import '../orders/driver_offer_open.dart';
 import '../maps/map_settings.dart';
 import '../maps/map_tiles.dart';
@@ -256,7 +257,8 @@ class _PreviewShellState extends State<PreviewShell> {
                                 .popUntil((route) => route.isFirst);
                             setState(() => _index = index);
                           },
-                    onTrips: () => setState(() => _index = 1),
+                    api: widget.dispatchApi,
+                    userId: widget.userId,
                     onBack: () => setState(() => _index = 0),
                   ),
                 ],
@@ -332,7 +334,8 @@ class ProfileScreen extends StatelessWidget {
     this.diagnosticsEnabled = false,
     this.accountPanel,
     this.onSignOut,
-    this.onTrips,
+    this.api,
+    this.userId,
     this.onBack,
     this.onOpenDriverDemo,
     super.key,
@@ -340,7 +343,9 @@ class ProfileScreen extends StatelessWidget {
   final bool driver, diagnosticsEnabled;
   final DeviceGateway device;
   final Widget? accountPanel;
-  final VoidCallback? onSignOut, onTrips, onBack, onOpenDriverDemo;
+  final VoidCallback? onSignOut, onBack, onOpenDriverDemo;
+  final DispatchApi? api;
+  final String? userId;
 
   @override
   Widget build(BuildContext context) {
@@ -388,15 +393,7 @@ class ProfileScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-              const SizedBox(height: 22),
-              Text(
-                'МОЙ АККАУНТ',
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: palette.muted,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 16),
               Material(
                 color: palette.surface,
                 shape: RoundedRectangleBorder(
@@ -405,30 +402,35 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    _ProfileRow(
-                      icon: Icons.history,
-                      title: 'Поездки',
-                      subtitle: 'История поездок',
-                      onTap: onTrips,
-                    ),
-                    Divider(
-                      height: 1,
-                      indent: 16,
-                      endIndent: 16,
-                      color: palette.divider,
-                    ),
+                    if (driver) ...[
+                      _ProfileRow(
+                        icon: Icons.directions_car_outlined,
+                        title: 'Мой автомобиль',
+                        onTap: () {
+                          final backend = api;
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => MyVehicleScreen(
+                                api: backend is TripPeopleApi
+                                    ? backend as TripPeopleApi
+                                    : null,
+                                userId: userId,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1, indent: 16, endIndent: 16),
+                    ],
                     _ProfileRow(
                       icon: Icons.settings_outlined,
                       title: 'Настройки',
-                      subtitle: 'Тема и внешний вид',
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute<void>(
-                          builder: (_) => SettingsScreen(
-                            device: device,
-                            diagnosticsEnabled: diagnosticsEnabled,
-                            onOpenDriverDemo: onOpenDriverDemo,
-                          ),
+                          builder: (_) =>
+                              SettingsScreen(device: device, driver: driver),
                         ),
                       ),
                     ),
@@ -439,9 +441,19 @@ class ProfileScreen extends StatelessWidget {
                       color: palette.divider,
                     ),
                     _ProfileRow(
+                      icon: Icons.headset_mic_outlined,
+                      title: 'Поддержка',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => const AccountSupportScreen(),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1, indent: 16, endIndent: 16),
+                    _ProfileRow(
                       icon: Icons.info_outline,
                       title: 'О приложении',
-                      subtitle: 'Версия и лицензии',
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute<void>(
@@ -459,33 +471,18 @@ class ProfileScreen extends StatelessWidget {
             ],
           ),
         ),
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (onSignOut != null) ...[
-                  FullWidthAction(
-                    'Выйти',
-                    key: const Key('sign-out'),
-                    secondary: true,
-                    onPressed: onSignOut,
-                  ),
-                ],
-                const SizedBox(height: 12),
-                Text(
-                  'орбита. · Местное такси для своих',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: palette.muted),
-                ),
-              ],
+        if (onSignOut != null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: FullWidthAction(
+                'Выйти из аккаунта',
+                key: const Key('sign-out'),
+                secondary: true,
+                onPressed: onSignOut,
+              ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -495,21 +492,19 @@ class _ProfileRow extends StatelessWidget {
   const _ProfileRow({
     required this.icon,
     required this.title,
-    required this.subtitle,
     required this.onTap,
   });
   final IconData icon;
-  final String title, subtitle;
+  final String title;
   final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
     final palette = OrbitaPalette.of(context);
     return ListTile(
-      minTileHeight: 72,
+      minTileHeight: 56,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       leading: Icon(icon, color: palette.muted),
       title: Text(title),
-      subtitle: Text(subtitle),
       trailing: Icon(Icons.chevron_right, color: palette.muted),
       onTap: onTap,
     );

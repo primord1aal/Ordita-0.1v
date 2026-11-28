@@ -150,6 +150,13 @@ internal object DriverOfferNotifications {
         return preferences.getStringSet(SEEN, emptySet()).orEmpty().contains("${offer.offerId}:${offer.expiresAtMillis}")
     }
 
+    fun prepareChannel(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < 26) return false
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+        ensureChannel(manager)
+        return manager.getNotificationChannel(CHANNEL) != null
+    }
+
     private fun ensureChannel(manager: NotificationManager) {
         if (Build.VERSION.SDK_INT < 26 || manager.getNotificationChannel(CHANNEL) != null) return
         val sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)

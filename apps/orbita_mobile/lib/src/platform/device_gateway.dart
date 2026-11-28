@@ -106,7 +106,11 @@ abstract interface class DeviceGateway {
   void onOpenChecks(void Function()? callback);
 }
 
-class AndroidDeviceGateway implements DeviceGateway {
+abstract interface class OfferNotificationSettings {
+  Future<void> openOfferNotificationSettings();
+}
+
+class AndroidDeviceGateway implements DeviceGateway, OfferNotificationSettings {
   AndroidDeviceGateway({MethodChannel? channel})
     : _channel =
           channel ?? const MethodChannel('ru.orbita.taxi.foundation/device');
@@ -140,6 +144,9 @@ class AndroidDeviceGateway implements DeviceGateway {
   Future<void> stopLocationDiagnostic() => _call('stopLocationDiagnostic');
   @override
   Future<void> openSettings() => _call('openSettings');
+  @override
+  Future<void> openOfferNotificationSettings() =>
+      _call('openOfferNotificationSettings');
   @override
   Future<bool> consumeLaunchRequest() async =>
       await _channel.invokeMethod<bool>('consumeLaunchRequest') ?? false;

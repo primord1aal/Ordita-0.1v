@@ -14,7 +14,8 @@ create index orbita_orders_driver_history
 create function orbita_trip_history_private.read_page(
   p_role text,
   p_before_at timestamptz,
-  p_before_id uuid
+  p_before_id uuid,
+  p_status text
 ) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 declare
@@ -28,7 +29,8 @@ begin
     raise exception using errcode = '42501', message = 'ORB_DISPATCH_FORBIDDEN';
   end if;
 
-  if (p_before_at is null) <> (p_before_id is null)
+  if (p_status is not null and p_status not in ('completed', 'cancelled'))
+     or (p_before_at is null) <> (p_before_id is null)
      or (p_before_at is not null and not pg_catalog.isfinite(p_before_at)) then
     raise exception using errcode = '22023', message = 'ORB_DISPATCH_INVALID';
   end if;
@@ -39,6 +41,7 @@ begin
     from public.orbita_orders o
     where p_role = 'passenger' and o.passenger_id = v_user
       and o.status in ('completed', 'cancelled')
+      and (p_status is null or o.status = p_status)
       and (p_before_at is null or (o.created_at, o.id) < (p_before_at, p_before_id))
     union all
     select o.id, o.status, o.created_at, o.completed_at, o.cancelled_at,
@@ -46,6 +49,7 @@ begin
     from public.orbita_orders o
     where p_role = 'driver' and o.driver_id = v_user and o.driver_id is not null
       and o.status in ('completed', 'cancelled')
+      and (p_status is null or o.status = p_status)
       and (p_before_at is null or (o.created_at, o.id) < (p_before_at, p_before_id))
   ),
   page as (
@@ -71,13 +75,14 @@ $$;
 create function public.orbita_order_history(
   p_role text,
   p_before_at timestamptz default null,
-  p_before_id uuid default null
+  p_before_id uuid default null,
+  p_status text default null
 ) returns jsonb
 language sql stable security invoker set search_path = '' as $$
-  select orbita_trip_history_private.read_page(p_role, p_before_at, p_before_id);
+  select orbita_trip_history_private.read_page(p_role, p_before_at, p_before_id, p_status);
 $$;
 
-revoke all on function orbita_trip_history_private.read_page(text, timestamptz, uuid),
-  public.orbita_order_history(text, timestamptz, uuid) from public, anon, authenticated, service_role;
-grant execute on function orbita_trip_history_private.read_page(text, timestamptz, uuid),
-  public.orbita_order_history(text, timestamptz, uuid) to authenticated;
+revoke all on function orbita_trip_history_private.read_page(text, timestamptz, uuid, text),
+  public.orbita_order_history(text, timestamptz, uuid, text) from public, anon, authenticated, service_role;
+grant execute on function orbita_trip_history_private.read_page(text, timestamptz, uuid, text),
+  public.orbita_order_history(text, timestamptz, uuid, text) to authenticated;

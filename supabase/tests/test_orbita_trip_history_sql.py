@@ -27,8 +27,10 @@ class TripHistoryTests(unittest.TestCase):
         proposal = base.ROOT / 'supabase/proposals/orbita_trip_history.sql'
         self.admin('begin;\n' + proposal.read_text() + '\ncommit;')
 
-    def page(self, uid, role, cursor=None, error=None, db_role='authenticated'):
+    def page(self, uid, role, cursor=None, error=None, db_role='authenticated', status=None):
         cursor_sql = '' if cursor is None else ', ' + ', '.join(map(base.literal, cursor))
+        if status is not None:
+            cursor_sql += ', p_status => ' + base.literal(status)
         result, values = self.client_raw(
             f'select public.orbita_order_history({base.literal(role)}{cursor_sql});',
             uid=uid, role=db_role,
@@ -74,13 +76,15 @@ class TripHistoryTests(unittest.TestCase):
         self.assertFalse(second['has_more'])
         self.assertEqual([row['id'] for row in first['items'] + second['items']], ids[::-1])
         self.assertEqual(self.page(base.D, 'driver')['items'], [])
+        self.assertEqual(self.page(base.B, 'passenger', status='completed')['items'], [])
+        self.assertEqual(self.page(base.B, 'passenger', status='cancelled'), first)
 
     def test_access_is_rechecked_and_table_grants_stay_closed(self):
         self.page(base.B, 'driver', error='ORB_DISPATCH_FORBIDDEN')
         self.page(base.D, 'driver', error='permission denied', db_role='anon')
         self.assertEqual(self.admin(
             "select has_function_privilege('service_role', "
-            "'public.orbita_order_history(text,timestamptz,uuid)', 'EXECUTE');"), 'f')
+            "'public.orbita_order_history(text,timestamptz,uuid,text)', 'EXECUTE');"), 'f')
         self.page(base.B, 'passenger', ('infinity', base.D), error='ORB_DISPATCH_INVALID')
         self.assertEqual(self.admin(
             "select has_table_privilege('authenticated', 'public.orbita_orders', 'select');"), 'f')

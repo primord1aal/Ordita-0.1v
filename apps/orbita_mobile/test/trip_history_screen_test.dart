@@ -2,16 +2,26 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:orbita_mobile/src/orders/trip_history.dart';
 import 'package:orbita_mobile/src/screens/trip_history_screen.dart';
 import 'package:orbita_mobile/src/ui/theme.dart';
 
+import 'design_test_fonts.dart';
+import 'test_helpers.dart';
+
 class _HistoryApi implements TripHistoryApi {
   final calls = <Completer<Object?>>[];
+  final filters = <String?>[];
 
   @override
-  Future<Object?> loadTripHistory({required bool driver, HistoryTrip? before}) {
+  Future<Object?> loadTripHistory({
+    required bool driver,
+    HistoryTrip? before,
+    String? status,
+  }) {
     expect(driver, isTrue);
+    filters.add(status);
     final call = Completer<Object?>();
     calls.add(call);
     return call.future;
@@ -39,15 +49,21 @@ Map<String, dynamic> _page({String user = _account}) => {
 };
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(loadDesignTestFonts);
   testWidgets(
     'История загружается при открытии, обновляется и отбрасывает чужой ответ',
     (tester) async {
       final api = _HistoryApi();
+      setViewport(tester, const Size(390, 844), 1);
 
       Future<void> show({bool active = true, bool terminal = false}) =>
           tester.pumpWidget(
             MaterialApp(
               theme: orbitaTheme(),
+              locale: const Locale("ru"),
+              supportedLocales: const [Locale("ru")],
+              localizationsDelegates: GlobalMaterialLocalizations.delegates,
               home: Scaffold(
                 body: HistoryScreen(
                   api: api,
@@ -66,16 +82,33 @@ void main() {
       api.calls.single.complete(_page());
       await tester.pump();
       expect(find.text('Свой заказ'), findsOneWidget);
+      if (captureDesignGoldens) {
+        await expectLater(
+          find.byType(Scaffold),
+          matchesGoldenFile('goldens/glass-history.png'),
+        );
+      }
+      await tester.tap(find.text('Свой заказ'));
+      await tester.pumpAndSettle();
+      expect(find.text('Детали поездки'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Отменённые'));
+      await tester.pump();
+      expect(api.filters.last, 'cancelled');
+      api.calls.last.complete({..._page(), 'items': <Object>[]});
+      await tester.pump();
+      expect(find.text('Пока нет поездок.'), findsOneWidget);
 
       await show(terminal: true);
-      expect(api.calls, hasLength(2));
+      expect(api.calls, hasLength(3));
       await show(active: false, terminal: true);
       api.calls.last.complete(_page());
       await tester.pump();
       expect(find.text('Свой заказ'), findsNothing);
 
       await show(terminal: true);
-      expect(api.calls, hasLength(3));
+      expect(api.calls, hasLength(4));
       api.calls.last.complete(_page(user: 'foreign-user'));
       await tester.pump();
       expect(

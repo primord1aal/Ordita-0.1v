@@ -3,6 +3,7 @@ package ru.orbita.taxi.dev
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.NotificationManager
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -110,6 +111,10 @@ class MainActivity : FlutterActivity() {
                         else result.success(null)
                     }
                     "openSettings" -> { openSettings(); result.success(null) }
+                    "openOfferNotificationSettings" -> {
+                        openOfferNotificationSettings()
+                        result.success(null)
+                    }
                     "showLocalNotification" -> {
                         if (!DeviceSupport.notificationsAllowed(this)) result.error("permission", "Уведомления не разрешены", null)
                         else {
@@ -166,6 +171,29 @@ class MainActivity : FlutterActivity() {
 
     private fun openSettings() {
         startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+    }
+
+    private fun openOfferNotificationSettings() {
+        if (Build.VERSION.SDK_INT >= 26) {
+            val channelReady = DriverOfferNotifications.prepareChannel(applicationContext)
+            if (channelReady) {
+                val channelSettings = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                    .putExtra(Settings.EXTRA_CHANNEL_ID, DriverOfferNotifications.CHANNEL)
+                if (tryOpenSettings(channelSettings)) return
+            }
+            val notificationSettings = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            if (tryOpenSettings(notificationSettings)) return
+        }
+        openSettings()
+    }
+
+    private fun tryOpenSettings(settingsIntent: Intent): Boolean = try {
+        startActivity(settingsIntent)
+        true
+    } catch (_: ActivityNotFoundException) {
+        false
     }
 
     override fun onRequestPermissionsResult(code: Int, permissions: Array<out String>, grants: IntArray) {

@@ -1,13 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbita_mobile/src/screens/account_pages.dart';
+import 'package:orbita_mobile/src/platform/device_gateway.dart';
 import 'package:orbita_mobile/src/ui/theme_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'design_test_fonts.dart';
 import 'test_helpers.dart';
+import 'fake_device.dart';
+
+class _SettingsDevice extends FakeDevice implements OfferNotificationSettings {
+  int openings = 0;
+  @override
+  Future<void> openOfferNotificationSettings() async {
+    openings++;
+  }
+}
 
 void main() {
-  testWidgets('Системная тема и диагностика доступны через настройки профиля', (
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(loadDesignTestFonts);
+  testWidgets('Системная тема в настройках, диагностика отдельно в профиле', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
@@ -33,6 +46,9 @@ void main() {
       ),
       'system',
     );
+    expect(find.text('О приложении'), findsNothing);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
     await tester.tap(find.text('О приложении'));
     await tester.pumpAndSettle();
     expect(find.text('Настройки приложения'), findsOneWidget);
@@ -41,6 +57,29 @@ void main() {
     expect(find.byKey(const Key('location-card')), findsOneWidget);
     expect(find.byKey(const Key('notifications-card')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Профиль водителя открывает действующие настройки Android', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final device = _SettingsDevice();
+    await openPreview(tester, 'Водитель', device: device);
+    await openProfile(tester);
+    expect(find.text('История поездок'), findsNothing);
+    await tester.tap(find.text('Мой автомобиль'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Подтверждённых данных об автомобиле пока нет.'),
+      findsOneWidget,
+    );
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Настройки'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Звук и вибрация заказов'));
+    await tester.pumpAndSettle();
+    expect(device.openings, 1);
   });
 
   testWidgets('Лицензия Inter доступна из профиля', (tester) async {
