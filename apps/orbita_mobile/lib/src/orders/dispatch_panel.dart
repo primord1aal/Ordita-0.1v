@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../ui/components.dart';
+import '../maps/route_preview.dart';
 import '../ui/theme.dart';
 import 'dispatch_controller.dart';
 
-class DispatchPanel extends StatelessWidget {
-  const DispatchPanel({required this.controller, super.key});
+class PassengerDispatchPanel extends StatelessWidget {
+  const PassengerDispatchPanel({
+    required this.controller,
+    this.tripRoute,
+    super.key,
+  });
   final DispatchController controller;
+  final RoutePreview? tripRoute;
   @override
   Widget build(BuildContext context) {
     final c = controller, state = c.state;
@@ -25,33 +31,8 @@ class DispatchPanel extends StatelessWidget {
         ],
         if (state == null && c.message == null)
           const Text('Проверяем текущий заказ…'),
-        if (trip != null) ...[
-          const SizedBox(height: 8),
-          Semantics(
-            liveRegion: true,
-            child: Text(
-              trip.label,
-              key: const Key('trip-status'),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text('Откуда: ${trip.pickup.address}'),
-          Text('Куда: ${trip.destination.address}'),
-          const SizedBox(height: 10),
-          if (trip.status == 'created') ...[
-            ValueListenableBuilder<int>(
-              valueListenable: c.clock,
-              builder: (context, value, child) => Text(
-                'Осталось до конца поиска: ${c.secondsUntil(trip.expiresAt)} с',
-              ),
-            ),
-            TextButton(
-              onPressed: c.canAct ? () => c.cancel(trip.id) : null,
-              child: const Text('Отменить заказ'),
-            ),
-          ],
-        ],
+        if (trip != null && trip.active)
+          _PassengerTrip(controller: c, trip: trip, route: tripRoute),
         if (c.pending != null) ...[
           const Text(
             'Заказ отправлен без подтверждения. Повтор проверит тот же заказ.',
@@ -59,6 +40,126 @@ class DispatchPanel extends StatelessWidget {
           TextButton(
             onPressed: c.enabled && !c.busy ? c.retryCreate : null,
             child: const Text('Проверить отправленный заказ'),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _PassengerTrip extends StatelessWidget {
+  const _PassengerTrip({
+    required this.controller,
+    required this.trip,
+    this.route,
+  });
+
+  final DispatchController controller;
+  final Trip trip;
+  final RoutePreview? route;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final palette = OrbitaPalette.of(context);
+    final (status, timing) = switch (trip.status) {
+      'created' => (trip.label, null),
+      'accepted' => (trip.label, 'Время подачи уточняется'),
+      'to_pickup' => ('Водитель едет к вам', 'Время подачи уточняется'),
+      'arrived' => (trip.label, null),
+      'riding' => ('Вы в поездке', 'Время до назначения уточняется'),
+      _ => (trip.label, null),
+    };
+    final details = [
+      if (route?.durationSeconds case final duration?)
+        '≈ ${(duration / 60).ceil()} мин',
+      if (route?.distanceMeters case final distance?)
+        '${(distance / 1000).toStringAsFixed(1).replaceAll('.', ',')} км',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          liveRegion: true,
+          child: Row(
+            children: [
+              Icon(Icons.circle, size: 10, color: palette.success),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  status,
+                  key: const Key('trip-status'),
+                  style: theme.textTheme.titleLarge,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (timing != null) ...[
+          const SizedBox(height: 4),
+          Text(timing, style: theme.textTheme.titleMedium),
+        ],
+        if (details.isNotEmpty)
+          Text(
+            'Поездка · ${details.join(' · ')}',
+            key: const Key('route-summary'),
+            style: theme.textTheme.bodyMedium?.copyWith(color: palette.muted),
+          ),
+        if (trip.driverId != null) ...[
+          const SizedBox(height: 10),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: palette.surfaceVariant,
+              borderRadius: OrbitaChrome.controlShape,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: palette.divider,
+                    foregroundColor: palette.text,
+                    child: const Icon(Icons.person_outline),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Водитель назначен',
+                          style: theme.textTheme.bodyLarge,
+                        ),
+                        Text(
+                          'Данные водителя и автомобиля недоступны',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 10),
+        OrderAddressLine(address: trip.pickup.address, pickup: true),
+        const SizedBox(height: 4),
+        OrderAddressLine(address: trip.destination.address),
+        if (trip.status == 'created') ...[
+          const SizedBox(height: 8),
+          ValueListenableBuilder<int>(
+            valueListenable: controller.clock,
+            builder: (context, value, child) => Text(
+              'Осталось до конца поиска: ${controller.secondsUntil(trip.expiresAt)} с',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          TextButton(
+            onPressed: controller.canAct
+                ? () => controller.cancel(trip.id)
+                : null,
+            child: const Text('Отменить заказ'),
           ),
         ],
       ],

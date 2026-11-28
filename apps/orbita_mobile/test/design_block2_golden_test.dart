@@ -7,6 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:orbita_mobile/src/app.dart';
+import 'package:orbita_mobile/src/domain/contracts.dart';
+import 'package:orbita_mobile/src/screens/preview_screens.dart'
+    show PreviewShell;
+import 'package:orbita_mobile/src/ui/theme.dart';
 import 'package:orbita_mobile/src/maps/map_settings.dart';
 import 'package:orbita_mobile/src/maps/map_tiles.dart';
 import 'package:orbita_mobile/src/screens/map_picker_screen.dart';
@@ -14,6 +18,9 @@ import 'package:orbita_mobile/src/ui/theme_settings.dart';
 import 'package:orbita_mobile/src/ui/orbita_map.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'dispatch_controller_test.dart'
+    as dispatch_fakes
+    show FakeApi, envelope, passenger, trip;
 import 'fake_auth_repository.dart';
 import 'fake_device.dart';
 import 'design_test_fonts.dart';
@@ -108,6 +115,64 @@ void main() {
         find.byType(Scaffold).first,
         'block2-passenger-${mode.name}',
       );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final (file, status, label) in [
+    ('glass-passenger-pickup', 'to_pickup', 'Водитель едет к вам'),
+    ('glass-passenger-riding', 'riding', 'Вы в поездке'),
+  ]) {
+    testWidgets('Стеклянная карточка пассажира: $file', (tester) async {
+      setViewport(tester, const Size(390, 844), 1);
+      final maps = MapSettings(initialKey: fakeMapKey);
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox());
+        maps.dispose();
+      });
+      final order = dispatch_fakes.trip({
+        'request_id': '00000000-0000-4000-8000-000000000004',
+        'pickup': {
+          'address': 'Чик, Учебная улица, 12',
+          'latitude': 55.006,
+          'longitude': 82.437,
+        },
+        'destination': {
+          'address': 'Чик, Садовая улица, 5',
+          'latitude': 55.007,
+          'longitude': 82.444,
+        },
+      }, status: status);
+      final api = dispatch_fakes.FakeApi()
+        ..handler = (_, _) async => dispatch_fakes.envelope(order: order);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: orbitaTheme(),
+          home: PreviewShell(
+            role: PreviewRole.passenger,
+            device: FakeDevice(),
+            mapSettings: maps,
+            dispatchApi: api,
+            userId: dispatch_fakes.passenger,
+            routeServiceFactory: (_) => FakeRouteService(),
+            tileSessionFactory: (_) => _DesignTiles(Brightness.dark),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(label).hitTestable(), findsOneWidget);
+      expect(
+        find.text('Данные водителя и автомобиля недоступны'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('route-summary')), findsOneWidget);
+      expect(find.text('Как используются адреса'), findsNothing);
+      await capture(find.byType(Scaffold).first, file);
       expect(tester.takeException(), isNull);
     });
   }

@@ -62,11 +62,15 @@ class _PassengerScreenState extends State<PassengerScreen> {
   GeoPoint? _position;
   int? _pickupRevisionWhenLocating;
   String? _gpsMessage;
+  String? _lastActiveOrder;
   @override
   void initState() {
     super.initState();
     _controller.setEnabled(widget.enabled, foreground: widget.foreground);
     _controller.addListener(_changed);
+    _lastActiveOrder = widget.dispatch?.hasActiveTrip == true
+        ? widget.dispatch?.state?.trip?.id
+        : null;
     widget.dispatch?.addListener(_dispatchChanged);
     _pickupFocus.addListener(_focusChanged);
     _destinationFocus.addListener(_focusChanged);
@@ -163,6 +167,24 @@ class _PassengerScreenState extends State<PassengerScreen> {
 
   void _dispatchChanged() {
     if (!mounted) return;
+    final dispatch = widget.dispatch;
+    final trip = dispatch?.state?.trip;
+    if (dispatch?.hasCurrentSnapshot == true) {
+      if (trip?.active == true) {
+        _lastActiveOrder = trip!.id;
+      } else if (_lastActiveOrder != null && _lastActiveOrder == trip?.id) {
+        _lastActiveOrder = null;
+        if (trip!.status == 'completed') _controller.clearTripDraft();
+        if (widget.enabled) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+            SnackBar(
+              content: Text(trip.label),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    }
     if (_orderLocked) {
       _location?.cancel(notify: false);
       _closeSearch();
@@ -210,6 +232,9 @@ class _PassengerScreenState extends State<PassengerScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoLocate());
     if (oldWidget.dispatch != widget.dispatch) {
       oldWidget.dispatch?.removeListener(_dispatchChanged);
+      _lastActiveOrder = widget.dispatch?.hasActiveTrip == true
+          ? widget.dispatch?.state?.trip?.id
+          : null;
       widget.dispatch?.addListener(_dispatchChanged);
       _changed();
     }
@@ -389,22 +414,6 @@ class _PassengerScreenState extends State<PassengerScreen> {
     );
   }
 
-  void _addressPrivacy() => showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Поиск и маршрут'),
-      content: const Text(
-        'Для поиска адресов введённый текст и выбранные точки передаются Geoapify. Обе точки используются для построения маршрута. После нажатия «Заказать такси» адреса отправляются в службу такси.',
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Понятно'),
-        ),
-      ],
-    ),
-  );
-
   Widget _routeStatus() {
     if (_route.busy) {
       return Padding(
@@ -480,26 +489,24 @@ class _PassengerScreenState extends State<PassengerScreen> {
           panel: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.dispatch?.hasActiveTrip == true
-                          ? 'Текущий заказ'
-                          : 'Куда едем?',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                  ),
-                  if (_searching)
-                    IconButton(
-                      tooltip: 'Свернуть поиск',
-                      onPressed: _closeSearch,
-                      icon: const Icon(Icons.keyboard_arrow_down),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 10),
               if (widget.dispatch?.hasActiveTrip != true) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Куда едем?',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    if (_searching)
+                      IconButton(
+                        tooltip: 'Свернуть поиск',
+                        onPressed: _closeSearch,
+                        icon: const Icon(Icons.keyboard_arrow_down),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 _field(AddressField.pickup),
                 const SizedBox(height: 8),
                 _field(AddressField.destination),
@@ -508,23 +515,19 @@ class _PassengerScreenState extends State<PassengerScreen> {
               if (_searching)
                 _results()
               else ...[
-                if (_gpsMessage != null && _controller.pickup.place == null)
+                if (!_orderLocked &&
+                    _gpsMessage != null &&
+                    _controller.pickup.place == null)
                   Text(
                     _gpsMessage!,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                _routeStatus(),
-                if (!_orderLocked &&
-                    (_controller.pickup.place == null ||
-                        _controller.destination.place == null))
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      'Выберите адрес из подсказок или точку на карте, чтобы подтвердить маршрут.',
-                    ),
-                  ),
+                if (!_orderLocked) _routeStatus(),
                 if (widget.dispatch case final dispatch?) ...[
-                  DispatchPanel(controller: dispatch),
+                  PassengerDispatchPanel(
+                    controller: dispatch,
+                    tripRoute: _route.route,
+                  ),
                   if (!dispatch.hasActiveTrip && dispatch.pending == null)
                     FullWidthAction(
                       'Заказать такси',
@@ -549,11 +552,6 @@ class _PassengerScreenState extends State<PassengerScreen> {
                   const Text('Заказ недоступен.'),
                 ],
               ],
-              TextButton.icon(
-                onPressed: _addressPrivacy,
-                icon: const Icon(Icons.info_outline, size: 18),
-                label: const Text('Как используются адреса'),
-              ),
             ],
           ),
         ),

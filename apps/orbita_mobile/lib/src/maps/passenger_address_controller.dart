@@ -102,6 +102,23 @@ class PassengerAddressController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearTripDraft() {
+    _pickupInputRevision++;
+    _cancelLocationLookup();
+    _cancel();
+    _pickupFromLocation = false;
+    activeField = AddressField.pickup;
+    for (final item in [pickup, destination]) {
+      item
+        ..text = ''
+        ..place = null
+        ..message = null
+        ..suggestions = const []
+        ..searched = false;
+    }
+    notifyListeners();
+  }
+
   void _schedule(AddressField field) {
     _timer?.cancel();
     final item = draft(field);

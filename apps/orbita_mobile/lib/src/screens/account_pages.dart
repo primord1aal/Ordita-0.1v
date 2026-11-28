@@ -222,6 +222,20 @@ class AboutScreen extends StatelessWidget {
             Text('Версия $appVersion'),
             const SizedBox(height: 20),
             Divider(color: palette.divider),
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              leading: const Icon(Icons.info_outline),
+              title: const Text('Как используются адреса'),
+              children: const [
+                Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Для поиска адресов введённый текст и выбранные точки передаются Geoapify. Обе точки используются для построения маршрута. После нажатия «Заказать такси» адреса отправляются в службу такси.',
+                  ),
+                ),
+              ],
+            ),
+            Divider(color: palette.divider),
             if (diagnosticsEnabled) ...[
               ListTile(
                 contentPadding: EdgeInsets.zero,

@@ -14,6 +14,8 @@ import 'package:orbita_mobile/src/orders/dispatch_controller.dart';
 import 'package:orbita_mobile/src/orders/order_models.dart';
 import 'package:orbita_mobile/src/services/session_store.dart';
 
+import 'maps_test_fakes.dart';
+
 const passenger = '00000000-0000-4000-8000-000000000001';
 const driver = '00000000-0000-4000-8000-000000000002';
 const pickup = AddressPlace('Чик, Учебная, 1', GeoPoint(55, 82.43));
@@ -351,24 +353,30 @@ void main() {
           'longitude': 82.44,
         },
       };
+      var status = 'accepted';
       final api = FakeApi()
         ..handler = ((action, payload) async =>
-            envelope(order: trip(intent, status: 'accepted')));
+            envelope(order: trip(intent, status: status)));
       final c = DispatchController(api: api, userId: passenger, driver: false);
-      final maps = MapSettings();
+      final maps = MapSettings(initialKey: fakeMapKey);
       c.setEnabled(true);
       await tester.pump();
       await tester.pumpWidget(
         MaterialApp(
           theme: orbitaTheme(brightness: Brightness.light),
           home: Scaffold(
-            body: PassengerScreen(mapSettings: maps, dispatch: c),
+            body: PassengerScreen(
+              mapSettings: maps,
+              dispatch: c,
+              routeServiceFactory: (_) => FakeRouteService(),
+              tileSessionFactory: (_) => FakeMapTiles(),
+            ),
           ),
         ),
       );
       await tester.pump();
       expect(find.byKey(const Key('pickup')), findsNothing);
-      expect(find.text('Откуда: ${pickup.label}'), findsOneWidget);
+      expect(find.text(pickup.label), findsOneWidget);
       final map = tester.widget<OrbitaMap>(
         find.byKey(const Key('passenger-map')),
       );
@@ -376,6 +384,27 @@ void main() {
       expect(map.destination!.label, destination.label);
       expect(find.text('Заказ принят водителем'), findsOneWidget);
       expect(find.byKey(const Key('create-order')), findsNothing);
+      expect(find.text('Как используются адреса'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 700));
+      await tester.pump();
+      expect(find.text('Время подачи уточняется'), findsOneWidget);
+      expect(find.text('Поездка · ≈ 9 мин · 4,2 км'), findsOneWidget);
+      status = 'riding';
+      await c.refresh();
+      await tester.pump();
+      expect(find.text('Время подачи уточняется'), findsNothing);
+      expect(find.text('Время до назначения уточняется'), findsOneWidget);
+      expect(find.text('Поездка · ≈ 9 мин · 4,2 км'), findsOneWidget);
+      status = 'completed';
+      await c.refresh();
+      await tester.pump();
+      expect(find.text('Поездка завершена'), findsOneWidget);
+      expect(find.byKey(const Key('create-order')), findsOneWidget);
+      expect(find.text(pickup.label), findsNothing);
+      expect(
+        tester.widget<OrbitaMap>(find.byKey(const Key('passenger-map'))).pickup,
+        isNull,
+      );
       await tester.pumpWidget(const SizedBox());
       c.dispose();
       maps.dispose();
