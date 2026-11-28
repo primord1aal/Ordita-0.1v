@@ -12,6 +12,7 @@ import 'auth_repository.dart';
 import '../orders/dispatch_controller.dart';
 import '../orders/trip_history.dart';
 import '../orders/trip_location.dart';
+import '../orders/trip_people.dart';
 import '../platform/device_gateway.dart' show DeviceLocationFix;
 import '../orders/order_models.dart';
 import 'bounded_http_client.dart';
@@ -23,7 +24,8 @@ class SupabaseAuthRepository
         DispatchApi,
         DriverPushApi,
         TripHistoryApi,
-        TripLocationApi {
+        TripLocationApi,
+        TripPeopleApi {
   SupabaseAuthRepository(this.configuration)
     : storage = SecureAuthStorage(
         SecureSessionStore(projectRef: configuration.projectRef),
@@ -214,81 +216,51 @@ class SupabaseAuthRepository
   );
 
   @override
-  Future<Object?> dispatch(String action, Map<String, Object?> payload) async {
-    final generation = _generation;
-    if (_sdk.auth.currentSession == null) {
-      throw const OrderFailure(OrderFailureKind.sessionRequired);
-    }
-    try {
-      final result = await _sdk.rpc(
-        'orbita_dispatch',
-        params: {'p_action': action, 'p_payload': payload},
-      );
-      _current(generation);
-      await _persist(_sdk.auth.currentSession, generation);
-      return result;
-    } on sdk.PostgrestException catch (error) {
-      throw OrderFailure.fromServerMessage(
-        const {'PGRST202', '42883'}.contains(error.code)
-            ? error.code
-            : error.message,
-      );
-    }
-  }
+  Future<Object?> dispatch(String action, Map<String, Object?> payload) =>
+      _orderRpc('orbita_dispatch', {'p_action': action, 'p_payload': payload});
 
   @override
   Future<Object?> loadTripHistory({
     required bool driver,
     HistoryTrip? before,
-  }) async {
-    final generation = _generation;
-    if (_sdk.auth.currentSession == null) {
-      throw const OrderFailure(OrderFailureKind.sessionRequired);
-    }
-    try {
-      final result = await _sdk.rpc(
-        'orbita_order_history',
-        params: {
-          'p_role': driver ? 'driver' : 'passenger',
-          if (before != null) 'p_before_at': before.createdAt.toIso8601String(),
-          if (before != null) 'p_before_id': before.id,
-        },
-      );
-      _current(generation);
-      await _persist(_sdk.auth.currentSession, generation);
-      return result;
-    } on sdk.PostgrestException catch (error) {
-      throw OrderFailure.fromServerMessage(
-        const {'PGRST202', '42883'}.contains(error.code)
-            ? error.code
-            : error.message,
-      );
-    }
-  }
+  }) => _orderRpc('orbita_order_history', {
+    'p_role': driver ? 'driver' : 'passenger',
+    if (before != null) 'p_before_at': before.createdAt.toIso8601String(),
+    if (before != null) 'p_before_id': before.id,
+  });
 
   @override
   Future<Object?> exchangeTripLocation(
     String orderId, {
     DeviceLocationFix? fix,
-  }) async {
+  }) => _orderRpc('orbita_trip_location', {
+    'p_order_id': orderId,
+    if (fix != null)
+      'p_fix': {
+        'latitude': fix.latitude,
+        'longitude': fix.longitude,
+        'accuracy_meters': fix.accuracyMeters,
+        'captured_at': fix.capturedAt.toUtc().toIso8601String(),
+      },
+  });
+
+  @override
+  Future<Object?> loadTripPeer(String orderId) =>
+      _orderRpc('orbita_trip_peer', {'p_order': orderId});
+
+  @override
+  Future<Object?> loadOwnVehicle() => _orderRpc('orbita_my_vehicle', const {});
+
+  Future<Object?> _orderRpc(
+    String function,
+    Map<String, Object?> parameters,
+  ) async {
     final generation = _generation;
     if (_sdk.auth.currentSession == null) {
       throw const OrderFailure(OrderFailureKind.sessionRequired);
     }
     try {
-      final result = await _sdk.rpc(
-        'orbita_trip_location',
-        params: {
-          'p_order_id': orderId,
-          if (fix != null)
-            'p_fix': {
-              'latitude': fix.latitude,
-              'longitude': fix.longitude,
-              'accuracy_meters': fix.accuracyMeters,
-              'captured_at': fix.capturedAt.toUtc().toIso8601String(),
-            },
-        },
-      );
+      final result = await _sdk.rpc(function, params: parameters);
       _current(generation);
       await _persist(_sdk.auth.currentSession, generation);
       return result;

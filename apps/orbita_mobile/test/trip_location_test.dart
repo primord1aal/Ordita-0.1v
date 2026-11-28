@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orbita_mobile/src/maps/map_settings.dart';
 import 'package:orbita_mobile/src/orders/dispatch_controller.dart';
 import 'package:orbita_mobile/src/orders/trip_location.dart';
+import 'package:orbita_mobile/src/orders/trip_people.dart';
 import 'package:orbita_mobile/src/platform/device_gateway.dart';
 import 'package:orbita_mobile/src/screens/passenger_screen.dart';
 import 'package:orbita_mobile/src/ui/orbita_map.dart';
@@ -14,8 +15,23 @@ import 'dispatch_controller_test.dart'
     show FakeApi, destination, envelope, passenger, pickup, trip;
 import 'maps_test_fakes.dart';
 
-class _Api extends FakeApi implements TripLocationApi {
+class _Api extends FakeApi implements TripLocationApi, TripPeopleApi {
   final locationCalls = <(String, Completer<Object?>)>[];
+
+  @override
+  Future<Object?> loadTripPeer(String orderId) async => {
+    'order_id': orderId,
+    'display_name': 'Водитель из тестового API',
+    'vehicle': {
+      'make': 'Тестовая марка',
+      'model': 'Модель',
+      'color': 'Серый',
+      'plate': 'A 123 BB',
+    },
+  };
+
+  @override
+  Future<Object?> loadOwnVehicle() async => null;
 
   @override
   Future<Object?> exchangeTripLocation(
@@ -83,6 +99,9 @@ void main() {
       OrbitaMap map() => tester.widget(find.byKey(const Key('passenger-map')));
       expect(map().vehiclePosition?.latitude, 55.003);
       expect(map().approachRoute, isNotNull);
+      expect(find.text('Водитель из тестового API'), findsOneWidget);
+      expect(find.text('Серый · Тестовая марка Модель'), findsOneWidget);
+      expect(find.text('A 123 BB'), findsOneWidget);
       expect(roads.calls.last.$2.latitude, pickup.point.latitude);
 
       status = 'riding';
@@ -103,6 +122,7 @@ void main() {
       });
       await tester.pumpAndSettle();
       expect(map().vehiclePosition, isNull);
+      expect(find.text('A 123 BB'), findsNothing);
       expect(map().route, isNull);
       controller.setEnabled(false);
     },

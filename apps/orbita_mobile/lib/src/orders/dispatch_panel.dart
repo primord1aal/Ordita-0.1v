@@ -4,6 +4,7 @@ import '../ui/components.dart';
 import '../maps/route_preview.dart';
 import '../ui/theme.dart';
 import 'dispatch_controller.dart';
+import 'trip_people.dart';
 
 class PassengerDispatchPanel extends StatelessWidget {
   const PassengerDispatchPanel({
@@ -122,39 +123,10 @@ class _PassengerTrip extends StatelessWidget {
           ),
         if (trip.driverId != null) ...[
           const SizedBox(height: 10),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: palette.surfaceVariant,
-              borderRadius: OrbitaChrome.controlShape,
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: palette.divider,
-                    foregroundColor: palette.text,
-                    child: const Icon(Icons.person_outline),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Водитель назначен',
-                          style: theme.textTheme.bodyLarge,
-                        ),
-                        Text(
-                          'Данные водителя и автомобиля недоступны',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          _TripPeerCard(
+            key: ValueKey((trip.id, trip.driverId)),
+            controller: controller,
+            tripId: trip.id,
           ),
         ],
         const SizedBox(height: 10),
@@ -468,6 +440,12 @@ class _DriverJourney extends StatelessWidget {
           toPickup ? trip.pickup.address : trip.destination.address,
           style: theme.textTheme.titleMedium,
         ),
+        const SizedBox(height: 8),
+        _TripPeerCard(
+          key: ValueKey((trip.id, trip.passengerId)),
+          controller: controller,
+          tripId: trip.id,
+        ),
         if (action != null) ...[
           const SizedBox(height: 12),
           FullWidthAction(
@@ -485,6 +463,114 @@ class _DriverJourney extends StatelessWidget {
       ],
     );
   }
+}
+
+class _TripPeerCard extends StatefulWidget {
+  const _TripPeerCard({
+    required this.controller,
+    required this.tripId,
+    super.key,
+  });
+
+  final DispatchController controller;
+  final String tripId;
+
+  @override
+  State<_TripPeerCard> createState() => _TripPeerCardState();
+}
+
+class _TripPeerCardState extends State<_TripPeerCard> {
+  Future<TripPeer?>? _peer;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TripPeerCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller ||
+        widget.tripId != oldWidget.tripId) {
+      _load();
+    }
+  }
+
+  void _load() {
+    final api = widget.controller.api;
+    if (api is! TripPeopleApi) {
+      _peer = null;
+      return;
+    }
+    final id = widget.tripId;
+    _peer = (api as TripPeopleApi)
+        .loadTripPeer(id)
+        .then((value) => TripPeer.parse(value, orderId: id));
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<TripPeer?>(
+    future: _peer,
+    builder: (context, snapshot) {
+      final driver = widget.controller.driver;
+      final peer =
+          widget.controller.hasCurrentSnapshot &&
+              snapshot.connectionState == ConnectionState.done
+          ? snapshot.data
+          : null;
+      if (driver && (peer?.name?.isEmpty ?? true)) {
+        return const SizedBox.shrink();
+      }
+      final theme = Theme.of(context);
+      final palette = OrbitaPalette.of(context);
+      final vehicle = peer?.vehicle;
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: palette.surfaceVariant,
+          borderRadius: OrbitaChrome.controlShape,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: palette.divider,
+                foregroundColor: palette.text,
+                child: const Icon(Icons.person_outline),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      peer?.name ?? 'Водитель назначен',
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                    if (!driver)
+                      Text(
+                        vehicle == null
+                            ? 'Данные водителя и автомобиля недоступны'
+                            : '${vehicle.color} · ${vehicle.make} ${vehicle.model}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    if (!driver && vehicle != null)
+                      Text(
+                        vehicle.plate,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: palette.accent,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 bool _hasMeasures(RoutePreview? route) =>
