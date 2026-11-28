@@ -49,6 +49,8 @@ class _DriverScreenState extends State<DriverScreen> {
     if (widget.device case final device?) {
       _location = MapLocationAction(
         device: device,
+        missingLocationMessage:
+            'Не удалось определить местоположение. Попробуйте ещё раз.',
         isAllowed: () => mounted && widget.enabled && widget.foreground,
         onLocation: (point) => setState(() {
           _position = point;
@@ -78,6 +80,16 @@ class _DriverScreenState extends State<DriverScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoLocate());
   }
 
+  void _showCompleted() {
+    if (!mounted || !widget.enabled) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(
+        content: Text('Поездка завершена'),
+        duration: Duration(seconds: 5),
+      ),
+    );
+  }
+
   void _autoLocate() {
     if (mounted && widget.enabled && widget.foreground) {
       unawaited(_location?.locateAutomatically());
@@ -104,7 +116,7 @@ class _DriverScreenState extends State<DriverScreen> {
       final dispatch = widget.dispatch;
       final state = dispatch?.state;
       final trip = state?.trip;
-      final acceptedTrip = trip != null && trip.active ? trip : null;
+      final activeTrip = trip != null && trip.active ? trip : null;
       return MapWorkLayout(
         scrollKey: const Key('driver-scroll'),
         map: (context, height) => DriverMap(
@@ -116,25 +128,30 @@ class _DriverScreenState extends State<DriverScreen> {
           workSurface: true,
           tileSessionFactory: widget.tileSessionFactory,
           focusPoint: _position,
-          tripId: acceptedTrip?.id,
-          pickup: acceptedTrip == null
+          tripId: activeTrip?.id,
+          pickup: activeTrip == null
               ? null
               : AddressPlace(
-                  acceptedTrip.pickup.address,
-                  acceptedTrip.pickup.point,
+                  activeTrip.pickup.address,
+                  activeTrip.pickup.point,
                 ),
-          destination: acceptedTrip == null
+          destination: activeTrip == null
               ? null
               : AddressPlace(
-                  acceptedTrip.destination.address,
-                  acceptedTrip.destination.point,
+                  activeTrip.destination.address,
+                  activeTrip.destination.point,
                 ),
           onLocate: _location?.locate,
           locating: _location?.busy ?? false,
         ),
         shift: ShiftControl(
           compact: true,
-          confirmedOnline: state?.online ?? false,
+          checking:
+              dispatch != null &&
+              !dispatch.hasCurrentSnapshot &&
+              dispatch.message == null,
+          confirmedOnline:
+              dispatch?.hasCurrentSnapshot == true && state?.online == true,
           available:
               widget.enabled &&
               widget.foreground &&
@@ -144,7 +161,7 @@ class _DriverScreenState extends State<DriverScreen> {
           requestChange: dispatch?.setOnline,
         ),
         panel: dispatch == null
-            ? const Text('Активных поездок нет')
+            ? const Text('Активных поездок нет', key: Key('current-order'))
             : Column(
                 key: const Key('current-order'),
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -159,7 +176,10 @@ class _DriverScreenState extends State<DriverScreen> {
                       onPressed: _location?.openSettings,
                       child: const Text('Открыть настройки'),
                     ),
-                  DispatchPanel(controller: dispatch),
+                  DriverDispatchPanel(
+                    controller: dispatch,
+                    onCompleted: _showCompleted,
+                  ),
                 ],
               ),
       );

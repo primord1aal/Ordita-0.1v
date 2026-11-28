@@ -13,11 +13,12 @@ class ShiftControl extends StatefulWidget {
     this.confirmedOnline = false,
     this.available = false,
     this.compact = false,
+    this.checking = false,
     this.requestChange,
     super.key,
   });
 
-  final bool confirmedOnline, available, compact;
+  final bool confirmedOnline, available, compact, checking;
   final Future<void> Function(bool online)? requestChange;
 
   @override
@@ -136,7 +137,9 @@ class _ShiftControlState extends State<ShiftControl> {
   @override
   Widget build(BuildContext context) {
     final palette = OrbitaPalette.of(context);
-    final label = _pending
+    final label = widget.checking
+        ? 'Проверяем смену…'
+        : _pending
         ? (widget.compact ? 'Сверяем статус…' : 'Подключаем…')
         : widget.confirmedOnline
         ? 'На линии'

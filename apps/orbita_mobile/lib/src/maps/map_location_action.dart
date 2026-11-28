@@ -15,6 +15,8 @@ class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
     required this.isAllowed,
     required this.onLocation,
     required this.onError,
+    this.missingLocationMessage =
+        'Местоположение недоступно. Выберите точку на карте.',
   }) {
     WidgetsBinding.instance.addObserver(this);
   }
@@ -23,6 +25,7 @@ class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
   final bool Function() isAllowed;
   final FutureOr<void> Function(GeoPoint) onLocation;
   final ValueChanged<String> onError;
+  final String missingLocationMessage;
   bool busy = false, _disposed = false;
   bool _automaticAttempted = false;
   bool _waitingForLocationSettings = false;
@@ -106,12 +109,12 @@ class MapLocationAction extends ChangeNotifier with WidgetsBindingObserver {
           'timeout' =>
             'Не удалось определить местоположение. Попробуйте ещё раз.',
           'busy' => 'Местоположение уже определяется.',
-          _ => 'Местоположение недоступно. Выберите точку на карте.',
+          _ => missingLocationMessage,
         });
       }
     } catch (_) {
       if (_current(revision)) {
-        onError('Местоположение недоступно. Выберите точку на карте.');
+        onError(missingLocationMessage);
       }
     } finally {
       if (!_disposed && revision == _revision) {

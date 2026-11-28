@@ -142,7 +142,9 @@ void main() {
       final device = FakeDevice()..state = readyState();
       await openPreview(tester, 'Водитель', device: device);
       expect(
-        MediaQuery.textScalerOf(tester.element(find.text('орбита.'))).scale(16),
+        MediaQuery.textScalerOf(
+          tester.element(find.byKey(const Key('map-brand'))),
+        ).scale(16),
         closeTo(16 * scale, 0.01),
       );
       await checkNavigation(tester);
@@ -244,12 +246,12 @@ void main() {
         final nav = tester.getSemantics(find.byKey(const Key('nav-0')));
         expect(nav.flagsCollection.isButton, isTrue);
         expect(nav.flagsCollection.isSelected, ui.Tristate.isTrue);
-        expect(nav.getSemanticsData().label, 'Линия');
+        expect(nav.getSemanticsData().label, 'Работа');
         final shift = tester.getSemantics(
           find.byKey(const Key('shift-control')),
         );
         expect(shift.flagsCollection.isEnabled, ui.Tristate.isFalse);
-        expect(shift.getSemanticsData().label, contains('Не на линии'));
+        expect(shift.getSemanticsData().label, contains('Вне смены'));
         expect(
           shift.getSemanticsData().hasAction(ui.SemanticsAction.tap),
           isFalse,

@@ -7,6 +7,7 @@ import 'package:orbita_mobile/src/maps/map_settings.dart';
 import 'package:orbita_mobile/src/screens/passenger_screen.dart';
 import 'package:orbita_mobile/src/screens/driver_screen.dart';
 import 'package:orbita_mobile/src/ui/orbita_map.dart';
+import 'package:orbita_mobile/src/ui/driver_map.dart';
 import 'package:orbita_mobile/src/ui/theme.dart';
 import 'package:orbita_mobile/src/maps/address_models.dart';
 import 'package:orbita_mobile/src/orders/dispatch_controller.dart';
@@ -409,7 +410,7 @@ void main() {
               ? {
                   'id': '00000000-0000-4000-8000-000000000005',
                   'order_id': '00000000-0000-4000-8000-000000000003',
-                  'expires_at': '2026-11-20T16:00:25Z',
+                  'expires_at': '2026-11-20T16:00:18Z',
                 }
               : null,
         };
@@ -427,13 +428,15 @@ void main() {
       ),
     );
     await tester.pump();
+    expect(find.text('18 с'), findsOneWidget);
+    expect(tester.widget<DriverMap>(find.byType(DriverMap)).tripId, isNotNull);
     await tester.ensureVisible(find.byKey(const Key('accept-offer')));
     await tester.tap(find.byKey(const Key('accept-offer')));
     await tester.pump();
     expect(c.state!.trip!.status, 'accepted');
     for (final label in [
-      'К клиенту',
-      'На месте',
+      'Ехать к пассажиру',
+      'Я на месте',
       'Начать поездку',
       'Завершить поездку',
     ]) {
@@ -443,6 +446,13 @@ void main() {
     }
     expect(c.state!.trip!.status, 'completed');
     expect(find.text('Поездка завершена'), findsOneWidget);
+    expect(find.text('Ожидаем заказ'), findsOneWidget);
+    expect(find.text(pickup.label), findsNothing);
+    expect(tester.widget<DriverMap>(find.byType(DriverMap)).tripId, isNull);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    expect(find.text('Поездка завершена'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     c.dispose();
     maps.dispose();

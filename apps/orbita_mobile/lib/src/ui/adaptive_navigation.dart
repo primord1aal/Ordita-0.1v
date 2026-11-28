@@ -36,7 +36,7 @@ class _AdaptiveNavigationState extends State<AdaptiveNavigation> {
   double? get availableHeight => widget.availableHeight;
 
   List<String> get _labels => [
-    driver ? 'Линия' : 'Заказ',
+    driver ? 'Работа' : 'Заказ',
     'Поездки',
     'Профиль',
   ];

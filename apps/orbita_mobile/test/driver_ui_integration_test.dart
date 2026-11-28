@@ -16,6 +16,8 @@ import 'package:orbita_mobile/src/orders/dispatch_controller.dart';
 import 'package:orbita_mobile/src/platform/device_gateway.dart';
 import 'package:orbita_mobile/src/screens/driver_screen.dart';
 import 'package:orbita_mobile/src/screens/passenger_screen.dart';
+import 'package:orbita_mobile/src/screens/preview_screens.dart'
+    show PreviewShell;
 import 'package:orbita_mobile/src/ui/driver_demo_access.dart';
 import 'package:orbita_mobile/src/ui/driver_map.dart';
 import 'package:orbita_mobile/src/ui/theme.dart';
@@ -28,7 +30,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'design_test_fonts.dart';
 import 'dispatch_controller_test.dart'
     as dispatch_fakes
-    show FakeApi, driver, envelope;
+    show FakeApi, driver, envelope, trip;
 import 'fake_auth_repository.dart';
 import 'fake_device.dart';
 import 'maps_test_fakes.dart';
@@ -361,6 +363,96 @@ void main() {
     checkHorizontalBounds(tester);
     expect(tester.takeException(), isNull);
   });
+
+  for (final (file, status, label) in [
+    ('glass-driver-waiting', null, 'Ожидаем заказ'),
+    ('glass-driver-offer', 'created', 'Новый заказ'),
+    ('glass-driver-pickup', 'to_pickup', 'К пассажиру'),
+    ('glass-driver-riding', 'riding', 'В поездке'),
+  ]) {
+    testWidgets('Стеклянный рабочий экран водителя: $file', (tester) async {
+      setViewport(tester, const Size(390, 844), 1);
+      final settings = MapSettings(initialKey: fakeMapKey);
+      addTearDown(settings.dispose);
+      final order = status == null
+          ? null
+          : dispatch_fakes.trip({
+              'request_id': '00000000-0000-4000-8000-000000000004',
+              'pickup': {
+                'address': 'Чик, Учебная улица, 12',
+                'latitude': 55.006,
+                'longitude': 82.437,
+              },
+              'destination': {
+                'address': 'Чик, Садовая улица, 5',
+                'latitude': 55.007,
+                'longitude': 82.444,
+              },
+            }, status: status);
+      final api = dispatch_fakes.FakeApi()
+        ..handler = (_, _) async => {
+          ...dispatch_fakes.envelope(isDriver: true, order: order),
+          if (status == 'created')
+            'offer': {
+              'id': '00000000-0000-4000-8000-000000000005',
+              'order_id': order!['id'],
+              'expires_at': '2026-11-20T16:00:19Z',
+            },
+        };
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: orbitaTheme(brightness: Brightness.light),
+          home: PreviewShell(
+            role: PreviewRole.driver,
+            device: FakeDevice()
+              ..state = readyState()
+              ..locationHandler = () async => DeviceLocationFix(
+                latitude: 55.005,
+                longitude: 82.44,
+                accuracyMeters: 10,
+                capturedAt: DateTime.now().toUtc(),
+              ),
+            mapSettings: settings,
+            dispatchApi: api,
+            userId: dispatch_fakes.driver,
+            tileSessionFactory: (_) => _DesignTiles(false),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 350));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pumpAndSettle();
+      final map = tester.getRect(find.byType(DriverMap));
+      final panel = tester.getRect(find.byKey(const Key('work-panel')));
+      expect(find.text(label).hitTestable(), findsOneWidget);
+      expect(map.bottom, closeTo(panel.top, .5));
+      expect(
+        panel.bottom,
+        closeTo(
+          tester.getRect(find.byKey(const Key('navigation-horizontal'))).top,
+          .5,
+        ),
+      );
+      if (status == 'created') {
+        expect(find.text('19 с'), findsOneWidget);
+        expect(
+          tester.getTopLeft(find.text('Отказаться')).dy,
+          closeTo(tester.getTopLeft(find.text('Принять')).dy, 1),
+        );
+      }
+      if (captureDesignGoldens) {
+        await expectLater(
+          find.byType(Scaffold),
+          matchesGoldenFile('goldens/$file.png'),
+        );
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   final shots = [
     ('driver-off-light', false, null, const Size(390, 844), 1.0),

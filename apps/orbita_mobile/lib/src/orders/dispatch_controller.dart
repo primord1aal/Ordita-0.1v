@@ -263,10 +263,17 @@ class DispatchController extends ChangeNotifier {
     });
   }
 
-  Future<void> advance(String status, {required String orderId}) async {
+  Future<bool> advance(String status, {required String orderId}) async {
     await _waitForPoll();
-    if (!canAct || state?.trip?.id != orderId) return;
+    if (!canAct || state?.trip?.id != orderId) return false;
+    final previous = state;
+    final generation = _generation;
     await _run('advance', {'order_id': orderId, 'status': status});
+    return generation == _generation &&
+        hasCurrentSnapshot &&
+        message == null &&
+        !identical(state, previous) &&
+        (state?.outcome == 'ok' || state?.outcome == 'already_processed');
   }
 
   Future<void> _run(
