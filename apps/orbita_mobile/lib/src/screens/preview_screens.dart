@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../domain/contracts.dart';
 import '../orders/dispatch_controller.dart';
+import '../orders/trip_history.dart';
 import '../orders/driver_offer_open.dart';
 import '../maps/map_settings.dart';
 import '../maps/map_tiles.dart';
@@ -14,6 +15,7 @@ import '../ui/components.dart';
 import '../ui/theme.dart';
 import 'account_pages.dart';
 import 'passenger_screen.dart';
+import 'trip_history_screen.dart';
 import 'driver_screen.dart';
 
 export 'passenger_screen.dart';
@@ -182,7 +184,27 @@ class _PreviewShellState extends State<PreviewShell> {
                           routeServiceFactory: widget.routeServiceFactory,
                           tileSessionFactory: widget.tileSessionFactory,
                         ),
-                  const HistoryScreen(),
+                  ListenableBuilder(
+                    listenable: _dispatch ?? const AlwaysStoppedAnimation(null),
+                    builder: (context, _) {
+                      final api = widget.dispatchApi;
+                      final trip = _dispatch?.state?.trip;
+                      return HistoryScreen(
+                        api: api is TripHistoryApi
+                            ? api as TripHistoryApi
+                            : null,
+                        userId: widget.userId,
+                        driver: driver,
+                        active:
+                            _index == 1 &&
+                            widget.mapAccessAllowed &&
+                            widget.mapForeground,
+                        lastTerminal: trip != null && !trip.active
+                            ? (trip.id, trip.version, trip.status)
+                            : null,
+                      );
+                    },
+                  ),
                   ProfileScreen(
                     driver: driver,
                     diagnosticsEnabled: widget.diagnosticsEnabled,
@@ -264,26 +286,6 @@ class CurrentOrderCard extends StatelessWidget {
         ],
       ],
     ),
-  );
-}
-
-class HistoryScreen extends StatelessWidget {
-  const HistoryScreen({super.key});
-  @override
-  Widget build(BuildContext context) => CustomScrollView(
-    slivers: [
-      const SliverToBoxAdapter(child: BrandHeader()),
-      SliverPadding(
-        padding: const EdgeInsets.all(16),
-        sliver: SliverList.list(
-          children: [
-            Text('Ваши поездки', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 16),
-            const SurfaceCard(child: Text('Пока нет поездок.')),
-          ],
-        ),
-      ),
-    ],
   );
 }
 

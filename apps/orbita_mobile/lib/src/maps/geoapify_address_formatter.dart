@@ -4,7 +4,10 @@ String? formatGeoapifyAddress(Map<dynamic, dynamic> row) {
   String? locality;
   for (final key in ['city', 'town', 'village', 'hamlet']) {
     locality = _text(row[key]);
-    if (locality != null) break;
+    if (locality != null) {
+      locality = _localityCaption(locality, row);
+      break;
+    }
   }
   final street = _text(row['street']);
   final house = _text(row['housenumber']);
@@ -22,6 +25,24 @@ String? formatGeoapifyAddress(Map<dynamic, dynamic> row) {
   // Используем только короткие подписи. Не разбираем их по запятым и не
   // придумываем компоненты адреса из свободного текста.
   return _text(row['address_line1']) ?? _text(row['name']);
+}
+
+String _localityCaption(String name, Map<dynamic, dynamic> row) {
+  // Geoapify can return the OSM transliteration for the same settlement.
+  // Match only this structured locality within its Russian service area.
+  final lat = row['lat'];
+  final lon = row['lon'];
+  if (name.toLowerCase() == 'chik' &&
+      row['country_code'] == 'ru' &&
+      lat is num &&
+      lat >= 54.97 &&
+      lat <= 55.04 &&
+      lon is num &&
+      lon >= 82.36 &&
+      lon <= 82.49) {
+    return 'Чик';
+  }
+  return name;
 }
 
 String? _text(dynamic value) {

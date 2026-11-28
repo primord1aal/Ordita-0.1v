@@ -10,12 +10,13 @@ import '../orders/driver_push_registration.dart';
 import '../services/session_store.dart';
 import 'auth_repository.dart';
 import '../orders/dispatch_controller.dart';
+import '../orders/trip_history.dart';
 import '../orders/order_models.dart';
 import 'bounded_http_client.dart';
 import 'secure_auth_storage.dart';
 
 class SupabaseAuthRepository
-    implements AuthRepository, DispatchApi, DriverPushApi {
+    implements AuthRepository, DispatchApi, DriverPushApi, TripHistoryApi {
   SupabaseAuthRepository(this.configuration)
     : storage = SecureAuthStorage(
         SecureSessionStore(projectRef: configuration.projectRef),
@@ -215,6 +216,36 @@ class SupabaseAuthRepository
       final result = await _sdk.rpc(
         'orbita_dispatch',
         params: {'p_action': action, 'p_payload': payload},
+      );
+      _current(generation);
+      await _persist(_sdk.auth.currentSession, generation);
+      return result;
+    } on sdk.PostgrestException catch (error) {
+      throw OrderFailure.fromServerMessage(
+        const {'PGRST202', '42883'}.contains(error.code)
+            ? error.code
+            : error.message,
+      );
+    }
+  }
+
+  @override
+  Future<Object?> loadTripHistory({
+    required bool driver,
+    HistoryTrip? before,
+  }) async {
+    final generation = _generation;
+    if (_sdk.auth.currentSession == null) {
+      throw const OrderFailure(OrderFailureKind.sessionRequired);
+    }
+    try {
+      final result = await _sdk.rpc(
+        'orbita_order_history',
+        params: {
+          'p_role': driver ? 'driver' : 'passenger',
+          if (before != null) 'p_before_at': before.createdAt.toIso8601String(),
+          if (before != null) 'p_before_id': before.id,
+        },
       );
       _current(generation);
       await _persist(_sdk.auth.currentSession, generation);

@@ -2,6 +2,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orbita_mobile/src/maps/geoapify_address_formatter.dart';
 
 void main() {
+  test('Нормализуется только локальный Чик из структурированных полей', () {
+    final row = {
+      'country_code': 'ru',
+      'village': 'Chik',
+      'lat': 55.006,
+      'lon': 82.431,
+      'street': 'Chik-Test',
+    };
+    expect(formatGeoapifyAddress(row), 'Чик, Chik-Test');
+    expect(formatGeoapifyAddress({...row, 'lat': 56.2}), 'Chik, Chik-Test');
+    expect(
+      formatGeoapifyAddress({...row, 'country_code': 'kz'}),
+      'Chik, Chik-Test',
+    );
+    expect(formatGeoapifyAddress({'address_line1': 'Chik, 2'}), 'Chik, 2');
+  });
+
   test('Населённый пункт, улица и дом без административных частей', () {
     expect(
       formatGeoapifyAddress({
