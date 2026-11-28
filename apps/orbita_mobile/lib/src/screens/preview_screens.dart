@@ -172,6 +172,8 @@ class _PreviewShellState extends State<PreviewShell> {
                           device: widget.device,
                           enabled: widget.mapAccessAllowed && _index == 0,
                           foreground: widget.mapForeground,
+                          trackActiveTrip:
+                              widget.mapAccessAllowed && widget.mapForeground,
                           tileSessionFactory: widget.tileSessionFactory,
                         )
                       : PassengerScreen(

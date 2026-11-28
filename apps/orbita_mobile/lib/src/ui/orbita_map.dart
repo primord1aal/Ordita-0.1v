@@ -31,7 +31,10 @@ class OrbitaMap extends StatefulWidget {
     this.fitHeight = false,
     this.initialZoom = 16,
     this.userPosition,
+    this.vehiclePosition,
+    this.vehiclePositionStale = false,
     this.route,
+    this.approachRoute,
     this.coveredHeight = 0,
     this.workSurface = false,
     super.key,
@@ -49,8 +52,9 @@ class OrbitaMap extends StatefulWidget {
   final VoidCallback? onLocate;
   final bool locating, fitHeight;
   final double initialZoom;
-  final GeoPoint? userPosition;
-  final RoutePreview? route;
+  final GeoPoint? userPosition, vehiclePosition;
+  final bool vehiclePositionStale;
+  final RoutePreview? route, approachRoute;
   final double coveredHeight;
 
   static double minimumFittedHeight(BuildContext context, double width) {
@@ -95,7 +99,8 @@ class _OrbitaMapState extends State<OrbitaMap> {
       _focus(focusPoint, zoom: 17);
       return;
     }
-    final driverSelection = widget.controls == MapControls.driver
+    final driverSelection =
+        widget.controls == MapControls.driver || widget.workSurface
         ? widget.selectionId
         : null;
     if (driverSelection != null && driverSelection == _framedDriverSelection) {
@@ -189,6 +194,7 @@ class _OrbitaMapState extends State<OrbitaMap> {
         _scheduleFrame(focusLocation: true);
       }
     } else if (focusChanged ||
+        widget.selectionId != oldWidget.selectionId ||
         widget.route != oldWidget.route ||
         widget.coveredHeight != oldWidget.coveredHeight ||
         widget.height != oldWidget.height) {
@@ -414,10 +420,32 @@ class _OrbitaMapState extends State<OrbitaMap> {
                                             point.longitude,
                                           ),
                                       ],
-                                      color: const Color(0xffA6533A),
+                                      color: OrbitaPalette.of(context).accent,
                                       strokeWidth: 5,
-                                      borderColor: const Color(0xffFAFAF4),
+                                      borderColor: OrbitaPalette.of(context)
+                                          .surface,
                                       borderStrokeWidth: 2,
+                                    ),
+                                ],
+                              ),
+                            if (widget.approachRoute case final approach?)
+                              PolylineLayer(
+                                key: const Key('driver-approach-route'),
+                                polylines: [
+                                  for (final line in approach.lines)
+                                    Polyline(
+                                      points: [
+                                        for (final point in line)
+                                          LatLng(
+                                            point.latitude,
+                                            point.longitude,
+                                          ),
+                                      ],
+                                      color: OrbitaPalette.of(context).muted,
+                                      strokeWidth: 4,
+                                      pattern: StrokePattern.dashed(
+                                        segments: [8, 6],
+                                      ),
                                     ),
                                 ],
                               ),
@@ -531,6 +559,12 @@ class _OrbitaMapState extends State<OrbitaMap> {
                                     ),
                               ],
                             ),
+                            if (widget.vehiclePosition case final vehicle?)
+                              _VehicleMarker(
+                                key: ValueKey(widget.selectionId),
+                                point: vehicle,
+                                stale: widget.vehiclePositionStale,
+                              ),
                           ],
                         ),
                         if (widget.picking)
@@ -723,6 +757,55 @@ class _OrbitaMapState extends State<OrbitaMap> {
           ),
         )
       : const Icon(Icons.my_location);
+}
+
+class _VehicleMarker extends StatelessWidget {
+  const _VehicleMarker({required this.point, required this.stale, super.key});
+
+  final GeoPoint point;
+  final bool stale;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = OrbitaPalette.of(context);
+    final fill = stale ? palette.surfaceVariant : palette.surface;
+    final end = Offset(point.latitude, point.longitude);
+    return TweenAnimationBuilder<Offset>(
+      tween: Tween(begin: end, end: end),
+      duration: stale || MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+      builder: (context, coordinate, child) => MarkerLayer(
+        markers: [
+          Marker(
+            point: LatLng(coordinate.dx, coordinate.dy),
+            width: 38,
+            height: 38,
+            child: child!,
+          ),
+        ],
+      ),
+      child: Tooltip(
+        message: stale ? 'Последнее известное положение машины' : 'Машина',
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: fill,
+            border: Border.all(
+              color: stale ? palette.outline : palette.accent,
+              width: 2,
+            ),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.directions_car_filled_outlined,
+            color: palette.text,
+            size: 22,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class MapAttribution extends StatelessWidget {

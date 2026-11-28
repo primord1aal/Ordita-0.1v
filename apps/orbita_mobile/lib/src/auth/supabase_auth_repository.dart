@@ -11,12 +11,19 @@ import '../services/session_store.dart';
 import 'auth_repository.dart';
 import '../orders/dispatch_controller.dart';
 import '../orders/trip_history.dart';
+import '../orders/trip_location.dart';
+import '../platform/device_gateway.dart' show DeviceLocationFix;
 import '../orders/order_models.dart';
 import 'bounded_http_client.dart';
 import 'secure_auth_storage.dart';
 
 class SupabaseAuthRepository
-    implements AuthRepository, DispatchApi, DriverPushApi, TripHistoryApi {
+    implements
+        AuthRepository,
+        DispatchApi,
+        DriverPushApi,
+        TripHistoryApi,
+        TripLocationApi {
   SupabaseAuthRepository(this.configuration)
     : storage = SecureAuthStorage(
         SecureSessionStore(projectRef: configuration.projectRef),
@@ -245,6 +252,41 @@ class SupabaseAuthRepository
           'p_role': driver ? 'driver' : 'passenger',
           if (before != null) 'p_before_at': before.createdAt.toIso8601String(),
           if (before != null) 'p_before_id': before.id,
+        },
+      );
+      _current(generation);
+      await _persist(_sdk.auth.currentSession, generation);
+      return result;
+    } on sdk.PostgrestException catch (error) {
+      throw OrderFailure.fromServerMessage(
+        const {'PGRST202', '42883'}.contains(error.code)
+            ? error.code
+            : error.message,
+      );
+    }
+  }
+
+  @override
+  Future<Object?> exchangeTripLocation(
+    String orderId, {
+    DeviceLocationFix? fix,
+  }) async {
+    final generation = _generation;
+    if (_sdk.auth.currentSession == null) {
+      throw const OrderFailure(OrderFailureKind.sessionRequired);
+    }
+    try {
+      final result = await _sdk.rpc(
+        'orbita_trip_location',
+        params: {
+          'p_order_id': orderId,
+          if (fix != null)
+            'p_fix': {
+              'latitude': fix.latitude,
+              'longitude': fix.longitude,
+              'accuracy_meters': fix.accuracyMeters,
+              'captured_at': fix.capturedAt.toUtc().toIso8601String(),
+            },
         },
       );
       _current(generation);

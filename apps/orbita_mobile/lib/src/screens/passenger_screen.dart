@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import '../maps/address_models.dart';
 import '../orders/dispatch_controller.dart';
 import '../orders/dispatch_panel.dart';
+import '../orders/trip_location.dart';
 import '../maps/geoapify_service.dart';
 import '../maps/map_settings.dart';
 import '../maps/map_location_action.dart';
 import '../maps/route_preview.dart';
+import '../maps/trip_roads.dart';
 import '../platform/device_gateway.dart';
 import '../ui/map_panel_layout.dart';
 import '../maps/map_tiles.dart';
@@ -59,6 +61,11 @@ class _PassengerScreenState extends State<PassengerScreen> {
   String _tileKey = '';
   bool _choosing = false;
   MapLocationAction? _location;
+  TripLocation? _tracking;
+  late final _roads = TripRoads(
+    widget.mapSettings,
+    factory: widget.routeServiceFactory,
+  );
   GeoPoint? _position;
   int? _pickupRevisionWhenLocating;
   String? _gpsMessage;
@@ -66,6 +73,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
   @override
   void initState() {
     super.initState();
+    _setupTracking();
     _controller.setEnabled(widget.enabled, foreground: widget.foreground);
     _controller.addListener(_changed);
     _lastActiveOrder = widget.dispatch?.hasActiveTrip == true
@@ -115,6 +123,23 @@ class _PassengerScreenState extends State<PassengerScreen> {
     }
     _changed();
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoLocate());
+  }
+
+  void _setupTracking() {
+    _tracking?.dispose();
+    final dispatch = widget.dispatch;
+    _tracking = dispatch == null ? null : TripLocation(dispatch);
+    _tracking?.addListener(_updateRoads);
+    _tracking?.setEnabled(widget.enabled && widget.foreground);
+  }
+
+  void _updateRoads() {
+    _roads.update(
+      widget.dispatch?.state?.trip,
+      _tracking?.point,
+      enabled: widget.enabled && widget.foreground && !_choosing,
+      stale: _tracking?.stale ?? false,
+    );
   }
 
   void _autoLocate() {
@@ -193,6 +218,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
   }
 
   void _changed() {
+    _updateRoads();
     _route.update(
       _place(AddressField.pickup)?.point,
       _place(AddressField.destination)?.point,
@@ -231,6 +257,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
     super.didUpdateWidget(oldWidget);
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoLocate());
     if (oldWidget.dispatch != widget.dispatch) {
+      _setupTracking();
       oldWidget.dispatch?.removeListener(_dispatchChanged);
       _lastActiveOrder = widget.dispatch?.hasActiveTrip == true
           ? widget.dispatch?.state?.trip?.id
@@ -240,6 +267,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
     }
     if (oldWidget.enabled != widget.enabled ||
         oldWidget.foreground != widget.foreground) {
+      _tracking?.setEnabled(widget.enabled && widget.foreground);
       _controller.setEnabled(widget.enabled, foreground: widget.foreground);
       if (!_controller.enabled) {
         _tiles?.cancel();
@@ -250,6 +278,8 @@ class _PassengerScreenState extends State<PassengerScreen> {
 
   @override
   void dispose() {
+    _tracking?.dispose();
+    _roads.dispose();
     _location?.dispose();
     _route.dispose();
     _pickupFocus.dispose();
@@ -460,6 +490,8 @@ class _PassengerScreenState extends State<PassengerScreen> {
       _controller,
       _route,
       ?_location,
+      ?_tracking,
+      _roads.preview,
       ?widget.dispatch,
     ]),
     builder: (context, _) {
@@ -480,9 +512,17 @@ class _PassengerScreenState extends State<PassengerScreen> {
             enabled: _controller.enabled && !_choosing,
             pickup: _place(AddressField.pickup),
             destination: _place(AddressField.destination),
-            route: _route.route,
+            route: _roads.toPickup
+                ? _route.route
+                : _roads.preview.route ?? _route.route,
+            approachRoute: _roads.toPickup ? _roads.preview.route : null,
             focusPoint: _place(_controller.activeField)?.point,
             userPosition: _position,
+            selectionId: widget.dispatch?.hasActiveTrip == true
+                ? widget.dispatch?.state?.trip?.id
+                : null,
+            vehiclePosition: _tracking?.point,
+            vehiclePositionStale: _tracking?.stale ?? false,
             onLocate: _orderLocked || _location == null ? null : _locatePickup,
             locating: _location?.busy ?? false,
           ),
@@ -527,6 +567,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
                   PassengerDispatchPanel(
                     controller: dispatch,
                     tripRoute: _route.route,
+                    remainingRoute: _roads.preview.route,
                   ),
                   if (!dispatch.hasActiveTrip && dispatch.pending == null)
                     FullWidthAction(

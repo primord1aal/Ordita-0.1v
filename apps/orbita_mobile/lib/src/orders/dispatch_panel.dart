@@ -9,10 +9,11 @@ class PassengerDispatchPanel extends StatelessWidget {
   const PassengerDispatchPanel({
     required this.controller,
     this.tripRoute,
+    this.remainingRoute,
     super.key,
   });
   final DispatchController controller;
-  final RoutePreview? tripRoute;
+  final RoutePreview? tripRoute, remainingRoute;
   @override
   Widget build(BuildContext context) {
     final c = controller, state = c.state;
@@ -32,7 +33,12 @@ class PassengerDispatchPanel extends StatelessWidget {
         if (state == null && c.message == null)
           const Text('Проверяем текущий заказ…'),
         if (trip != null && trip.active)
-          _PassengerTrip(controller: c, trip: trip, route: tripRoute),
+          _PassengerTrip(
+            controller: c,
+            trip: trip,
+            route: tripRoute,
+            remaining: remainingRoute,
+          ),
         if (c.pending != null) ...[
           const Text(
             'Заказ отправлен без подтверждения. Повтор проверит тот же заказ.',
@@ -52,11 +58,12 @@ class _PassengerTrip extends StatelessWidget {
     required this.controller,
     required this.trip,
     this.route,
+    this.remaining,
   });
 
   final DispatchController controller;
   final Trip trip;
-  final RoutePreview? route;
+  final RoutePreview? route, remaining;
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +104,15 @@ class _PassengerTrip extends StatelessWidget {
         ),
         if (timing != null) ...[
           const SizedBox(height: 4),
-          Text(timing, style: theme.textTheme.titleMedium),
+          if (_hasMeasures(remaining))
+            _RemainingTrip(
+              route: remaining!,
+              label: trip.status == 'riding'
+                  ? 'До назначения'
+                  : 'До прибытия машины',
+            )
+          else
+            Text(timing, style: theme.textTheme.titleMedium),
         ],
         if (details.isNotEmpty)
           Text(
@@ -171,11 +186,13 @@ class DriverDispatchPanel extends StatelessWidget {
   const DriverDispatchPanel({
     required this.controller,
     required this.onCompleted,
+    this.remainingRoute,
     super.key,
   });
 
   final DispatchController controller;
   final VoidCallback onCompleted;
+  final RoutePreview? remainingRoute;
 
   @override
   Widget build(BuildContext context) {
@@ -213,6 +230,7 @@ class DriverDispatchPanel extends StatelessWidget {
             controller: controller,
             trip: trip,
             onCompleted: onCompleted,
+            remaining: remainingRoute,
           )
         else if (state != null)
           Row(
@@ -377,11 +395,13 @@ class _DriverJourney extends StatelessWidget {
     required this.controller,
     required this.trip,
     required this.onCompleted,
+    this.remaining,
   });
 
   final DispatchController controller;
   final Trip trip;
   final VoidCallback onCompleted;
+  final RoutePreview? remaining;
 
   @override
   Widget build(BuildContext context) {
@@ -431,6 +451,13 @@ class _DriverJourney extends StatelessWidget {
             ),
           ],
         ),
+        if (_hasMeasures(remaining)) ...[
+          const SizedBox(height: 4),
+          _RemainingTrip(
+            route: remaining!,
+            label: toPickup ? 'До подачи' : 'До назначения',
+          ),
+        ],
         const Divider(),
         Text(
           toPickup ? 'Адрес подачи' : 'Адрес назначения',
@@ -455,6 +482,40 @@ class _DriverJourney extends StatelessWidget {
                 : null,
           ),
         ],
+      ],
+    );
+  }
+}
+
+bool _hasMeasures(RoutePreview? route) =>
+    route?.distanceMeters != null || route?.durationSeconds != null;
+
+class _RemainingTrip extends StatelessWidget {
+  const _RemainingTrip({required this.route, required this.label});
+
+  final RoutePreview route;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
+    final seconds = route.durationSeconds;
+    final meters = route.distanceMeters;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (seconds != null)
+          Text('≈ ${(seconds / 60).ceil()} мин', style: theme.headlineMedium),
+        Text(
+          [
+            label,
+            if (meters != null)
+              '${(meters / 1000).toStringAsFixed(1).replaceAll('.', ',')} км',
+          ].join(' · '),
+          style: theme.bodyMedium?.copyWith(
+            color: OrbitaPalette.of(context).muted,
+          ),
+        ),
       ],
     );
   }

@@ -4,8 +4,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../maps/map_settings.dart';
+import '../maps/trip_roads.dart';
 import '../orders/dispatch_controller.dart';
 import '../orders/dispatch_panel.dart';
+import '../orders/trip_location.dart';
 import '../maps/map_location_action.dart';
 import '../maps/address_models.dart';
 import '../platform/device_gateway.dart';
@@ -24,6 +26,7 @@ class DriverScreen extends StatefulWidget {
     this.dispatch,
     this.enabled = true,
     this.foreground = true,
+    this.trackActiveTrip,
     this.tileSessionFactory,
     super.key,
   });
@@ -32,6 +35,7 @@ class DriverScreen extends StatefulWidget {
   final DeviceGateway? device;
   final DispatchController? dispatch;
   final bool enabled, foreground;
+  final bool? trackActiveTrip;
   final MapTileSession Function(String)? tileSessionFactory;
 
   @override
@@ -40,12 +44,16 @@ class DriverScreen extends StatefulWidget {
 
 class _DriverScreenState extends State<DriverScreen> {
   MapLocationAction? _location;
+  TripLocation? _tracking;
+  late final _roads = TripRoads(widget.mapSettings);
   GeoPoint? _position;
   String? _gpsMessage;
 
   @override
   void initState() {
     super.initState();
+    _setupTracking();
+    widget.dispatch?.addListener(_updateRoads);
     if (widget.device case final device?) {
       _location = MapLocationAction(
         device: device,
@@ -80,6 +88,27 @@ class _DriverScreenState extends State<DriverScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoLocate());
   }
 
+  void _setupTracking() {
+    _tracking?.dispose();
+    final dispatch = widget.dispatch;
+    _tracking = dispatch == null
+        ? null
+        : TripLocation(dispatch, device: widget.device);
+    _tracking?.addListener(_updateRoads);
+    _tracking?.setEnabled(
+      widget.trackActiveTrip ?? (widget.enabled && widget.foreground),
+    );
+  }
+
+  void _updateRoads() {
+    _roads.update(
+      widget.dispatch?.state?.trip,
+      _tracking?.point,
+      enabled: widget.enabled && widget.foreground,
+      stale: _tracking?.stale ?? false,
+    );
+  }
+
   void _showCompleted() {
     if (!mounted || !widget.enabled) return;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -99,19 +128,40 @@ class _DriverScreenState extends State<DriverScreen> {
   @override
   void didUpdateWidget(covariant DriverScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.dispatch != oldWidget.dispatch) {
+      oldWidget.dispatch?.removeListener(_updateRoads);
+      widget.dispatch?.addListener(_updateRoads);
+    }
+    if (widget.dispatch != oldWidget.dispatch ||
+        widget.device != oldWidget.device) {
+      _setupTracking();
+    } else {
+      _tracking?.setEnabled(
+        widget.trackActiveTrip ?? (widget.enabled && widget.foreground),
+      );
+    }
+    _updateRoads();
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoLocate());
     if (!widget.enabled || !widget.foreground) _location?.cancel(notify: false);
   }
 
   @override
   void dispose() {
+    widget.dispatch?.removeListener(_updateRoads);
+    _tracking?.dispose();
+    _roads.dispose();
     _location?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: Listenable.merge([?_location, ?widget.dispatch]),
+    listenable: Listenable.merge([
+      ?_location,
+      ?_tracking,
+      _roads.preview,
+      ?widget.dispatch,
+    ]),
     builder: (context, _) {
       final dispatch = widget.dispatch;
       final state = dispatch?.state;
@@ -128,6 +178,8 @@ class _DriverScreenState extends State<DriverScreen> {
           workSurface: true,
           tileSessionFactory: widget.tileSessionFactory,
           focusPoint: _position,
+          userPosition: _tracking?.point ?? _position,
+          route: _roads.preview.route,
           tripId: activeTrip?.id,
           pickup: activeTrip == null
               ? null
@@ -179,6 +231,7 @@ class _DriverScreenState extends State<DriverScreen> {
                   DriverDispatchPanel(
                     controller: dispatch,
                     onCompleted: _showCompleted,
+                    remainingRoute: _roads.preview.route,
                   ),
                 ],
               ),

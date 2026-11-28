@@ -300,17 +300,20 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       expect(count(), 4);
       await show(brightness: Brightness.dark);
-      expect(count(), 4);
-      expect(transports.single.calls.last.path, contains('/osm-carto/'));
+      expect(count(), 8);
+      expect(transports.single.calls.last.path, contains('/dark-matter/'));
+      await show(brightness: Brightness.dark);
+      expect(count(), 8);
       await show();
-      expect(count(), 4);
+      expect(count(), 8);
       await settings.save('another_artificial_key_0123456789');
       await tester.pumpAndSettle();
       expect(transports.length, 2);
-      expect(count(), 8);
+      expect(count(), 12);
+      expect(transports.last.calls.last.path, contains('/osm-carto/'));
       await settings.clear();
       await tester.pumpAndSettle();
-      expect(count(), 8);
+      expect(count(), 12);
       await tester.pumpWidget(const SizedBox());
       settings.dispose();
     },
