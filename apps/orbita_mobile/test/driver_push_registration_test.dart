@@ -44,6 +44,32 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
   }
 
+  test('Foreground uses the existing channel once per live offer', () async {
+    final calls = <MethodCall>[];
+    bridge((method) async {
+      calls.add(method);
+      return null;
+    });
+    final offers = DriverForegroundOffers(channel: channel);
+    final deadline = DateTime.now().toUtc().add(const Duration(seconds: 15));
+    const id = '00000000-0000-4000-8000-000000000009';
+    expect(offers.update(id, deadline, seconds: 14), isTrue);
+    expect(offers.update(id, deadline, seconds: 10), isFalse);
+    expect(offers.update(id, deadline, seconds: 0), isFalse);
+    expect(offers.update(id, deadline, seconds: 0), isFalse);
+    await settle();
+    expect(calls.map((call) => call.method), [
+      'showForegroundOffer',
+      'dismissOffer',
+    ]);
+    expect(calls.first.arguments, {
+      'kind': 'driver_offer',
+      'offer_id': id,
+      'expires_at': deadline.toIso8601String(),
+    });
+    expect(calls.last.arguments, id);
+  });
+
   test(
     'only a confirmed shift enables native delivery and starts heartbeat',
     () async {

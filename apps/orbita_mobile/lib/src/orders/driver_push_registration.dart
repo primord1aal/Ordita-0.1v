@@ -121,3 +121,47 @@ class DriverPushRegistration {
     unawaited(_disable());
   }
 }
+
+/// Both polling in the open app and RuStore use Android's existing offer channel.
+class DriverForegroundOffers {
+  DriverForegroundOffers({MethodChannel? channel})
+    : _channel = channel ?? DriverPushRegistration.platformChannel;
+
+  final MethodChannel _channel;
+  final _seen = <String, DateTime>{};
+  String? _current;
+
+  bool update(String? id, DateTime? deadline, {required int seconds}) {
+    final incoming = deadline == null || seconds <= 0 ? null : id;
+    final previous = _current;
+    _current = incoming;
+    if (previous != null && previous != incoming) {
+      unawaited(_send('dismissOffer', previous));
+    }
+    if (incoming == null || deadline == null) return false;
+
+    final now = DateTime.now();
+    _seen.removeWhere(
+      (_, expiry) => !expiry.isAfter(now) && expiry != deadline,
+    );
+    if (_seen.containsKey(incoming)) return false;
+    if (_seen.length == 64) _seen.remove(_seen.keys.first);
+    _seen[incoming] = deadline;
+    unawaited(
+      _send('showForegroundOffer', {
+        'kind': 'driver_offer',
+        'offer_id': incoming,
+        'expires_at': deadline.toUtc().toIso8601String(),
+      }),
+    );
+    return true;
+  }
+
+  Future<void> _send(String method, Object payload) async {
+    try {
+      await _channel.invokeMethod<void>(method, payload);
+    } catch (_) {
+      // Offer actions remain usable when Android notifications are unavailable.
+    }
+  }
+}

@@ -18,6 +18,7 @@ import '../maps/passenger_address_controller.dart';
 import '../ui/components.dart';
 import '../ui/orbita_map.dart';
 import '../ui/theme.dart';
+import '../ui/trip_notice.dart';
 import 'map_picker_screen.dart';
 
 class PassengerScreen extends StatefulWidget {
@@ -69,7 +70,7 @@ class _PassengerScreenState extends State<PassengerScreen> {
   GeoPoint? _position;
   int? _pickupRevisionWhenLocating;
   String? _gpsMessage;
-  String? _lastActiveOrder;
+  String? _lastActiveOrder, _lastActiveStatus;
   @override
   void initState() {
     super.initState();
@@ -195,17 +196,40 @@ class _PassengerScreenState extends State<PassengerScreen> {
     final dispatch = widget.dispatch;
     final trip = dispatch?.state?.trip;
     if (dispatch?.hasCurrentSnapshot == true) {
+      final previousStatus = _lastActiveStatus;
+      final sameOrder =
+          _lastActiveOrder != null && _lastActiveOrder == trip?.id;
       if (trip?.active == true) {
         _lastActiveOrder = trip!.id;
-      } else if (_lastActiveOrder != null && _lastActiveOrder == trip?.id) {
+        _lastActiveStatus = trip.status;
+        if (sameOrder && previousStatus != trip.status && widget.enabled) {
+          if (previousStatus == 'created' && trip.driverId != null) {
+            showTripNotice(
+              context,
+              'Водитель назначен',
+              icon: Icons.directions_car_outlined,
+            );
+          } else if (trip.status == 'arrived') {
+            showTripNotice(
+              context,
+              'Водитель на месте',
+              icon: Icons.directions_car_outlined,
+              subtitle: 'Ваш автомобиль ожидает вас',
+            );
+          }
+        }
+      } else if (sameOrder) {
         _lastActiveOrder = null;
-        if (trip!.status == 'completed') _controller.clearTripDraft();
+        _lastActiveStatus = null;
+        final completed = trip!.status == 'completed';
+        if (completed) _controller.clearTripDraft();
         if (widget.enabled) {
-          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-            SnackBar(
-              content: Text(trip.label),
-              duration: const Duration(seconds: 5),
-            ),
+          showTripNotice(
+            context,
+            trip.label,
+            icon: completed
+                ? Icons.check_circle_outline
+                : Icons.cancel_outlined,
           );
         }
       }

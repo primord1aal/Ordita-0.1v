@@ -76,11 +76,11 @@ internal object DriverOfferNotifications {
 
     @Synchronized
     @SuppressLint("MissingPermission") // Android permission and notification status are checked before posting.
-    fun show(context: Context, message: Map<String, String>) {
+    fun show(context: Context, message: Map<String, String>, foreground: Boolean = false) {
         val now = System.currentTimeMillis()
         val offer = DriverOfferNotice.parse(message, now) ?: return
         val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        if (!preferences.getBoolean(ENABLED, false)) return
+        if (!foreground && !preferences.getBoolean(ENABLED, false)) return
         if (!notificationsAllowed(context)) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         ensureChannel(manager)
@@ -113,6 +113,7 @@ internal object DriverOfferNotifications {
             @Suppress("DEPRECATION")
             notification.setPriority(Notification.PRIORITY_HIGH)
                 .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                .setDefaults(Notification.DEFAULT_VIBRATE)
         }
         try {
             manager.notify(NOTIFICATION_ID, notification.build())
@@ -124,6 +125,13 @@ internal object DriverOfferNotifications {
         if (Build.VERSION.SDK_INT < 26) {
             Handler(Looper.getMainLooper()).postDelayed({ expire(manager, offer.offerId) }, remaining)
         }
+    }
+
+    @Synchronized
+    fun dismiss(context: Context, offerId: String) {
+        if (displayedOffer != offerId) return
+        context.getSystemService(NotificationManager::class.java)?.cancel(NOTIFICATION_ID)
+        displayedOffer = null
     }
 
     fun notificationsAllowed(context: Context): Boolean {
@@ -148,6 +156,7 @@ internal object DriverOfferNotifications {
         val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION).build()
         val channel = NotificationChannel(CHANNEL, "Предложения водителю", NotificationManager.IMPORTANCE_HIGH)
         channel.setSound(sound, attributes)
+        channel.enableVibration(true)
         manager.createNotificationChannel(channel)
     }
 

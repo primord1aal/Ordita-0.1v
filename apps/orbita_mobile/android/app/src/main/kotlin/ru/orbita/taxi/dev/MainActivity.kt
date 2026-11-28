@@ -53,6 +53,28 @@ class MainActivity : FlutterActivity() {
                         else result.error("push_configuration", "Не удалось сохранить настройку уведомлений", null)
                     }
                 }
+                "showForegroundOffer" -> {
+                    val payload = call.arguments as? Map<*, *>
+                    if (activityVisible && payload != null && payload.size == 3) {
+                        val kind = payload["kind"] as? String
+                        val id = payload[OFFER_ID] as? String
+                        val expiry = payload[OFFER_EXPIRES_AT] as? String
+                        if (kind != null && id != null && expiry != null) {
+                            DriverOfferNotifications.show(
+                                applicationContext,
+                                mapOf("kind" to kind, OFFER_ID to id, OFFER_EXPIRES_AT to expiry),
+                                foreground = true,
+                            )
+                        }
+                    }
+                    result.success(null)
+                }
+                "dismissOffer" -> {
+                    (call.arguments as? String)?.let {
+                        DriverOfferNotifications.dismiss(applicationContext, it)
+                    }
+                    result.success(null)
+                }
                 "startHeartbeat" -> {
                     val values = call.arguments as? Map<*, *>
                     result.success(values != null && DriverShiftHeartbeatService.start(applicationContext, values))

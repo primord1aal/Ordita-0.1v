@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 
 import '../domain/contracts.dart';
 import '../orders/dispatch_controller.dart';
+import '../orders/driver_push_registration.dart';
+import '../ui/trip_notice.dart';
 import '../orders/trip_history.dart';
 import '../orders/driver_offer_open.dart';
 import '../maps/map_settings.dart';
@@ -65,6 +68,8 @@ class _PreviewShellState extends State<PreviewShell> {
   int _index = 0;
   DispatchController? _dispatch;
   bool _handlingOfferOpen = false;
+  final _foregroundOffers = DriverForegroundOffers();
+  String? _announcedOffer;
 
   bool get _canCheckOfferOpen =>
       widget.role == PreviewRole.driver &&
@@ -92,9 +97,38 @@ class _PreviewShellState extends State<PreviewShell> {
 
   void _driverOnline() {
     final dispatch = _dispatch;
-    if (dispatch != null && dispatch.canAct) {
-      widget.onDriverOnline?.call(dispatch.state!.online);
+    if (dispatch == null || !dispatch.canAct) return;
+    final state = dispatch.state!;
+    widget.onDriverOnline?.call(state.online);
+    if (!widget.mapAccessAllowed || !widget.mapForeground) return;
+    final deadline = state.offerExpiresAt;
+    final seconds = deadline == null ? 0 : dispatch.secondsUntil(deadline);
+    final id = seconds > 0 ? state.offerId : null;
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      _foregroundOffers.update(id, deadline, seconds: seconds);
     }
+    if (id == _announcedOffer) return;
+    _announcedOffer = id;
+    if (id == null || _index == 0) return;
+    final address = state.trip?.pickup.address;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _announcedOffer != id || _index == 0) return;
+      final remaining = dispatch.secondsUntil(deadline!);
+      if (remaining == 0) return;
+      showTripNotice(
+        context,
+        'Новый заказ',
+        icon: Icons.notifications_active_outlined,
+        subtitle: address,
+        duration: Duration(seconds: remaining),
+        action: SnackBarAction(
+          label: 'Открыть',
+          onPressed: () {
+            if (mounted && _announcedOffer == id) setState(() => _index = 0);
+          },
+        ),
+      );
+    });
   }
 
   @override

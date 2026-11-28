@@ -18,6 +18,7 @@ import '../ui/driver_map.dart';
 import '../ui/map_panel_layout.dart';
 import '../ui/shift_control.dart';
 import '../ui/theme.dart';
+import '../ui/trip_notice.dart';
 
 class DriverScreen extends StatefulWidget {
   const DriverScreen({
@@ -111,11 +112,10 @@ class _DriverScreenState extends State<DriverScreen> {
 
   void _showCompleted() {
     if (!mounted || !widget.enabled) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      const SnackBar(
-        content: Text('Поездка завершена'),
-        duration: Duration(seconds: 5),
-      ),
+    showTripNotice(
+      context,
+      'Поездка завершена',
+      icon: Icons.check_circle_outline,
     );
   }
 
