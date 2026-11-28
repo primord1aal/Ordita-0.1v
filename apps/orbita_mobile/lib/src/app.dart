@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter/services.dart';
 
 import 'backend/api_probe.dart';
 import 'backend/probe_journal.dart';
@@ -135,6 +135,10 @@ class _OrbitaAppState extends State<OrbitaApp> {
         theme: orbitaTheme(brightness: Brightness.light),
         darkTheme: orbitaTheme(),
         themeMode: _themeSettings.mode,
+        builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+          value: OrbitaChrome.systemBars(context),
+          child: child!,
+        ),
         onUnknownRoute: (_) => MaterialPageRoute<void>(
           builder: (_) => const Scaffold(
             body: SafeArea(

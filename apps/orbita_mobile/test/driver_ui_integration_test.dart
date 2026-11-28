@@ -17,6 +17,7 @@ import 'package:orbita_mobile/src/platform/device_gateway.dart';
 import 'package:orbita_mobile/src/screens/driver_screen.dart';
 import 'package:orbita_mobile/src/screens/passenger_screen.dart';
 import 'package:orbita_mobile/src/ui/driver_demo_access.dart';
+import 'package:orbita_mobile/src/ui/driver_map.dart';
 import 'package:orbita_mobile/src/ui/theme.dart';
 import 'package:orbita_mobile/src/ui/theme_settings.dart';
 import 'package:orbita_mobile/src/ui/orbita_map.dart';
@@ -270,7 +271,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('К заказу'));
       await tester.pumpAndSettle();
-      expect(find.text('Не на линии'), findsOneWidget);
+      expect(find.text('Вне смены'), findsOneWidget);
       expect(find.text('На линии'), findsNothing);
       expect(tester.takeException(), isNull);
     },
@@ -420,37 +421,36 @@ void main() {
         await tester.pumpAndSettle();
       }
       if (spec.$4 == 1) {
-        // 1: шапка 74, рабочий логотип 32; 2: дорожка 64, бегунок 50.
-        expect(find.byType(BrandHeader), findsOneWidget);
-        expect(
-          tester.getSize(find.byType(BrandHeader)).height,
-          closeTo(74, .5),
-        );
-        expect(
-          tester.getSize(find.byType(OrbitaLogo)).width,
-          spec.$3 == null ? 32 : 42,
-        );
-        expect(
-          tester.getRect(find.byType(OrbitaLogo)).top,
-          greaterThanOrEqualTo(28),
-        );
-        if (spec.$3 != DriverDemoScenario.offer) {
-          expect(
-            tester.getSize(find.byKey(const Key('shift-track'))).height,
-            closeTo(64, .5),
-          );
-          expect(
-            tester.getSize(find.byKey(const Key('shift-thumb'))),
-            const Size(50, 50),
-          );
-          expect(tester.getRect(find.byKey(const Key('shift-track'))).left, 18);
-        }
-        // 3: карта заполняет остаток, панель целиком над навигацией без scroll.
+        final real = spec.$3 == null;
         final nav = tester.getRect(
           find.byKey(const Key('navigation-horizontal')),
         );
-        final panel = tester.getRect(find.byKey(const Key('current-order')));
-        expect(panel.bottom, closeTo(nav.top, 1));
+        if (real) {
+          expect(find.byType(BrandHeader), findsNothing);
+          final brand = tester.getRect(find.byKey(const Key('map-brand')));
+          final shift = tester.getRect(find.byKey(const Key('shift-track')));
+          final map = tester.getRect(find.byType(DriverMap));
+          final panel = tester.getRect(find.byKey(const Key('work-panel')));
+          expect(brand.top, shift.top);
+          expect(brand.right, lessThan(shift.left));
+          expect(
+            map.contains(brand.center) && map.contains(shift.center),
+            isTrue,
+          );
+          expect(panel.top, closeTo(map.bottom, 1));
+          expect(panel.bottom, closeTo(nav.top, 1));
+          expect(map.height, greaterThan(panel.height * 2));
+          final credits = tester.getRect(find.byType(MapAttribution));
+          expect(credits.bottom, lessThanOrEqualTo(panel.top));
+        } else {
+          expect(
+            tester.getSize(find.byType(BrandHeader)).height,
+            closeTo(74, .5),
+          );
+          expect(tester.getSize(find.byType(OrbitaLogo)).width, 42);
+          final panel = tester.getRect(find.byKey(const Key('current-order')));
+          expect(panel.bottom, closeTo(nav.top, 1));
+        }
         expect(
           tester
               .state<ScrollableState>(find.byType(Scrollable).first)

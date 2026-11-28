@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Цвета утверждённой редакции «Лён и бронза».
 @immutable
@@ -27,12 +28,12 @@ class OrbitaPalette extends ThemeExtension<OrbitaPalette> {
   final Color success, warning, error, brandTile, brandRing, mapLand;
 
   static const light = OrbitaPalette(
-    background: Color(0xffF1F1E8),
-    surface: Color(0xffFAFAF4),
-    surfaceVariant: Color(0xffE6EADF),
-    text: Color(0xff29382F),
+    background: Color(0xffF3F0E7),
+    surface: Color(0xffF7F4EB),
+    surfaceVariant: Color(0xffE4E4D8),
+    text: Color(0xff293B32),
     muted: Color(0xff5E6859),
-    accent: Color(0xffA6533A),
+    accent: Color(0xffA45D40),
     onAccent: Color(0xffFFFFFF),
     accentSoft: Color(0xffEEE5D9),
     outline: Color(0xff74806D),
@@ -40,28 +41,28 @@ class OrbitaPalette extends ThemeExtension<OrbitaPalette> {
     success: Color(0xff42664A),
     warning: Color(0xff865A24),
     error: Color(0xffA13D36),
-    brandTile: Color(0xff29382F),
-    brandRing: Color(0xffFAFAF4),
-    mapLand: Color(0xffE3E8DC),
+    brandTile: Color(0xff293B32),
+    brandRing: Color(0xffF7F4EB),
+    mapLand: Color(0xffD8D8CA),
   );
 
   static const dark = OrbitaPalette(
-    background: Color(0xff23241F),
-    surface: Color(0xff2E3028),
-    surfaceVariant: Color(0xff3C4034),
+    background: Color(0xff202722),
+    surface: Color(0xff252F28),
+    surfaceVariant: Color(0xff333F36),
     text: Color(0xffF2F0E5),
     muted: Color(0xffBFC4B0),
-    accent: Color(0xffE39272),
+    accent: Color(0xffD89A78),
     onAccent: Color(0xff29251F),
-    accentSoft: Color(0xff414034),
+    accentSoft: Color(0xff493C32),
     outline: Color(0xffA0A88F),
     divider: Color(0xff4C5142),
     success: Color(0xffB0C8A4),
     warning: Color(0xffE4C58F),
     error: Color(0xffF0A197),
     brandTile: Color(0xffF2F0E5),
-    brandRing: Color(0xff23241F),
-    mapLand: Color(0xff30382D),
+    brandRing: Color(0xff202722),
+    mapLand: Color(0xff293B32),
   );
 
   static OrbitaPalette of(BuildContext context) =>
@@ -113,12 +114,52 @@ class OrbitaPalette extends ThemeExtension<OrbitaPalette> {
 
 // Совместимые имена для экранов, переносимых в следующих блоках.
 abstract final class OrbitaColors {
-  static const background = Color(0xff23241F);
-  static const card = Color(0xff2E3028);
-  static const accent = Color(0xffE39272);
+  static const background = Color(0xff202722);
+  static const card = Color(0xff252F28);
+  static const accent = Color(0xffD89A78);
   static const text = Color(0xffF2F0E5);
   static const muted = Color(0xffBFC4B0);
   static const warning = Color(0xffE4C58F);
+}
+
+abstract final class OrbitaChrome {
+  static const inset = 12.0;
+  static const panelShape = BorderRadius.vertical(top: Radius.circular(26));
+  static const controlShape = BorderRadius.all(Radius.circular(17));
+
+  static BoxDecoration glass(
+    BuildContext context, {
+    BorderRadius radius = controlShape,
+  }) {
+    final palette = OrbitaPalette.of(context);
+    return BoxDecoration(
+      color: palette.surface.withValues(alpha: .95),
+      borderRadius: radius,
+      border: Border.all(color: palette.divider),
+      boxShadow: [
+        BoxShadow(
+          color: palette.text.withValues(alpha: .08),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    );
+  }
+
+  static SystemUiOverlayStyle systemBars(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    return SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarBrightness: theme.brightness,
+      statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+      systemNavigationBarColor: OrbitaPalette.of(context).background,
+      systemNavigationBarIconBrightness: dark
+          ? Brightness.light
+          : Brightness.dark,
+      systemNavigationBarContrastEnforced: false,
+    );
+  }
 }
 
 const appVersion = '0.6.3 · сборка 15';

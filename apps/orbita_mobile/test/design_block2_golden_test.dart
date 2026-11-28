@@ -11,6 +11,7 @@ import 'package:orbita_mobile/src/maps/map_settings.dart';
 import 'package:orbita_mobile/src/maps/map_tiles.dart';
 import 'package:orbita_mobile/src/screens/map_picker_screen.dart';
 import 'package:orbita_mobile/src/ui/theme_settings.dart';
+import 'package:orbita_mobile/src/ui/orbita_map.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fake_auth_repository.dart';
@@ -92,6 +93,17 @@ void main() {
       tester,
     ) async {
       await mount(tester, mode: mode);
+      final map = tester.getRect(find.byKey(const Key('passenger-map')));
+      final panel = tester.getRect(find.byKey(const Key('work-panel')));
+      final nav = tester.getRect(
+        find.byKey(const Key('navigation-horizontal')),
+      );
+      expect(map.bottom, closeTo(panel.top, .5));
+      expect(panel.bottom, closeTo(nav.top, .5));
+      expect(
+        tester.getRect(find.byType(MapAttribution)).bottom,
+        lessThan(panel.top),
+      );
       await capture(
         find.byType(Scaffold).first,
         'block2-passenger-${mode.name}',

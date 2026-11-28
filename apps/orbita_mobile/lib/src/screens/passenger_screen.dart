@@ -9,7 +9,6 @@ import '../maps/geoapify_service.dart';
 import '../maps/map_settings.dart';
 import '../maps/map_location_action.dart';
 import '../maps/route_preview.dart';
-import '../ui/orbita_brand.dart';
 import '../platform/device_gateway.dart';
 import '../ui/map_panel_layout.dart';
 import '../maps/map_tiles.dart';
@@ -455,217 +454,105 @@ class _PassengerScreenState extends State<PassengerScreen> {
       ?widget.dispatch,
     ]),
     builder: (context, _) {
-      final palette = OrbitaPalette.of(context);
-      final scaler = MediaQuery.textScalerOf(context);
-      final width = MediaQuery.sizeOf(context).width;
-      var extraHeight = 0.0;
-      for (final draft in [_controller.pickup, _controller.destination]) {
-        final painter = TextPainter(
-          text: TextSpan(
-            text: draft.text.isEmpty ? 'Введите адрес' : draft.text,
-            style: DefaultTextStyle.of(context).style.merge(
-              const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
-          ),
-          textDirection: Directionality.of(context),
-          textScaler: scaler,
-          maxLines: 2,
-        )..layout(maxWidth: (width - 132).clamp(1, double.infinity));
-        extraHeight += (painter.height - scaler.scale(15) * 1.2).clamp(
-          0,
-          double.infinity,
-        );
-        painter.dispose();
-      }
-      if (_route.busy || _route.route != null || _route.message != null) {
-        extraHeight += scaler.scale(16) * 1.4 + 24;
-      }
-      final compactHeight =
-          (widget.dispatch?.hasActiveTrip == true ? 320 : 390) +
-          (scaler.scale(15) - 15) * 7;
       return PopScope(
         canPop: !_searching,
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop) _closeSearch();
         },
-        child: MapPanelLayout(
-          expanded: _searching,
-          compactHeight: compactHeight,
-          preferredHeight:
-              compactHeight +
-              extraHeight +
-              (!_orderLocked &&
-                      (_controller.pickup.place == null ||
-                          _controller.destination.place == null)
-                  ? 44
-                  : 0) +
-              (_gpsMessage != null && _controller.pickup.place == null
-                  ? 44
-                  : 0) +
-              (widget.dispatch?.message != null ? 100 : 0) +
-              (widget.dispatch?.state == null ? 20 : 0),
-          onCollapsed: _closeSearch,
-          overlay: Positioned(
-            top: 12,
-            left: 14,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.sizeOf(context).width - 28,
-              ),
-              child: Material(
-                color: palette.surface,
-                borderRadius: BorderRadius.circular(16),
-                elevation: 0,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const OrbitaLogo(size: 32),
-                      if (_route.route == null) ...[
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            'орбита.',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              color: palette.text,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
+        child: MapWorkLayout(
+          searching: _searching,
+          scrollKey: const Key('passenger-scroll'),
+          map: (context, height) => OrbitaMap(
+            key: const Key('passenger-map'),
+            height: height,
+            workSurface: true,
+            borderRadius: BorderRadius.zero,
+            session: _tiles,
+            enabled: _controller.enabled && !_choosing,
+            pickup: _place(AddressField.pickup),
+            destination: _place(AddressField.destination),
+            route: _route.route,
+            focusPoint: _place(_controller.activeField)?.point,
+            userPosition: _position,
+            onLocate: _orderLocked || _location == null ? null : _locatePickup,
+            locating: _location?.busy ?? false,
           ),
-          mapBuilder: (context, covered) => LayoutBuilder(
-            builder: (context, area) => OrbitaMap(
-              key: const Key('passenger-map'),
-              height: area.maxHeight,
-              fitHeight: true,
-              coveredHeight: covered,
-              borderRadius: BorderRadius.zero,
-              session: _tiles,
-              enabled: _controller.enabled && !_choosing,
-              pickup: _place(AddressField.pickup),
-              destination: _place(AddressField.destination),
-              route: _route.route,
-              focusPoint: _place(_controller.activeField)?.point,
-              userPosition: _position,
-              onLocate: _orderLocked || _location == null
-                  ? null
-                  : _locatePickup,
-              locating: _location?.busy ?? false,
-            ),
-          ),
-          panelBuilder: (context, scroll, visibleMapHeight) => CustomScrollView(
-            key: const Key('passenger-scroll'),
-            controller: scroll,
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            slivers: [
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
-                sliver: SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 36,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: palette.outline,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              widget.dispatch?.hasActiveTrip == true
-                                  ? 'Текущий заказ'
-                                  : 'Куда едем?',
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                          ),
-                          if (_searching)
-                            IconButton(
-                              tooltip: 'Свернуть поиск',
-                              onPressed: _closeSearch,
-                              icon: const Icon(Icons.keyboard_arrow_down),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      if (widget.dispatch?.hasActiveTrip != true) ...[
-                        _field(AddressField.pickup),
-                        const SizedBox(height: 8),
-                        _field(AddressField.destination),
-                        const SizedBox(height: 12),
-                      ],
-                      if (_searching)
-                        _results()
-                      else ...[
-                        if (_gpsMessage != null &&
-                            _controller.pickup.place == null)
-                          Text(
-                            _gpsMessage!,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        _routeStatus(),
-                        if (!_orderLocked &&
-                            (_controller.pickup.place == null ||
-                                _controller.destination.place == null))
-                          const Padding(
-                            padding: EdgeInsets.only(bottom: 6),
-                            child: Text(
-                              'Выберите адрес из подсказок или точку на карте, чтобы подтвердить маршрут.',
-                            ),
-                          ),
-                        if (widget.dispatch case final dispatch?) ...[
-                          DispatchPanel(controller: dispatch),
-                          if (!dispatch.hasActiveTrip &&
-                              dispatch.pending == null)
-                            FullWidthAction(
-                              'Заказать такси',
-                              key: const Key('create-order'),
-                              onPressed:
-                                  dispatch.canAct &&
-                                      _controller.enabled &&
-                                      _controller.pickup.place != null &&
-                                      _controller.destination.place != null
-                                  ? () => dispatch.create(
-                                      _controller.pickup.place!,
-                                      _controller.destination.place!,
-                                    )
-                                  : null,
-                            ),
-                        ] else ...[
-                          const FullWidthAction(
-                            'Заказать такси',
-                            key: Key('create-order'),
-                            onPressed: null,
-                          ),
-                          const Text('Заказ недоступен.'),
-                        ],
-                      ],
-                      TextButton.icon(
-                        onPressed: _addressPrivacy,
-                        icon: const Icon(Icons.info_outline, size: 18),
-                        label: const Text('Как используются адреса'),
-                      ),
-                      if (_tiles != null && visibleMapHeight < 180)
-                        const MapAttribution(compact: true),
-                    ],
+          panel: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.dispatch?.hasActiveTrip == true
+                          ? 'Текущий заказ'
+                          : 'Куда едем?',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                   ),
-                ),
+                  if (_searching)
+                    IconButton(
+                      tooltip: 'Свернуть поиск',
+                      onPressed: _closeSearch,
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (widget.dispatch?.hasActiveTrip != true) ...[
+                _field(AddressField.pickup),
+                const SizedBox(height: 8),
+                _field(AddressField.destination),
+                const SizedBox(height: 12),
+              ],
+              if (_searching)
+                _results()
+              else ...[
+                if (_gpsMessage != null && _controller.pickup.place == null)
+                  Text(
+                    _gpsMessage!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                _routeStatus(),
+                if (!_orderLocked &&
+                    (_controller.pickup.place == null ||
+                        _controller.destination.place == null))
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      'Выберите адрес из подсказок или точку на карте, чтобы подтвердить маршрут.',
+                    ),
+                  ),
+                if (widget.dispatch case final dispatch?) ...[
+                  DispatchPanel(controller: dispatch),
+                  if (!dispatch.hasActiveTrip && dispatch.pending == null)
+                    FullWidthAction(
+                      'Заказать такси',
+                      key: const Key('create-order'),
+                      onPressed:
+                          dispatch.canAct &&
+                              _controller.enabled &&
+                              _controller.pickup.place != null &&
+                              _controller.destination.place != null
+                          ? () => dispatch.create(
+                              _controller.pickup.place!,
+                              _controller.destination.place!,
+                            )
+                          : null,
+                    ),
+                ] else ...[
+                  const FullWidthAction(
+                    'Заказать такси',
+                    key: Key('create-order'),
+                    onPressed: null,
+                  ),
+                  const Text('Заказ недоступен.'),
+                ],
+              ],
+              TextButton.icon(
+                onPressed: _addressPrivacy,
+                icon: const Icon(Icons.info_outline, size: 18),
+                label: const Text('Как используются адреса'),
               ),
             ],
           ),

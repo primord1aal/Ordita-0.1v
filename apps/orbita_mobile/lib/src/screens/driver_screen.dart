@@ -13,6 +13,7 @@ import '../maps/map_tiles.dart';
 import '../ui/components.dart' hide ShiftControl;
 import '../ui/driver_demo_access.dart';
 import '../ui/driver_map.dart';
+import '../ui/map_panel_layout.dart';
 import '../ui/shift_control.dart';
 import '../ui/theme.dart';
 
@@ -103,20 +104,36 @@ class _DriverScreenState extends State<DriverScreen> {
       final dispatch = widget.dispatch;
       final state = dispatch?.state;
       final trip = state?.trip;
-      final acceptedTrip =
-          trip != null && trip.active && trip.status != 'created' ? trip : null;
-      return _DriverBody(
-        mapSettings: widget.mapSettings,
-        compactBrand: true,
-        minimumMapHeight: 180,
-        enabled: widget.enabled,
-        foreground: widget.foreground,
-        tileSessionFactory: widget.tileSessionFactory,
-        focusPoint: _position,
-        trip: acceptedTrip,
-        onLocate: _location?.locate,
-        locating: _location?.busy ?? false,
-        slider: ShiftControl(
+      final acceptedTrip = trip != null && trip.active ? trip : null;
+      return MapWorkLayout(
+        scrollKey: const Key('driver-scroll'),
+        map: (context, height) => DriverMap(
+          key: const Key('driver-map'),
+          mapSettings: widget.mapSettings,
+          enabled: widget.enabled,
+          foreground: widget.foreground,
+          height: height,
+          workSurface: true,
+          tileSessionFactory: widget.tileSessionFactory,
+          focusPoint: _position,
+          tripId: acceptedTrip?.id,
+          pickup: acceptedTrip == null
+              ? null
+              : AddressPlace(
+                  acceptedTrip.pickup.address,
+                  acceptedTrip.pickup.point,
+                ),
+          destination: acceptedTrip == null
+              ? null
+              : AddressPlace(
+                  acceptedTrip.destination.address,
+                  acceptedTrip.destination.point,
+                ),
+          onLocate: _location?.locate,
+          locating: _location?.busy ?? false,
+        ),
+        shift: ShiftControl(
+          compact: true,
           confirmedOnline: state?.online ?? false,
           available:
               widget.enabled &&
@@ -127,26 +144,24 @@ class _DriverScreenState extends State<DriverScreen> {
           requestChange: dispatch?.setOnline,
         ),
         panel: dispatch == null
-            ? const _EmptyPanel(online: false)
-            : _DriverPanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_gpsMessage != null)
-                      Text(
-                        _gpsMessage!,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    if (_location?.needsSettings == true)
-                      TextButton(
-                        onPressed: _location?.openSettings,
-                        child: const Text('Открыть настройки'),
-                      ),
-                    DispatchPanel(controller: dispatch),
-                  ],
-                ),
+            ? const Text('Активных поездок нет')
+            : Column(
+                key: const Key('current-order'),
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_gpsMessage != null)
+                    Text(
+                      _gpsMessage!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  if (_location?.needsSettings == true)
+                    TextButton(
+                      onPressed: _location?.openSettings,
+                      child: const Text('Открыть настройки'),
+                    ),
+                  DispatchPanel(controller: dispatch),
+                ],
               ),
-        panelHeight: trip != null ? 330 : _EmptyPanel.height(context),
       );
     },
   );
@@ -482,27 +497,13 @@ class _DriverBody extends StatelessWidget {
     required this.panelHeight,
     this.slider,
     this.onTools,
-    this.enabled = true,
-    this.foreground = true,
-    this.compactBrand = false,
-    this.minimumMapHeight = 140,
     this.tileSessionFactory,
-    this.focusPoint,
-    this.trip,
-    this.onLocate,
-    this.locating = false,
   });
-  final GeoPoint? focusPoint;
-  final Trip? trip;
-  final VoidCallback? onLocate;
-  final bool locating;
   final MapSettings mapSettings;
   final Widget panel;
   final double panelHeight;
-  final double minimumMapHeight;
   final Widget? slider;
   final VoidCallback? onTools;
-  final bool enabled, foreground, compactBrand;
   final MapTileSession Function(String)? tileSessionFactory;
   @override
   Widget build(BuildContext context) => CustomScrollView(
@@ -512,7 +513,7 @@ class _DriverBody extends StatelessWidget {
         child: GestureDetector(
           key: const Key('driver-tools'),
           onLongPress: onTools,
-          child: BrandHeader(driverTypography: true, compact: compactBrand),
+          child: BrandHeader(driverTypography: true, compact: false),
         ),
       ),
       if (slider != null)
@@ -527,10 +528,8 @@ class _DriverBody extends StatelessWidget {
         ),
       SliverLayoutBuilder(
         builder: (context, constraints) {
-          final pickup = trip?.pickup;
-          final destination = trip?.destination;
           final height = math.max(
-            minimumMapHeight,
+            140.0,
             constraints.viewportMainAxisExtent -
                 constraints.precedingScrollExtent -
                 panelHeight,
@@ -541,20 +540,8 @@ class _DriverBody extends StatelessWidget {
                 DriverMap(
                   key: const Key('driver-map'),
                   mapSettings: mapSettings,
-                  enabled: enabled,
-                  foreground: foreground,
                   height: height,
                   tileSessionFactory: tileSessionFactory,
-                  focusPoint: focusPoint,
-                  tripId: trip?.id,
-                  pickup: pickup == null
-                      ? null
-                      : AddressPlace(pickup.address, pickup.point),
-                  destination: destination == null
-                      ? null
-                      : AddressPlace(destination.address, destination.point),
-                  onLocate: onLocate,
-                  locating: locating,
                 ),
                 panel,
               ],

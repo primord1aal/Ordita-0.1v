@@ -116,9 +116,7 @@ class _AdaptiveNavigationState extends State<AdaptiveNavigation> {
       return DecoratedBox(
         key: Key('navigation-${layout.name}'),
         decoration: BoxDecoration(
-          color: driver
-              ? OrbitaPalette.of(context).background
-              : OrbitaPalette.of(context).surface,
+          color: OrbitaPalette.of(context).background,
           border: Border(
             top: BorderSide(color: OrbitaPalette.of(context).divider),
           ),
@@ -183,12 +181,25 @@ class _AdaptiveNavigationState extends State<AdaptiveNavigation> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  _icons[i],
-                                  size: driver ? 23 : 24,
-                                  color: selected == i
-                                      ? palette.accent
-                                      : palette.muted,
+                                DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: selected == i
+                                        ? palette.accentSoft
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
+                                    child: Icon(
+                                      _icons[i],
+                                      size: driver ? 23 : 24,
+                                      color: selected == i
+                                          ? palette.accent
+                                          : palette.muted,
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(height: 5),
                                 Text(

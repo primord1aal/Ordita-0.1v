@@ -33,11 +33,12 @@ class OrbitaMap extends StatefulWidget {
     this.userPosition,
     this.route,
     this.coveredHeight = 0,
+    this.workSurface = false,
     super.key,
   });
   final MapTileSession? session;
   final double height;
-  final bool enabled, picking;
+  final bool enabled, picking, workSurface;
   final AddressPlace? pickup, destination;
   final String? selectionId;
   final GeoPoint initialCenter;
@@ -146,9 +147,11 @@ class _OrbitaMapState extends State<OrbitaMap> {
     });
   }
 
-  // Detailed, readable cartography in both app themes. The map palette is
-  // independent of the controls; dark-matter hides useful address detail.
-  void _matchTheme() => widget.session?.setStyle(MapTileStyle.osmCarto);
+  void _matchTheme() => widget.session?.setStyle(
+    Theme.of(context).brightness == Brightness.dark
+        ? MapTileStyle.darkMatter
+        : MapTileStyle.osmCarto,
+  );
 
   @override
   void didChangeDependencies() {
@@ -254,6 +257,7 @@ class _OrbitaMapState extends State<OrbitaMap> {
       final style = session?.style;
       final revision = _reload;
       final attributionBelow =
+          !widget.workSurface &&
           widget.coveredHeight == 0 &&
           MapAttribution.measuredHeight(
                 context,
@@ -276,7 +280,28 @@ class _OrbitaMapState extends State<OrbitaMap> {
         canvasHeight,
       );
       _mapWidth = constraints.maxWidth;
-      final showControls = _visibleHeight >= 180;
+      final controlsHeight = widget.controls == MapControls.driver
+          ? 48.0
+          : widget.onLocate != null
+          ? 144.0
+          : 96.0;
+      final fullCreditsHeight = widget.workSurface
+          ? MapAttribution.measuredHeight(
+              context,
+              (constraints.maxWidth - 16).clamp(1, double.infinity),
+            )
+          : 0.0;
+      final creditsHeight = fullCreditsHeight.clamp(
+        0.0,
+        (_visibleHeight - controlsHeight - 82).clamp(32.0, double.infinity),
+      );
+      final controlsOnLeft =
+          widget.workSurface &&
+          widget.controls == MapControls.driver &&
+          MediaQuery.textScalerOf(context).scale(16) > 25;
+      final showControls = widget.workSurface
+          ? _visibleHeight >= creditsHeight + controlsHeight + 20
+          : _visibleHeight >= 180;
       return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -529,10 +554,15 @@ class _OrbitaMapState extends State<OrbitaMap> {
                             top: widget.picking ? 12 : null,
                             bottom: widget.picking
                                 ? null
+                                : widget.workSurface
+                                ? creditsHeight + 12
                                 : widget.controls == MapControls.driver
                                 ? 12
                                 : widget.coveredHeight + 8,
-                            right: widget.controls == MapControls.driver
+                            left: controlsOnLeft ? 12 : null,
+                            right: controlsOnLeft
+                                ? null
+                                : widget.controls == MapControls.driver
                                 ? 16
                                 : 8,
                             child: Material(
@@ -600,18 +630,33 @@ class _OrbitaMapState extends State<OrbitaMap> {
                                     ),
                             ),
                           ),
-                        if (!attributionBelow && _visibleHeight >= 180)
+                        if (!attributionBelow &&
+                            _visibleHeight >=
+                                (widget.workSurface ? creditsHeight + 8 : 180))
                           Positioned(
                             left: 8,
-                            right: 62,
-                            bottom: widget.coveredHeight + 8,
-                            child: const MapAttribution(),
+                            right: widget.workSurface ? 8 : 62,
+                            bottom: widget.workSurface
+                                ? 4
+                                : widget.coveredHeight + 8,
+                            child: creditsHeight < fullCreditsHeight
+                                ? ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      maxHeight: creditsHeight,
+                                    ),
+                                    child: const SingleChildScrollView(
+                                      primary: false,
+                                      child: MapAttribution(),
+                                    ),
+                                  )
+                                : const MapAttribution(),
                           ),
                         if (_tileError)
                           Positioned(
-                            top:
-                                widget.coveredHeight > 0 &&
-                                    _visibleHeight >= 180
+                            top: widget.workSurface && _visibleHeight >= 165
+                                ? 78
+                                : widget.coveredHeight > 0 &&
+                                      _visibleHeight >= 180
                                 ? 64
                                 : 8,
                             left: 8,
@@ -698,15 +743,15 @@ class MapAttribution extends StatelessWidget {
     bool compact = false,
   }) {
     final style = Theme.of(context).textTheme.labelSmall!
-        .copyWith(fontSize: 11);
+        .copyWith(fontSize: 10, letterSpacing: 0);
     double runWidth = 0, runHeight = 0, height = 0;
     for (final item in _links) {
       final painter = TextPainter(
         text: TextSpan(text: item.$1, style: style),
         textDirection: Directionality.of(context),
         textScaler: MediaQuery.textScalerOf(context),
-      )..layout(maxWidth: (width - 8).clamp(1, double.infinity));
-      final childWidth = (painter.width + 8).clamp(
+      )..layout(maxWidth: (width - 6).clamp(1, double.infinity));
+      final childWidth = (painter.width + 6).clamp(
         compact ? 48.0 : 0.0,
         double.infinity,
       );
@@ -758,10 +803,11 @@ class MapAttribution extends StatelessWidget {
             key: ValueKey('attribution-${item.$2}'),
             style: TextButton.styleFrom(
               textStyle: Theme.of(context).textTheme.labelSmall!
-                  .copyWith(fontSize: 11),
+                  .copyWith(fontSize: 10, letterSpacing: 0),
+              foregroundColor: OrbitaPalette.of(context).muted,
               minimumSize: compact ? const Size(48, 48) : Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
             ),
             onPressed: () => unawaited(_open(context, item.$2)),
             child: Text(item.$1),

@@ -158,7 +158,6 @@ class _PreviewShellState extends State<PreviewShell> {
                       MediaQuery.viewInsetsOf(context).bottom)
                   .clamp(0.0, double.infinity);
           return Scaffold(
-            resizeToAvoidBottomInset: driver || _index != 0,
             body: SafeArea(
               bottom: false,
               child: IndexedStack(
@@ -205,35 +204,16 @@ class _PreviewShellState extends State<PreviewShell> {
                 ],
               ),
             ),
-            bottomNavigationBar: keyboardVisible && (driver || _index != 0)
+            bottomNavigationBar: keyboardVisible
                 ? null
-                : Visibility(
-                    visible: !keyboardVisible,
-                    maintainSize: true,
-                    maintainAnimation: true,
-                    maintainState: true,
-                    child: MediaQuery(
-                      data: MediaQuery.of(context).copyWith(
-                        padding: keyboardVisible
-                            ? MediaQuery.paddingOf(context).copyWith(
-                                bottom: MediaQuery.viewPaddingOf(context)
-                                    .bottom,
-                              )
-                            : MediaQuery.paddingOf(context),
-                      ),
-                      child: AdaptiveNavigation(
-                        driver: driver,
-                        availableHeight: !driver && _index == 0
-                            ? availableHeight +
-                                  MediaQuery.viewInsetsOf(context).bottom
-                            : availableHeight,
-                        selected: _index,
-                        onSelected: (i) {
-                          FocusScope.of(context).unfocus();
-                          setState(() => _index = i);
-                        },
-                      ),
-                    ),
+                : AdaptiveNavigation(
+                    driver: driver,
+                    availableHeight: availableHeight,
+                    selected: _index,
+                    onSelected: (i) {
+                      FocusScope.of(context).unfocus();
+                      setState(() => _index = i);
+                    },
                   ),
           );
         },

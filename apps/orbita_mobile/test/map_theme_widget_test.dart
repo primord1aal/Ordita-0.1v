@@ -7,9 +7,7 @@ import 'package:orbita_mobile/src/ui/theme.dart';
 import 'maps_test_fakes.dart';
 
 void main() {
-  testWidgets('Подробный светлый слой остаётся читаемым в обеих темах', (
-    tester,
-  ) async {
+  testWidgets('Слой карты следует выбранной и системной теме', (tester) async {
     final session = FakeMapTiles();
     addTearDown(session.close);
     addTearDown(
@@ -32,7 +30,7 @@ void main() {
     await show(ThemeMode.light);
     expect(session.style, MapTileStyle.osmCarto);
     await show(ThemeMode.dark);
-    expect(session.style, MapTileStyle.osmCarto);
+    expect(session.style, MapTileStyle.darkMatter);
 
     tester.binding.platformDispatcher.platformBrightnessTestValue =
         Brightness.light;
@@ -41,7 +39,7 @@ void main() {
     tester.binding.platformDispatcher.platformBrightnessTestValue =
         Brightness.dark;
     await tester.pumpAndSettle();
-    expect(session.style, MapTileStyle.osmCarto);
+    expect(session.style, MapTileStyle.darkMatter);
     expect(tester.takeException(), isNull);
   });
 }

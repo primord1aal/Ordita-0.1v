@@ -2,6 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'orbita_brand.dart';
+import 'theme.dart';
+
 /// The map never joins the sheet's scroll view. Only the sheet moves, and its
 /// visible height also reserves space for map controls, attribution and camera.
 class MapPanelLayout extends StatefulWidget {
@@ -183,6 +186,149 @@ class _MapPanelLayoutState extends State<MapPanelLayout> {
             ),
           ],
         ),
+      );
+    },
+  );
+}
+
+/// Keeps the map mounted and gives it the space left by the actual panel.
+class MapWorkLayout extends StatelessWidget {
+  const MapWorkLayout({
+    required this.map,
+    required this.panel,
+    required this.scrollKey,
+    this.shift,
+    this.searching = false,
+    super.key,
+  });
+
+  final Widget Function(BuildContext, double height) map;
+  final Widget panel;
+  final Widget? shift;
+  final Key scrollKey;
+  final bool searching;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, area) {
+      final largeText = MediaQuery.textScalerOf(context).scale(16) > 25;
+      final mapReserve = math.min(
+        searching
+            ? 64.0
+            : largeText
+            ? 430.0
+            : 230.0,
+        area.maxHeight *
+            (searching
+                ? .18
+                : largeText
+                ? .65
+                : .45),
+      );
+      final palette = OrbitaPalette.of(context);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, viewport) => Stack(
+                fit: StackFit.expand,
+                children: [
+                  map(context, viewport.maxHeight),
+                  if (viewport.maxHeight >= 84)
+                    Positioned(
+                      top: OrbitaChrome.inset,
+                      left: OrbitaChrome.inset,
+                      right: OrbitaChrome.inset,
+                      child: _MapTopBar(shift: shift),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          DecoratedBox(
+            key: const Key('work-panel'),
+            decoration: OrbitaChrome.glass(
+              context,
+              radius: OrbitaChrome.panelShape,
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: area.maxHeight - mapReserve,
+              ),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: OrbitaChrome.panelShape,
+                clipBehavior: Clip.antiAlias,
+                child: SingleChildScrollView(
+                  key: scrollKey,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: palette.outline.withValues(alpha: .62),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      panel,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+class _MapTopBar extends StatelessWidget {
+  const _MapTopBar({this.shift});
+
+  final Widget? shift;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, area) {
+      const style = TextStyle(fontSize: 17, fontWeight: FontWeight.w700);
+      final textFits =
+          textWidth(context, 'орбита.', style) + 56 <=
+          (shift == null ? area.maxWidth : area.maxWidth * .39);
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DecoratedBox(
+            key: const Key('map-brand'),
+            decoration: OrbitaChrome.glass(context),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const OrbitaLogo(size: 32),
+                  if (textFits) ...[
+                    const SizedBox(width: 7),
+                    const Text('орбита.', style: style),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          if (shift != null) ...[
+            const SizedBox(width: 8),
+            Expanded(child: shift!),
+          ],
+        ],
       );
     },
   );

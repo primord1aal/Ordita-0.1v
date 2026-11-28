@@ -14,6 +14,7 @@ class DriverMap extends StatefulWidget {
     this.enabled = true,
     this.foreground = true,
     this.height = 300,
+    this.workSurface = false,
     this.tileSessionFactory,
     this.focusPoint,
     this.tripId,
@@ -25,7 +26,7 @@ class DriverMap extends StatefulWidget {
   });
 
   final MapSettings mapSettings;
-  final bool enabled, foreground;
+  final bool enabled, foreground, workSurface;
   final double height;
   final MapTileSession Function(String)? tileSessionFactory;
   final GeoPoint? focusPoint;
@@ -136,6 +137,7 @@ class _DriverMapState extends State<DriverMap> {
     return OrbitaMap(
       key: ValueKey(_session),
       height: widget.height,
+      workSurface: widget.workSurface,
       session: _session,
       enabled: _active,
       borderRadius: BorderRadius.zero,

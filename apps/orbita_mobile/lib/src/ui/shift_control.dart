@@ -12,11 +12,12 @@ class ShiftControl extends StatefulWidget {
   const ShiftControl({
     this.confirmedOnline = false,
     this.available = false,
+    this.compact = false,
     this.requestChange,
     super.key,
   });
 
-  final bool confirmedOnline, available;
+  final bool confirmedOnline, available, compact;
   final Future<void> Function(bool online)? requestChange;
 
   @override
@@ -111,14 +112,14 @@ class _ShiftControlState extends State<ShiftControl> {
         ),
         textDirection: Directionality.of(context),
         textScaler: MediaQuery.textScalerOf(context),
-      )..layout(maxWidth: math.max(1, width - 132));
+      )..layout(maxWidth: math.max(1, width - (widget.compact ? 70 : 132)));
       final height = painter.height;
       painter.dispose();
       return height;
     }
 
     return math.max(
-      64,
+      widget.compact ? 54 : 64,
       measure(label, _titleStyle) +
           (hint.isEmpty ? 0 : measure(hint, _hintStyle) + 2) +
           22,
@@ -136,11 +137,13 @@ class _ShiftControlState extends State<ShiftControl> {
   Widget build(BuildContext context) {
     final palette = OrbitaPalette.of(context);
     final label = _pending
-        ? 'Подключаем…'
+        ? (widget.compact ? 'Сверяем статус…' : 'Подключаем…')
         : widget.confirmedOnline
         ? 'На линии'
-        : 'Не на линии';
-    final hint = _pending
+        : (widget.compact ? 'Вне смены' : 'Не на линии');
+    final hint = widget.compact && !_interactive
+        ? ''
+        : _pending
         ? 'Дождись подтверждения'
         : !_enabled
         ? ''
@@ -173,7 +176,7 @@ class _ShiftControlState extends State<ShiftControl> {
             ExcludeSemantics(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  const thumbSize = 50.0;
+                  final thumbSize = widget.compact ? 48.0 : 50.0;
                   final travel = math.max(
                     0.0,
                     constraints.maxWidth - thumbSize - 14,
@@ -181,15 +184,17 @@ class _ShiftControlState extends State<ShiftControl> {
                   final rest = widget.confirmedOnline ? travel : 0.0;
                   final position = _dragging
                       ? _offset.clamp(0.0, travel)
-                      : _pending
+                      : _pending && !widget.compact
                       ? (widget.confirmedOnline ? 0.0 : travel)
                       : rest;
                   return Container(
                     key: const Key('shift-track'),
                     height: _height(context, label, hint, constraints.maxWidth),
                     decoration: BoxDecoration(
-                      color: palette.surfaceVariant,
-                      borderRadius: BorderRadius.circular(20),
+                      color: widget.compact
+                          ? palette.surface.withValues(alpha: .95)
+                          : palette.surfaceVariant,
+                      borderRadius: OrbitaChrome.controlShape,
                       border: Border.all(
                         color: _error != null
                             ? palette.error
@@ -203,10 +208,17 @@ class _ShiftControlState extends State<ShiftControl> {
                       alignment: Alignment.center,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 64,
-                            vertical: 8,
-                          ),
+                          padding: widget.compact
+                              ? EdgeInsets.fromLTRB(
+                                  widget.confirmedOnline ? 8 : 62,
+                                  6,
+                                  widget.confirmedOnline ? 62 : 8,
+                                  6,
+                                )
+                              : const EdgeInsets.symmetric(
+                                  horizontal: 64,
+                                  vertical: 8,
+                                ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -230,7 +242,7 @@ class _ShiftControlState extends State<ShiftControl> {
                           ),
                         ),
                         Positioned(
-                          left: 6 + position,
+                          left: (widget.compact ? 4 : 6) + position,
                           child: Listener(
                             onPointerCancel: (_) => _cancelDrag(),
                             child: GestureDetector(
