@@ -65,8 +65,28 @@ class PreviewShell extends StatefulWidget {
   State<PreviewShell> createState() => _PreviewShellState();
 }
 
-class _PreviewShellState extends State<PreviewShell> {
+class _PreviewShellState extends State<PreviewShell>
+    with SingleTickerProviderStateMixin {
   int _index = 0;
+  late final _tabMotion = AnimationController(vsync: this, value: 1);
+  late final _tabOpacity = Tween(
+    begin: .88,
+    end: 1.0,
+  ).chain(CurveTween(curve: Curves.easeOutCubic)).animate(_tabMotion);
+
+  void _navigate(int index) {
+    if (index == _index) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _index = index);
+    final motion = OrbitaChrome.motion(context);
+    if (motion != Duration.zero) {
+      _tabMotion.duration = motion;
+      _tabMotion.forward(from: 0);
+    } else {
+      _tabMotion.value = 1;
+    }
+  }
+
   DispatchController? _dispatch;
   bool _handlingOfferOpen = false;
   final _foregroundOffers = DriverForegroundOffers();
@@ -125,7 +145,7 @@ class _PreviewShellState extends State<PreviewShell> {
         action: SnackBarAction(
           label: 'Открыть',
           onPressed: () {
-            if (mounted && _announcedOffer == id) setState(() => _index = 0);
+            if (mounted && _announcedOffer == id) _navigate(0);
           },
         ),
       );
@@ -163,7 +183,7 @@ class _PreviewShellState extends State<PreviewShell> {
       if (open == null || !await _dispatch!.verifyOfferOpen(open)) return;
       if (!mounted || !_canCheckOfferOpen) return;
       Navigator.of(context).popUntil((route) => route.isFirst);
-      if (_index != 0) setState(() => _index = 0);
+      _navigate(0);
     } finally {
       _handlingOfferOpen = false;
       if (mounted) _scheduleOfferOpen();
@@ -175,6 +195,7 @@ class _PreviewShellState extends State<PreviewShell> {
     widget.driverOfferOpens?.removeListener(_scheduleOfferOpen);
     _dispatch?.removeListener(_driverOnline);
     _dispatch?.dispose();
+    _tabMotion.dispose();
     super.dispose();
   }
 
@@ -185,7 +206,7 @@ class _PreviewShellState extends State<PreviewShell> {
     return PopScope(
       canPop: _index == 0,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _index != 0) setState(() => _index = 0);
+        if (!didPop) _navigate(0);
       },
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -197,71 +218,75 @@ class _PreviewShellState extends State<PreviewShell> {
           return Scaffold(
             body: SafeArea(
               bottom: false,
-              child: IndexedStack(
-                index: _index,
-                children: [
-                  driver
-                      ? DriverScreen(
-                          mapSettings: widget.mapSettings,
-                          dispatch: _dispatch,
-                          device: widget.device,
-                          enabled: widget.mapAccessAllowed && _index == 0,
-                          foreground: widget.mapForeground,
-                          trackActiveTrip:
-                              widget.mapAccessAllowed && widget.mapForeground,
-                          tileSessionFactory: widget.tileSessionFactory,
-                        )
-                      : PassengerScreen(
-                          mapSettings: widget.mapSettings,
-                          dispatch: _dispatch,
-                          device: widget.device,
-                          enabled: widget.mapAccessAllowed && _index == 0,
-                          foreground: widget.mapForeground,
-                          serviceFactory: widget.addressServiceFactory,
-                          routeServiceFactory: widget.routeServiceFactory,
-                          tileSessionFactory: widget.tileSessionFactory,
-                        ),
-                  ListenableBuilder(
-                    listenable: _dispatch ?? const AlwaysStoppedAnimation(null),
-                    builder: (context, _) {
-                      final api = widget.dispatchApi;
-                      final trip = _dispatch?.state?.trip;
-                      return HistoryScreen(
-                        api: api is TripHistoryApi
-                            ? api as TripHistoryApi
-                            : null,
-                        userId: widget.userId,
-                        driver: driver,
-                        active:
-                            _index == 1 &&
-                            widget.mapAccessAllowed &&
-                            widget.mapForeground,
-                        lastTerminal: trip != null && !trip.active
-                            ? (trip.id, trip.version, trip.status)
-                            : null,
-                      );
-                    },
-                  ),
-                  ProfileScreen(
-                    driver: driver,
-                    diagnosticsEnabled: widget.diagnosticsEnabled,
-                    device: widget.device,
-                    accountPanel: widget.accountPanel,
-                    onSignOut: widget.onSignOut,
-                    onOpenDriverDemo: widget.onOpenDriverDemo == null
-                        ? null
-                        : () async {
-                            final index = await widget.onOpenDriverDemo!();
-                            if (!mounted || index == null) return;
-                            Navigator.of(this.context)
-                                .popUntil((route) => route.isFirst);
-                            setState(() => _index = index);
-                          },
-                    api: widget.dispatchApi,
-                    userId: widget.userId,
-                    onBack: () => setState(() => _index = 0),
-                  ),
-                ],
+              child: FadeTransition(
+                opacity: _tabOpacity,
+                child: IndexedStack(
+                  index: _index,
+                  children: [
+                    driver
+                        ? DriverScreen(
+                            mapSettings: widget.mapSettings,
+                            dispatch: _dispatch,
+                            device: widget.device,
+                            enabled: widget.mapAccessAllowed && _index == 0,
+                            foreground: widget.mapForeground,
+                            trackActiveTrip:
+                                widget.mapAccessAllowed && widget.mapForeground,
+                            tileSessionFactory: widget.tileSessionFactory,
+                          )
+                        : PassengerScreen(
+                            mapSettings: widget.mapSettings,
+                            dispatch: _dispatch,
+                            device: widget.device,
+                            enabled: widget.mapAccessAllowed && _index == 0,
+                            foreground: widget.mapForeground,
+                            serviceFactory: widget.addressServiceFactory,
+                            routeServiceFactory: widget.routeServiceFactory,
+                            tileSessionFactory: widget.tileSessionFactory,
+                          ),
+                    ListenableBuilder(
+                      listenable:
+                          _dispatch ?? const AlwaysStoppedAnimation(null),
+                      builder: (context, _) {
+                        final api = widget.dispatchApi;
+                        final trip = _dispatch?.state?.trip;
+                        return HistoryScreen(
+                          api: api is TripHistoryApi
+                              ? api as TripHistoryApi
+                              : null,
+                          userId: widget.userId,
+                          driver: driver,
+                          active:
+                              _index == 1 &&
+                              widget.mapAccessAllowed &&
+                              widget.mapForeground,
+                          lastTerminal: trip != null && !trip.active
+                              ? (trip.id, trip.version, trip.status)
+                              : null,
+                        );
+                      },
+                    ),
+                    ProfileScreen(
+                      driver: driver,
+                      diagnosticsEnabled: widget.diagnosticsEnabled,
+                      device: widget.device,
+                      accountPanel: widget.accountPanel,
+                      onSignOut: widget.onSignOut,
+                      onOpenDriverDemo: widget.onOpenDriverDemo == null
+                          ? null
+                          : () async {
+                              final index = await widget.onOpenDriverDemo!();
+                              if (!mounted || index == null) return;
+                              Navigator.of(this.context)
+                                  .popUntil((route) => route.isFirst);
+                              _navigate(index);
+                            },
+                      api: widget.dispatchApi,
+                      userId: widget.userId,
+                      onBack: () => _navigate(0),
+                    ),
+                  ],
+                ),
               ),
             ),
             bottomNavigationBar: keyboardVisible
@@ -270,10 +295,7 @@ class _PreviewShellState extends State<PreviewShell> {
                     driver: driver,
                     availableHeight: availableHeight,
                     selected: _index,
-                    onSelected: (i) {
-                      FocusScope.of(context).unfocus();
-                      setState(() => _index = i);
-                    },
+                    onSelected: _navigate,
                   ),
           );
         },

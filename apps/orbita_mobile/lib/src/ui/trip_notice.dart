@@ -11,12 +11,13 @@ ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? showTripNotice(
   SnackBarAction? action,
 }) {
   final palette = OrbitaPalette.of(context);
+  final motion = OrbitaChrome.motion(context);
   return ScaffoldMessenger.maybeOf(context)?.showSnackBar(
     SnackBar(
       duration: duration,
       behavior: SnackBarBehavior.floating,
       backgroundColor: palette.surface,
-      elevation: 3,
+      elevation: 0,
       showCloseIcon: action == null,
       closeIconColor: palette.muted,
       action: action,
@@ -58,5 +59,8 @@ ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? showTripNotice(
         ],
       ),
     ),
+    snackBarAnimationStyle: motion == Duration.zero
+        ? AnimationStyle.noAnimation
+        : AnimationStyle(duration: motion, reverseDuration: motion),
   );
 }

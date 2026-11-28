@@ -124,6 +124,11 @@ abstract final class OrbitaColors {
 
 abstract final class OrbitaChrome {
   static const inset = 12.0;
+
+  static Duration motion(BuildContext context) =>
+      MediaQuery.disableAnimationsOf(context)
+      ? Duration.zero
+      : const Duration(milliseconds: 220);
   static const panelShape = BorderRadius.vertical(top: Radius.circular(26));
   static const controlShape = BorderRadius.all(Radius.circular(17));
 

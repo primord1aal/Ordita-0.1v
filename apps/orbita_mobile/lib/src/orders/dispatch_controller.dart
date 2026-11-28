@@ -131,13 +131,16 @@ class DispatchController extends ChangeNotifier {
   bool get hasCurrentSnapshot => _enabled && _snapshotGeneration == _generation;
   bool get canAct => !busy && hasCurrentSnapshot && message == null;
   bool get hasActiveTrip => state?.trip?.active ?? false;
-  int secondsUntil(DateTime deadline) => max(
-    0,
-    (deadline.difference(state!.serverTime).inMilliseconds -
-            _age.elapsedMilliseconds +
-            999) ~/
-        1000,
+  Duration timeUntil(DateTime deadline) => Duration(
+    milliseconds: max(
+      0,
+      deadline.difference(state!.serverTime).inMilliseconds -
+          _age.elapsedMilliseconds,
+    ),
   );
+
+  int secondsUntil(DateTime deadline) =>
+      (timeUntil(deadline).inMilliseconds + 999) ~/ 1000;
 
   void setEnabled(bool value) {
     if (_disposed || value == _enabled) return;

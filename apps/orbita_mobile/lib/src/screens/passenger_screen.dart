@@ -519,12 +519,14 @@ class _PassengerScreenState extends State<PassengerScreen> {
       ?widget.dispatch,
     ]),
     builder: (context, _) {
+      final trip = widget.dispatch?.state?.trip;
       return PopScope(
         canPop: !_searching,
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop) _closeSearch();
         },
         child: MapWorkLayout(
+          phase: trip?.active == true ? (trip!.id, trip.status) : 'draft',
           searching: _searching,
           scrollKey: const Key('passenger-scroll'),
           map: (context, height) => OrbitaMap(

@@ -167,7 +167,12 @@ class _DriverScreenState extends State<DriverScreen> {
       final state = dispatch?.state;
       final trip = state?.trip;
       final activeTrip = trip != null && trip.active ? trip : null;
+      final deadline = state?.offerExpiresAt;
       return MapWorkLayout(
+        animatePanel: deadline == null || dispatch!.secondsUntil(deadline) > 2,
+        phase: activeTrip == null
+            ? ('idle', state?.online == true)
+            : (activeTrip.id, activeTrip.status, state?.offerId),
         scrollKey: const Key('driver-scroll'),
         map: (context, height) => DriverMap(
           key: const Key('driver-map'),

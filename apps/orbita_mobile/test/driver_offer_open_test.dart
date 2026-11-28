@@ -145,7 +145,10 @@ void main() {
       return result;
     });
     addTearDown(() => bridge.setMockMethodCallHandler(_channel, null));
-    Future<void> open(Map<String, Object?> payload) async {
+    Future<void> open(
+      Map<String, Object?> payload, {
+      bool settle = true,
+    }) async {
       pending = payload;
       await bridge.handlePlatformMessage(
         _channel.name,
@@ -154,7 +157,11 @@ void main() {
         ),
         null,
       );
-      await tester.pumpAndSettle();
+      if (settle) {
+        await tester.pumpAndSettle();
+      } else {
+        await tester.pump();
+      }
     }
 
     await tester.pumpWidget(
@@ -192,14 +199,15 @@ void main() {
     );
 
     await openProfile(tester);
-    await open(_payload(expires));
+    final beforeDuplicate = repo.api.calls.length;
+    await open(_payload(expires), settle: false);
     expect(
       tester
           .widget<AdaptiveNavigation>(find.byType(AdaptiveNavigation))
           .selected,
       2,
     );
-    expect(repo.api.calls, hasLength(3));
+    expect(repo.api.calls, hasLength(beforeDuplicate));
     await tester.pumpWidget(const SizedBox());
   });
 }

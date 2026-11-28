@@ -64,6 +64,7 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
     final device = _SettingsDevice();
+    setViewport(tester, const Size(390, 844), 1);
     await openPreview(tester, 'Водитель', device: device);
     await openProfile(tester);
     expect(find.text('История поездок'), findsNothing);
@@ -77,6 +78,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Настройки'));
     await tester.pumpAndSettle();
+    if (captureDesignGoldens) {
+      await expectLater(
+        find.byType(Scaffold).last,
+        matchesGoldenFile('goldens/glass-driver-settings.png'),
+      );
+    }
     await tester.tap(find.text('Звук и вибрация заказов'));
     await tester.pumpAndSettle();
     expect(device.openings, 1);

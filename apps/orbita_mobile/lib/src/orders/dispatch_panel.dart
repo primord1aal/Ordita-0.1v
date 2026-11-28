@@ -270,7 +270,8 @@ class _DriverOffer extends StatelessWidget {
     return ValueListenableBuilder<int>(
       valueListenable: controller.clock,
       builder: (context, _, addresses) {
-        final remaining = controller.secondsUntil(deadline);
+        final timeLeft = controller.timeUntil(deadline);
+        final remaining = (timeLeft.inMilliseconds + 999) ~/ 1000;
         final canRespond = controller.canAct && remaining > 0;
         final timer = Text(
           '$remaining с',
@@ -310,11 +311,12 @@ class _DriverOffer extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: TweenAnimationBuilder<double>(
-                tween: Tween(end: (remaining / 25).clamp(0.0, 1.0)),
-                duration:
-                    remaining == 0 || MediaQuery.disableAnimationsOf(context)
+                tween: Tween(
+                  end: (timeLeft.inMilliseconds / 25000).clamp(0.0, 1.0),
+                ),
+                duration: remaining == 0
                     ? Duration.zero
-                    : const Duration(milliseconds: 220),
+                    : OrbitaChrome.motion(context),
                 builder: (context, fraction, _) => LinearProgressIndicator(
                   minHeight: 5,
                   value: fraction,

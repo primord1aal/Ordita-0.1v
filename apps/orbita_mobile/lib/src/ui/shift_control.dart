@@ -28,6 +28,7 @@ class ShiftControl extends StatefulWidget {
 class _ShiftControlState extends State<ShiftControl> {
   final _focus = FocusNode();
   bool _focused = false, _dragging = false, _pending = false;
+  bool _animatePosition = false;
   double _offset = 0, _startX = 0, _startOffset = 0;
   int _generation = 0;
   String? _error;
@@ -38,6 +39,9 @@ class _ShiftControlState extends State<ShiftControl> {
   @override
   void didUpdateWidget(covariant ShiftControl oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.confirmedOnline != widget.confirmedOnline) {
+      _animatePosition = true;
+    }
     if (oldWidget.available != widget.available ||
         oldWidget.confirmedOnline != widget.confirmedOnline ||
         (oldWidget.requestChange != null && widget.requestChange == null)) {
@@ -63,6 +67,7 @@ class _ShiftControlState extends State<ShiftControl> {
     setState(() {
       _dragging = false;
       _pending = true;
+      _animatePosition = true;
       _error = null;
     });
     try {
@@ -79,7 +84,12 @@ class _ShiftControlState extends State<ShiftControl> {
   }
 
   void _cancelDrag() {
-    if (_dragging) setState(() => _dragging = false);
+    if (_dragging) {
+      setState(() {
+        _dragging = false;
+        _animatePosition = false;
+      });
+    }
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
@@ -244,7 +254,11 @@ class _ShiftControlState extends State<ShiftControl> {
                             ],
                           ),
                         ),
-                        Positioned(
+                        AnimatedPositioned(
+                          duration: _dragging || !_animatePosition
+                              ? Duration.zero
+                              : OrbitaChrome.motion(context),
+                          curve: Curves.easeOutCubic,
                           left: (widget.compact ? 4 : 6) + position,
                           child: Listener(
                             onPointerCancel: (_) => _cancelDrag(),
@@ -258,6 +272,7 @@ class _ShiftControlState extends State<ShiftControl> {
                                       _focus.requestFocus();
                                       setState(() {
                                         _dragging = true;
+                                        _animatePosition = false;
                                         _startX = details.globalPosition.dx;
                                         _startOffset = rest;
                                         _offset = rest;

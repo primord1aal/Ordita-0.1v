@@ -197,16 +197,19 @@ class MapWorkLayout extends StatelessWidget {
     required this.map,
     required this.panel,
     required this.scrollKey,
+    required this.phase,
     this.shift,
     this.searching = false,
+    this.animatePanel = true,
     super.key,
   });
 
   final Widget Function(BuildContext, double height) map;
   final Widget panel;
+  final Object phase;
   final Widget? shift;
   final Key scrollKey;
-  final bool searching;
+  final bool searching, animatePanel;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -226,6 +229,61 @@ class MapWorkLayout extends StatelessWidget {
                 : .45),
       );
       final palette = OrbitaPalette.of(context);
+      final motion = animatePanel
+          ? OrbitaChrome.motion(context)
+          : Duration.zero;
+      final workPanel = DecoratedBox(
+        decoration: OrbitaChrome.glass(
+          context,
+          radius: OrbitaChrome.panelShape,
+        ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: area.maxHeight - mapReserve),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: OrbitaChrome.panelShape,
+            clipBehavior: Clip.antiAlias,
+            child: SingleChildScrollView(
+              key: scrollKey,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: palette.outline.withValues(alpha: .62),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  AnimatedSwitcher(
+                    duration: motion,
+                    switchInCurve: Curves.easeOutCubic,
+                    layoutBuilder: (current, _) =>
+                        current ?? const SizedBox.shrink(),
+                    transitionBuilder: (child, animation) => FadeTransition(
+                      opacity: Tween(begin: .8, end: 1.0).animate(animation),
+                      child: SlideTransition(
+                        position: Tween(
+                          begin: const Offset(0, .025),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: child,
+                      ),
+                    ),
+                    child: KeyedSubtree(key: ValueKey(phase), child: panel),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -246,45 +304,16 @@ class MapWorkLayout extends StatelessWidget {
               ),
             ),
           ),
-          DecoratedBox(
+          SizedBox(
             key: const Key('work-panel'),
-            decoration: OrbitaChrome.glass(
-              context,
-              radius: OrbitaChrome.panelShape,
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxHeight: area.maxHeight - mapReserve,
-              ),
-              child: Material(
-                color: Colors.transparent,
-                borderRadius: OrbitaChrome.panelShape,
-                clipBehavior: Clip.antiAlias,
-                child: SingleChildScrollView(
-                  key: scrollKey,
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 36,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: palette.outline.withValues(alpha: .62),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      panel,
-                    ],
+            child: motion == Duration.zero
+                ? workPanel
+                : AnimatedSize(
+                    duration: motion,
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.bottomCenter,
+                    child: workPanel,
                   ),
-                ),
-              ),
-            ),
           ),
         ],
       );

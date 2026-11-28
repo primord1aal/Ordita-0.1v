@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -308,6 +309,10 @@ class _OrbitaMapState extends State<OrbitaMap> {
       final showControls = widget.workSurface
           ? _visibleHeight >= creditsHeight + controlsHeight + 20
           : _visibleHeight >= 180;
+      final mapLabelSize = MediaQuery.textScalerOf(context).scale(14);
+      final pickupDiameter = math.max(32.0, mapLabelSize * 1.4 + 8);
+      final destinationPinSize = math.max(44.0, mapLabelSize * 2 + 12);
+      final markerExtent = math.max(48.0, destinationPinSize + 4);
       return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -493,16 +498,16 @@ class _OrbitaMapState extends State<OrbitaMap> {
                                         place.point.latitude,
                                         place.point.longitude,
                                       ),
-                                      width: 48,
-                                      height: 48,
+                                      width: markerExtent,
+                                      height: markerExtent,
                                       alignment: Alignment.topCenter,
                                       child: Tooltip(
                                         message: '${entry.$2}: ${place.label}',
                                         child: entry.$2 == 'Откуда'
                                             ? Center(
                                                 child: Container(
-                                                  width: 32,
-                                                  height: 32,
+                                                  width: pickupDiameter,
+                                                  height: pickupDiameter,
                                                   alignment: Alignment.center,
                                                   decoration: BoxDecoration(
                                                     color: entry.$3,
@@ -520,6 +525,7 @@ class _OrbitaMapState extends State<OrbitaMap> {
                                                   child: Text(
                                                     'А',
                                                     style: TextStyle(
+                                                      fontSize: 14,
                                                       color: OrbitaPalette.of(
                                                         context,
                                                       ).surface,
@@ -535,16 +541,19 @@ class _OrbitaMapState extends State<OrbitaMap> {
                                                   Icon(
                                                     Icons.location_pin,
                                                     color: entry.$3,
-                                                    size: 44,
+                                                    size: destinationPinSize,
                                                   ),
                                                   Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          top: 8,
-                                                        ),
+                                                    padding: EdgeInsets.only(
+                                                      top:
+                                                          destinationPinSize *
+                                                          8 /
+                                                          44,
+                                                    ),
                                                     child: Text(
                                                       'Б',
                                                       style: TextStyle(
+                                                        fontSize: 14,
                                                         color: OrbitaPalette.of(
                                                           context,
                                                         ).onAccent,

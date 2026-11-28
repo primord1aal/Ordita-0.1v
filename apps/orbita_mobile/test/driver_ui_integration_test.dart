@@ -454,6 +454,132 @@ void main() {
     });
   }
 
+  for (final (reducedMotion, deadlineSecond, scale) in [
+    (false, 19, 1.0),
+    (true, 19, 1.0),
+    (false, 1, 1.0),
+    (false, 19, 3.2),
+  ]) {
+    testWidgets(
+      'Ожидание → новый заказ, reduce motion=$reducedMotion, $deadlineSecond с, ×$scale',
+      (tester) async {
+        setViewport(
+          tester,
+          scale == 1 ? const Size(390, 844) : const Size(320, 568),
+          scale,
+        );
+        final maps = MapSettings(initialKey: fakeMapKey);
+        final api = dispatch_fakes.FakeApi();
+        final dispatcher = DispatchController(
+          api: api,
+          userId: dispatch_fakes.driver,
+          driver: true,
+        );
+        addTearDown(maps.dispose);
+        addTearDown(dispatcher.dispose);
+        final draft = dispatch_fakes.trip({
+          'request_id': '00000000-0000-4000-8000-000000000004',
+          'pickup': {
+            'address': 'Чик, Учебная улица, 12',
+            'latitude': 55.006,
+            'longitude': 82.437,
+          },
+          'destination': {
+            'address': 'Чик, Садовая улица, 5',
+            'latitude': 55.007,
+            'longitude': 82.444,
+          },
+        });
+        var offered = false;
+        api.handler = (_, _) async => {
+          ...dispatch_fakes.envelope(
+            isDriver: true,
+            order: offered ? draft : null,
+          ),
+          if (offered)
+            'offer': {
+              'id': '00000000-0000-4000-8000-000000000005',
+              'order_id': draft['id'],
+              'expires_at':
+                  '2026-11-20T16:00:${deadlineSecond.toString().padLeft(2, '0')}Z',
+            },
+        };
+        dispatcher.setEnabled(true);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: orbitaTheme(brightness: Brightness.light),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(disableAnimations: reducedMotion),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: DriverScreen(
+                dispatch: dispatcher,
+                mapSettings: maps,
+                tileSessionFactory: (_) => _DesignTiles(false),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 120)),
+        );
+        await tester.pumpAndSettle();
+        final panel = find.byKey(const Key('work-panel'));
+        final initial = tester.getSize(panel).height;
+        final map = tester.state(find.byType(OrbitaMap));
+        expect(find.text('Ожидаем заказ').hitTestable(), findsOneWidget);
+        offered = true;
+        await dispatcher.refresh();
+        await tester.pump();
+        final start = tester.getSize(panel).height;
+        await tester.pump(const Duration(milliseconds: 50));
+        final middle = tester.getSize(panel).height;
+        if (scale == 1) {
+          expect(
+            find.byKey(const Key('accept-offer')).hitTestable(),
+            findsOneWidget,
+          );
+        }
+        if (!reducedMotion &&
+            deadlineSecond == 19 &&
+            scale == 1 &&
+            captureDesignGoldens) {
+          await tester.pump(const Duration(milliseconds: 65));
+          await expectLater(
+            find.byType(Scaffold),
+            matchesGoldenFile('goldens/glass-driver-offer-transition.png'),
+          );
+        }
+        await tester.pump(const Duration(milliseconds: 250));
+        final end = tester.getSize(panel).height;
+        if (scale > 1) {
+          final accept = find.byKey(const Key('accept-offer'));
+          await Scrollable.ensureVisible(tester.element(accept));
+          await tester.pumpAndSettle();
+          expect(accept.hitTestable(), findsOneWidget);
+          checkHorizontalBounds(tester);
+        } else {
+          expect(end, greaterThan(initial));
+          if (reducedMotion || deadlineSecond <= 2) {
+            expect(start, end);
+            expect(middle, end);
+          } else {
+            expect(start, closeTo(initial, 1));
+            expect(middle, greaterThan(initial));
+            expect(middle, lessThan(end));
+          }
+        }
+        expect(identical(map, tester.state(find.byType(OrbitaMap))), isTrue);
+        expect(tester.takeException(), isNull);
+        dispatcher.setEnabled(false);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+
   final shots = [
     ('driver-off-light', false, null, const Size(390, 844), 1.0),
     ('driver-off-dark', true, null, const Size(390, 844), 1.0),

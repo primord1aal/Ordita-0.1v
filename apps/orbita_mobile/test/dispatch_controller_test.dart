@@ -15,6 +15,8 @@ import 'package:orbita_mobile/src/orders/order_models.dart';
 import 'package:orbita_mobile/src/services/session_store.dart';
 
 import 'maps_test_fakes.dart';
+import 'design_test_fonts.dart';
+import 'test_helpers.dart';
 
 const passenger = '00000000-0000-4000-8000-000000000001';
 const driver = '00000000-0000-4000-8000-000000000002';
@@ -414,6 +416,8 @@ void main() {
   testWidgets('real driver screen submits offer and trip actions to API', (
     tester,
   ) async {
+    setViewport(tester, const Size(390, 844), 1);
+    if (captureDesignGoldens) await loadDesignTestFonts();
     final intent = {
       'request_id': '00000000-0000-4000-8000-000000000004',
       'pickup': {'address': pickup.label, 'latitude': 55, 'longitude': 82.43},
@@ -479,6 +483,12 @@ void main() {
     expect(find.text(pickup.label), findsNothing);
     expect(tester.widget<DriverMap>(find.byType(DriverMap)).tripId, isNull);
     await tester.pumpAndSettle();
+    if (captureDesignGoldens) {
+      await expectLater(
+        find.byType(Scaffold),
+        matchesGoldenFile('goldens/glass-trip-notice.png'),
+      );
+    }
     await tester.pump(const Duration(seconds: 6));
     await tester.pumpAndSettle();
     expect(find.text('Поездка завершена'), findsNothing);
